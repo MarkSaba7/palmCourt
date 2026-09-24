@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs, launch, freeze, analyse, report, practiceReport, HERE, REPO, q, f1, msr } from './lib.mjs';
-import { CLIPS, truthOf } from './clips.mjs';
+import { buildSuite } from './clips.mjs';
 import { FPS } from './scene.mjs';
 
 const A = parseArgs({ root: REPO, port: 8806, video: path.join(HERE, 'out'), harness: process.env.PC_HARNESS || '', cdn: '', model: '', secs: 10, main: false, modelTest: true, inject: true, practice: true, points: 2, clips: 'idle,fh,bh,windup,toss,fast', proc: 28, procsd: 6, arrive: 30, offhand: true, flip: 0.02, sens: 1, render: false, json: '', aux: false, limit: 150 });
@@ -77,15 +77,9 @@ async function runModel() {
   return r;
 }
 
-// The chosen clips back to back (like the paddle video), 1 s of the last clip's tail first so the detector warms up.
-function handSuite(names) {
-  let start = 0;
-  const segments = names.map((n) => { const c = CLIPS.find((x) => x.name === n), truth = truthOf(c), s = { name: n, start, frames: truth.frames, truth }; start += truth.frames; return s; });
-  return { fps: FPS, total: start, segments };
-}
-
+// The chosen clips back to back (like the paddle suite), with 1 s of the last clip's tail first to warm the detector up.
 async function runInject() {
-  const names = A.clips.split(','), suite = handSuite(names), pre = FPS;
+  const names = A.clips.split(','), suite = buildSuite(names), pre = FPS;
   const raw = await page.evaluate(async ({ names, total, pre, o }) => {
     const P = window.PalmCourt, T = P.Tracker, L = await import('/tests/e2e/live.mjs'), { CLIPS } = await import('/tests/e2e/clips.mjs'), R = window.__rig;
     T.stop(); T.kind = 'hand'; P.Settings.control = 'hand'; P.Input.lost(); R.take();

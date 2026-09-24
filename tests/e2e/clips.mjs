@@ -26,6 +26,13 @@ export const CLIPS = [
 ];
 export const clipByName = (n) => CLIPS.find((c) => c.name === n);
 
+// Clips back to back (the layout of gen-video.mjs's suite.json): { fps, total, segments: [{ name, id, start, frames, truth }] }
+export function buildSuite(names = CLIPS.map((c) => c.name)) {
+  let start = 0;
+  const segments = names.map((n) => { const c = clipByName(n), truth = truthOf(c), s = { name: n, id: c.id, start, frames: truth.frames, truth }; start += truth.frames; return s; });
+  return { fps: FPS, total: start, segments };
+}
+
 // Ground truth for a clip: per-frame paddle position (content time k / FPS), every move, the toss spells.
 export function truthOf(clip) {
   const s = clip.build(), n = Math.round(clip.dur * FPS), { moves, tosses } = s.truth();

@@ -1,10 +1,14 @@
 // Browser side of the webcam rig (imported by the page from /tests/e2e/live.mjs). Nothing here changes the game's
 // code: it wraps a few Tracker methods to see what they saw, and drives the camera / hand tracker from outside.
 //   recorder(P)     records every tracked frame (barcode, capture time, position found, cost) and every Input event
+//   directCamera(P) a canvas standing in for the camera's <video>: Tracker.process reads every frame we draw
+//   playSuite(...)  lockstep: every clip's frames through Tracker.process with exact 30 fps capture times
+//   liveDirect(...) real time: the paddle drawn at 30 fps on the direct camera and processed straight away
 //   liveCamera(o)   a synthetic webcam (canvas stream) whose paddle follows a Script the coach extends as the match goes
 //   handFeed(P, o)  stands in for MediaPipe: synthetic 21-point hands into Tracker.handleHands at camera timing
 //   coach(P, s, o)  watches the ball in a practice match and plays toss, serve and strokes on the Script
 import { W, H, FPS, PADDLE, REST, Script, makeStatic, renderLive, readCode, handLandmarks, rng, gaussR } from './scene.mjs';
+import { CLIPS, LOCK_WINDOW } from './clips.mjs';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
@@ -58,6 +62,68 @@ export function recorder(P) {
   R.peek = () => { const v = T.video; if (!v || v.readyState < 2) return null; cx.drawImage(v, 0, 0, 160, 120); return readCode(lum(cx.getImageData(0, 0, 160, 120).data, 160), 160, 120); };
   R.take = () => { const out = { frames: R.frames, events: R.events, procMs: R.procMs }; R.frames = []; R.events = []; R.procMs = []; R.cur = -1; return out; };
   return R;
+}
+
+// A canvas stands in for the camera's <video> element (Tracker.process only needs readyState, videoWidth/Height and
+// a new currentTime per frame). Tracker.start still opens the real (fake) camera, but reads this canvas instead. It is
+// CPU-backed, so reading it back doesn't go through SwiftShader.
+export function directCamera(P) {
+  const T = P.Tracker, cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d', { willReadFrequently: true }), img = ctx.createImageData(W, H);
+  Object.assign(cv, { readyState: 4, videoWidth: W, videoHeight: H, currentTime: 0, srcObject: null, play: async () => {}, pause() {} });
+  const real = T.video;
+  T.video = cv;
+  let k = 0;
+  return {
+    cv, img,
+    show() { ctx.putImageData(img, 0, 0); cv.currentTime = ++k; },
+    process(tCapMs, rec) { if (rec) rec.meta = { cap: tCapMs, stamp: 'direct' }; T.process(tCapMs); },
+    restore() { T.video = real; },
+  };
+}
+
+// Lockstep: every frame of the suite (suite.json layout, frames drawn here with the same renderer as the .y4m) goes
+// through Tracker.process with capture time t0 + g / 30 s, however slow this machine is. The color is locked through
+// the camera check's button while each lock clip holds the paddle in the circle.
+export async function playSuite(P, suite, cam, rec) {
+  const segs = suite.segments.map((s) => { const c = CLIPS.find((x) => x.name === s.name); return { ...s, clip: c, script: c.build() }; });
+  const statics = {}, stFor = (d) => statics[d] || (statics[d] = { stat: makeStatic({ distractor: d, seed: 7 }), st: {} });
+  const t0 = performance.now() + 50, locks = [];
+  let last = null;
+  for (let g = 0; g < suite.total; g++) {
+    const s = segs.find((x) => g >= x.start && g < x.start + x.frames), k = g - s.start, t = k / FPS, S = stFor(!!s.clip.distractor);
+    if (last !== S) { S.st.rect = null; if (S.st.base) cam.img.data.set(S.st.base); last = S; }
+    renderLive(t, { script: s.script, stat: S.stat, color: PADDLE[s.clip.color], exposure: s.clip.exposure, frame: k, clip: s.id }, cam.img.data, S.st);
+    cam.show();
+    if (/lock$/.test(s.name) && t >= LOCK_WINDOW[0] + 0.2 && !locks.some((l) => l.clip === s.name)) {
+      document.getElementById('btnLockColor').click();
+      const p = P.Settings.paddle;
+      locks.push({ clip: s.name, at: +t.toFixed(2), msg: document.getElementById('swingLog').textContent, col: p && { h: +p.h.toFixed(1), s: +p.s.toFixed(2), v: +p.v.toFixed(2), tol: +p.tol.toFixed(1), css: p.css } });
+    }
+    cam.process(t0 + (g * 1000) / FPS, rec);
+    if (g % 8 === 7) await new Promise((r) => setTimeout(r, 0));
+  }
+  return locks;
+}
+
+// Real time on the direct camera: draws the paddle (following `script`, page seconds) 30 times a second and processes
+// each frame at once, with its drawing time as the capture time. Barcode clip 15, frame k & 1023.
+export function liveDirect(cam, script, o = {}) {
+  const stat = makeStatic({ distractor: o.distractor, seed: 7 }), st = {}, log = [], ms = [];
+  let k = 0, stop = false;
+  const t0 = performance.now();
+  const tick = () => {
+    if (stop) return;
+    const now = performance.now();
+    renderLive(now / 1000, { script, stat, color: PADDLE[o.color || 'red'], exposure: o.exposure ?? 0.5, maxSamples: 6, frame: k & 1023, clip: 15 }, cam.img.data, st);
+    cam.show();
+    cam.process(now, o.rec);
+    log.push(now); ms.push(performance.now() - now); k++;
+    setTimeout(tick, Math.max(0, t0 + (k * 1000) / FPS - performance.now()));
+  };
+  tick();
+  return { log, ms, stop() { stop = true; } };
 }
 
 // A synthetic webcam drawn live: the paddle follows `script` (times in performance.now() seconds). Frame k shows the
