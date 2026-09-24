@@ -83,24 +83,28 @@ function walls(s) {
 // One fixed physics step, with net and ground collisions. Pushes events into ev.
 function stepBall(s, surf, ev) {
   if (s.rolling) {
-    const k = Math.max(0, 1 - 1.2 * DT);
+    const k = Math.max(0, 1 - 1.2 * DT), z0 = s.p.z;
     s.v.x *= k; s.v.z *= k; s.v.y = 0;
     s.p.x += s.v.x * DT; s.p.z += s.v.z * DT; s.p.y = BALL_R;
+    // A rolling ball stops against the net instead of rolling through it.
+    if (z0 !== 0 && (z0 > 0) !== (s.p.z > 0) && Math.abs(s.p.x) < COURT.postX + 0.05) { s.p.z = Math.sign(z0) * (BALL_R + 0.005); s.v.z *= -0.2; s.v.x *= 0.5; }
     walls(s);
     return;
   }
   const x0 = s.p.x, y0 = s.p.y, z0 = s.p.z;
   flight(s);
   const p = s.p, v = s.v, w = s.w;
-  if (!s.netDone && z0 !== 0 && (z0 > 0) !== (p.z > 0)) {
+  let netHit = false;
+  if (z0 !== 0 && (z0 > 0) !== (p.z > 0)) {
     const f = z0 / (z0 - p.z);
     const xc = x0 + (p.x - x0) * f, yc = y0 + (p.y - y0) * f;
     if (Math.abs(xc) < COURT.postX + 0.05) {
       const top = netHeight(xc), d = yc - top;
       if (d < BALL_R) {
-        s.netDone = true;
-        const side0 = z0 > 0 ? 1 : -1;
-        if (d > -0.4 * BALL_R) {
+        const side0 = z0 > 0 ? 1 : -1, cord = !s.netDone && d > -0.4 * BALL_R;
+        // One tape clip per shot; after that (a ball coming back at the net) the net just stops it.
+        s.netDone = netHit = true;
+        if (cord) {
           // Clipped the tape: the ball pops up and dribbles over, or drops back.
           const q = (d + 0.4 * BALL_R) / (1.4 * BALL_R);
           const over = q > 0.3;
@@ -117,6 +121,9 @@ function stepBall(s, surf, ev) {
     }
   }
   if (p.y < BALL_R && v.y < 0) {
+    // Where the ball met the court: part-way through this step, not where the step ends (that is up to v * DT deeper,
+    // 15 cm on a fast serve, and the line is judged at this spot).
+    const fc = netHit || !(y0 > p.y) ? 1 : clamp((y0 - BALL_R) / (y0 - p.y), 0, 1), cx = x0 + (p.x - x0) * fc, cz = z0 + (p.z - z0) * fc;
     p.y = BALL_R;
     const vin = -v.y;
     if (vin < 0.35) { s.rolling = true; v.y = 0; }
@@ -134,7 +141,7 @@ function stepBall(s, surf, ev) {
         const k = 1.5 / BALL_R;
         w.x -= k * jz; w.z += k * jx;
       }
-      ev.push({ type: 'bounce', x: p.x, z: p.z, vin });
+      ev.push({ type: 'bounce', x: cx, z: cz, vin });
     }
   }
   walls(s);
