@@ -92,9 +92,112 @@ details.howto b { color: var(--chalk); font-weight: 600; }
 .status.err { color: var(--coral); }
 
 /* ---------- camera check ---------- */
-.setup-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; align-items: start; }
-@media (max-width: 720px) { .setup-grid { grid-template-columns: 1fr; } }
-.cam-slot { min-height: 120px; background: #000; }
+#setup { --warn: #f5c451; }
+.slab.setup { width: min(1060px, 100%); gap: 14px; padding: 20px 22px 18px; }
+.setup-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; }
+.setup-head h2 { font-size: clamp(30px, 4.2vw, 44px); }
+.health { display: flex; flex-wrap: wrap; gap: 6px; }
+.hchip { margin: 0; display: flex; align-items: baseline; gap: 6px; padding: 6px 10px 5px 9px; border: 1px solid var(--edge); border-left: 3px solid var(--mist);
+  background: rgba(242,245,238,.04); white-space: nowrap; }
+.hchip b { font: 900 22px/1 var(--display); font-variant-numeric: tabular-nums; }
+.hchip span { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--mist); }
+.hchip.good { border-left-color: var(--good); } .hchip.good b { color: var(--good); }
+.hchip.warn { border-left-color: var(--warn); } .hchip.warn b { color: var(--warn); }
+.hchip.bad { border-left-color: var(--coral); } .hchip.bad b { color: var(--coral); }
+.setup-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 760px) { .setup-grid { grid-template-columns: 1fr; } }
+.cam-col { display: grid; gap: 8px; min-width: 0; }
+/* The preview keeps the camera's shape and shrinks to fit short screens (--ar is set from the camera). */
+.cam-slot { position: relative; width: min(100%, calc((100vh - 300px) * var(--ar, 1.3333))); min-width: min(100%, 280px); aspect-ratio: var(--ar, 4 / 3);
+  margin-inline: auto; background: #000; overflow: hidden; }
+.cam-guide { position: absolute; z-index: 3; left: 8px; right: 8px; top: 8px; margin: 0; padding: 6px 10px; background: rgba(8,18,29,.84); border-left: 3px solid var(--mist);
+  font-size: 13px; font-weight: 600; line-height: 1.35; pointer-events: none; }
+.cam-guide:empty { display: none; }
+.cam-guide.good { border-color: var(--good); }
+.cam-guide.warn { border-color: var(--warn); }
+.cam-guide.bad { border-color: var(--coral); }
+.cue { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; pointer-events: none; }
+.cam-count { position: absolute; inset: 0; z-index: 4; margin: 0; display: grid; place-items: center; pointer-events: none;
+  font: 900 clamp(80px, 12vw, 140px)/1 var(--display); color: var(--optic); text-shadow: 0 4px 30px rgba(0,0,0,.6); }
+.cam-off { position: absolute; inset: 0; z-index: 3; display: grid; align-content: center; gap: 14px; padding: 24px; background: var(--ink-2); }
+.cam-off p { margin: 0; font-weight: 600; max-width: 42ch; }
+.cam-off p::before { content: 'Camera'; display: block; margin-bottom: 6px; font: 700 12px/1 var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--coral); }
+.mouse-pad { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center; cursor: pointer; user-select: none; -webkit-user-select: none;
+  font: 900 26px/1.05 var(--display); text-transform: uppercase; letter-spacing: .03em; color: var(--mist); border: 2px dashed var(--edge); background: var(--ink-2); }
+.mouse-pad:hover, .mouse-pad:focus-visible { color: var(--chalk); border-color: var(--optic); outline: none; }
+.mouse-pad.hit { background: rgba(214,240,74,.12); color: var(--optic); }
+.stepper { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border: 1px solid var(--edge); }
+.stepper li + li { border-left: 1px solid var(--edge); }
+.stepper button { width: 100%; appearance: none; border: 0; background: transparent; padding: 7px 4px; display: flex; gap: 6px; align-items: center; justify-content: center;
+  font-size: 12.5px; font-weight: 700; color: var(--mist); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stepper button:hover { color: var(--chalk); background: rgba(242,245,238,.06); }
+.stepper button i { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font: 700 11px/1 var(--body); border: 1px solid currentColor; }
+.stepper button.done i { background: var(--good); border-color: var(--good); color: var(--ink); }
+.stepper button[aria-current="step"] { background: var(--chalk); color: var(--ink); }
+.stepper button:focus-visible { outline: 2px solid var(--optic); outline-offset: -2px; }
+.stepper button:disabled { opacity: .45; cursor: default; }
+.step-card { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--edge); background: rgba(242,245,238,.035); }
+.step-kicker { margin: 0; font: 700 11px/1 var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--optic); }
+.step-card h3 { margin: -2px 0 0; font: 900 28px/.95 var(--display); text-transform: uppercase; letter-spacing: .01em; }
+.step-text { margin: 0; color: var(--mist); font-size: 14px; }
+.step-text b { color: var(--chalk); font-weight: 600; }
+.step-body { display: grid; gap: 10px; }
+.step-body:empty { display: none; }
+.step-card .actions.row { gap: 8px; }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.checks li { display: grid; grid-template-columns: 8px 64px minmax(0, 1fr); gap: 9px; align-items: baseline; font-size: 13px; }
+.checks li::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--mist); align-self: center; }
+.checks li span { color: var(--mist); }
+.checks li b { font-weight: 600; }
+.checks li.good::before { background: var(--good); }
+.checks li.warn::before { background: var(--warn); }
+.checks li.bad::before { background: var(--coral); }
+.checks li.bad b { color: var(--coral); }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tile { position: relative; margin: 0; padding: 10px 6px 8px; display: grid; gap: 3px; text-align: center; border: 1px solid var(--edge); background: rgba(242,245,238,.03); }
+.tile b { font: 900 30px/1 var(--display); letter-spacing: .03em; color: var(--mist); }
+.tile small { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--mist); }
+.tile.now { border-color: var(--optic); box-shadow: inset 0 0 0 1px var(--optic); animation: tilePulse 1.4s ease-in-out infinite; }
+.tile.now b { color: var(--optic); }
+.tile.done { border-color: var(--good); background: rgba(127,224,168,.12); }
+.tile.done b, .tile.done small { color: var(--good); }
+.tile.done::after { content: '✓'; position: absolute; top: 4px; right: 7px; font-weight: 700; color: var(--good); }
+.tile.miss { animation: tileMiss .6s ease-out; }
+@keyframes tilePulse { 50% { box-shadow: inset 0 0 0 1px var(--optic), 0 0 0 3px rgba(214,240,74,.2); } }
+@keyframes tileMiss { 20% { border-color: var(--coral); background: rgba(255,122,98,.18); } }
+.pips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.pip { position: relative; height: 50px; border: 1px solid var(--edge); background: rgba(242,245,238,.03); display: flex; align-items: flex-end; }
+.pip i { display: block; width: 100%; height: var(--h, 0%); background: var(--optic); transition: height .25s; }
+.pip small { position: absolute; top: 5px; left: 0; right: 0; text-align: center; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pip.low i { background: var(--mist); opacity: .5; }
+.tstrip { position: relative; height: 36px; margin: 0 6px; border-bottom: 1px solid var(--edge); }
+.tstrip::before { content: ''; position: absolute; left: 50%; top: 4px; bottom: 0; width: 1px; background: var(--edge); }
+.tstrip span { position: absolute; bottom: -18px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--mist); }
+.tstrip span:first-child { left: 0; } .tstrip span:nth-child(2) { left: 50%; transform: translateX(-50%); } .tstrip span:nth-child(3) { right: 0; }
+.tstrip i { position: absolute; bottom: 6px; left: var(--x); width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--optic); }
+.tstrip i.med { bottom: 0; top: 2px; width: 3px; height: auto; margin-left: -1px; border-radius: 0; background: var(--chalk); }
+.tstrip-wrap { padding-bottom: 18px; }
+.result { margin: 0; font-size: 13px; font-weight: 600; min-height: 1.35em; }
+.result.good { color: var(--good); }
+.result.warn { color: var(--warn); }
+.result.bad { color: var(--coral); }
+.paddle-box { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.paddle-box .btn { min-width: 150px; text-align: center; }
+.swatch-pair { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--mist); }
+.swatch-pair .swatch { margin: 0; }
+.tuning { display: grid; gap: 8px; }
+.setup-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.setup-foot .fine { font-size: 12px; }
+#setupTipsBox { padding-top: 10px; }
+#setupTipsBox .steps { margin-top: 8px; font-size: 13px; }
+@media (max-height: 760px) and (min-width: 761px) {
+  .slab.setup { padding-block: 16px 14px; gap: 12px; }
+  .setup-head h2 { font-size: 34px; }
+  .step-card { padding: 12px 14px; gap: 8px; }
+  .step-card h3 { font-size: 24px; }
+  .step-text { font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) { .tile.now, .tile.miss { animation: none; } .pip i { transition: none; } }
 .steps { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--mist); }
 .steps b { color: var(--chalk); font-weight: 600; }
 .setup-side { display: grid; gap: 14px; }
@@ -104,7 +207,8 @@ details.howto b { color: var(--chalk); font-weight: 600; }
 .meter .bar::after { content: ''; position: absolute; top: 0; bottom: 0; left: var(--thresh, 30%); width: 2px; background: var(--coral); }
 .meter b { font-variant-numeric: tabular-nums; text-align: right; color: var(--chalk); }
 .swinglog { margin: 0; min-height: 1.4em; font-weight: 600; }
-.swing-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+.cam-col .swinglog { font-size: 13px; }
+.swing-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; min-height: 26px; }
 .swing-list li { padding: 4px 8px; font-size: 13px; font-variant-numeric: tabular-nums; background: rgba(242,245,238,.08); border-left: 3px solid var(--mist); }
 .swing-list li b { font-weight: 700; }
 .swing-list li small { color: var(--mist); }
@@ -117,6 +221,7 @@ details.howto b { color: var(--chalk); font-weight: 600; }
 .range input { accent-color: var(--optic); width: 100%; }
 .range output { text-align: right; font-variant-numeric: tabular-nums; color: var(--chalk); }
 .swatch { display: inline-block; width: 22px; height: 22px; border: 1px solid var(--edge); vertical-align: middle; margin-left: 10px; background: transparent; }
+.swatch.none { background: repeating-linear-gradient(135deg, transparent 0 4px, rgba(242,245,238,.18) 4px 5px) !important; }
 
 /* ---------- webcam picture-in-picture ---------- */
 #camWrap { position: fixed; z-index: 6; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: 210px; aspect-ratio: 4 / 3;
@@ -330,27 +435,57 @@ details.howto b { color: var(--chalk); font-weight: 600; }
 </main>
 
 <main id="setup" class="screen center" hidden>
-  <section class="slab wide">
-    <div>
-      <p class="eyebrow">Camera check</p>
-      <h2>Can it see your swing?</h2>
-    </div>
+  <section class="slab wide setup" aria-labelledby="setupTitle">
+    <header class="setup-head">
+      <div>
+        <p class="eyebrow" id="setupEyebrow">Camera check</p>
+        <h2 id="setupTitle">Set up your swing</h2>
+      </div>
+      <div class="health" id="camHealth" role="group" aria-label="Tracking health">
+        <p class="hchip" id="hFps"><b>–</b><span>fps tracked</span></p>
+        <p class="hchip" id="hProc"><b>–</b><span>ms a frame</span></p>
+        <p class="hchip" id="hLag"><b>–</b><span>ms lag</span></p>
+      </div>
+    </header>
     <div class="setup-grid">
-      <div id="camSlot" class="cam-slot"></div>
-      <div class="setup-side">
-        <ol class="steps" id="setupSteps"></ol>
+      <div class="cam-col">
+        <div id="camSlot" class="cam-slot">
+          <p class="cam-guide" id="camTip" role="status" aria-live="polite"></p>
+          <canvas id="cueCanvas" class="cue" aria-hidden="true"></canvas>
+          <p class="cam-count" id="camCount" hidden></p>
+          <div class="cam-off" id="camOff" hidden>
+            <p id="camOffMsg" role="alert"></p>
+            <div class="actions row"><button id="btnCamRetry" class="btn small">Try again</button><button id="btnCamMouse" class="btn small ghost">Use the mouse instead</button></div>
+          </div>
+          <div class="mouse-pad" id="mousePad" role="button" tabindex="0" aria-label="Test pad: click, or press Space, to swing" hidden>Click here or press Space to swing</div>
+        </div>
         <div class="meter"><span>Swing speed</span><div class="bar" id="swingBarWrap"><i id="swingBar"></i></div><b id="swingVal">–</b></div>
-        <p id="swingLog" class="swinglog">Swing to test it.</p>
+        <p id="swingLog" class="swinglog" role="status">Swing to test it.</p>
         <ul id="swingList" class="swing-list" aria-label="Recent swings"></ul>
-        <p id="strokeCheck" class="check" role="status"></p>
-        <label class="range" for="optSens"><span>Sensitivity</span><input type="range" id="optSens" min="0.6" max="1.6" step="0.05" value="1"><output id="sensVal">1.00×</output></label>
-        <label class="range" for="optLatency"><span>Timing offset</span><input type="range" id="optLatency" min="-0.1" max="0.25" step="0.01" value="0.04"><output id="latVal">+40 ms</output></label>
-        <div id="paddleBox" hidden><button id="btnLockColor" class="btn small">Lock paddle color</button><span id="colorSwatch" class="swatch"></span></div>
-        <p class="fine" id="trackInfo"></p>
-        <p class="status err" id="camTip"></p>
+      </div>
+      <div class="setup-side">
+        <ol class="stepper" id="calSteps" aria-label="Setup steps"></ol>
+        <section class="step-card" id="stepCard" aria-labelledby="stepTitle">
+          <p class="step-kicker" id="stepKicker"></p>
+          <h3 id="stepTitle"></h3>
+          <p class="step-text" id="stepText"></p>
+          <div id="paddleBox" class="paddle-box" hidden>
+            <button id="btnLockColor" class="btn small">Lock paddle color</button>
+            <span class="swatch-pair"><span id="colorPreview" class="swatch none"></span>In the circle</span>
+            <span class="swatch-pair"><span id="colorSwatch" class="swatch none"></span>Locked</span>
+          </div>
+          <div class="step-body" id="stepBody"></div>
+          <p id="strokeCheck" class="result" role="status" aria-live="polite"></p>
+          <div class="actions row"><button id="btnStepGo" class="btn primary small">Next</button><button id="btnStepAlt" class="btn ghost small" hidden></button></div>
+        </section>
+        <div class="tuning" id="tuning">
+          <label class="range" for="optSens"><span>Sensitivity</span><input type="range" id="optSens" min="0.6" max="1.6" step="0.05" value="1"><output id="sensVal">1.00×</output></label>
+          <label class="range" for="optLatency"><span>Timing offset</span><input type="range" id="optLatency" min="-0.1" max="0.25" step="0.01" value="0.04"><output id="latVal">+40 ms</output></label>
+        </div>
+        <details class="howto" id="setupTipsBox"><summary>Tips</summary><ol class="steps" id="setupSteps"></ol></details>
       </div>
     </div>
-    <div class="actions row"><button id="btnSetupDone" class="btn primary">Done</button></div>
+    <footer class="setup-foot"><button id="btnSetupDone" class="btn primary">Done</button><p class="fine" id="trackInfo"></p></footer>
   </section>
 </main>
 
