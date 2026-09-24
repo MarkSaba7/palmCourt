@@ -610,11 +610,12 @@ const UI = {
       if (t) { tag.textContent = t; tag.dataset.kind = ch.kind; }
       tag.classList.toggle('show', !!t);
     }
-    const meta = $('sbMeta'), parts = this.metaText(m, false);
+    const meta = $('sbMeta'), parts = this.metaText(m, false), info = document.createElement('span');
     if (m.tb && !m.tbOnly) parts.push('Tiebreak');
+    info.textContent = parts.join(' · ');
     const second = m.serveNo === 2 && !m.over ? document.createElement('b') : '';
     if (second) second.textContent = '2nd serve';
-    meta.replaceChildren(parts.join(' · '), second);
+    meta.replaceChildren(info, second);
     this.prompt();
   },
   // A cell's number rolls up into place when it changes. Returns whether it changed.
@@ -778,7 +779,8 @@ const UI = {
     const speed = mk('div', 'si-speed', String(kmh));
     speed.append(mk('small', '', 'km/h'), mk('small', '', `${Math.round(kmh * 0.6214)} mph`));
     const rpm = (Math.round(Math.abs(s.rpm || 0) / 50) * 50).toLocaleString('en-US');
-    const nodes = [label, speed, mk('div', 'si-detail', s.rpm ? `${s.rpm > 0 ? 'Topspin' : 'Backspin'} · ${rpm} rpm` : 'Flat')];
+    const spin = s.rpm > 0 ? 'Topspin' : 'Backspin', said = label.textContent.toLowerCase().includes(spin.toLowerCase());
+    const nodes = [label, speed, mk('div', 'si-detail', s.rpm ? `${said ? '' : `${spin} · `}${rpm} rpm` : 'Flat')];
     if (mine && !s.serve && s.tau != null) {
       const a = Math.abs(s.tau), when = a < 0.35 ? 'On time' : a > 1 ? (s.tau < 0 ? 'Very early' : 'Very late') : s.tau < 0 ? 'Early' : 'Late';
       const where = s.aim == null ? '' : s.aim < -0.9 ? 'to your left' : s.aim > 0.9 ? 'to your right' : 'through the middle';
