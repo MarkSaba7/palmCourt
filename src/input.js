@@ -211,7 +211,7 @@ const Tracker = {
   wrap: document.getElementById('camWrap'),
   stream: null, kind: null, running: false, gen: 0, camGen: 0, loopGen: 0, opening: null,
   worker: null, workerState: 'none', workerLoading: null, inFlight: false, sentAt: 0, stalls: 0, next: null, feed: null, noFeed: false,
-  landmarker: null, loading: null, lastMain: 0, lastTs: 0, lastVT: -1, delegate: '', where: '', loadError: '', startMs: 0,
+  landmarker: null, loading: null, lastMain: 0, lastTs: 0, lastVT: -1, delegate: '', where: '', loadError: '', startMs: 0, readyAt: 0,
   procMs: 0, lagMs: 0, rate: 0, rateN: 0, rateT: 0, stamp: '', aspect: 4 / 3, tsOffs: [], tsOff: NaN, arrOff: Infinity,
   palm: 0, scale: 1, offHand: 0, trail: [], picker: new HandPicker(), palmScale: new PalmScale(),
   st: { t: 0, res: 0, found: 0, cam: 0, seen: 0, errors: 0, errRun: 0, lastRes: 0 }, per: { rate: 0, cam: 0, found: 0, dropped: 0 },
@@ -304,7 +304,7 @@ const Tracker = {
         } else if (m.type === 'ready') {
           done = true; clearTimeout(timer); URL.revokeObjectURL(url);
           this.worker = w; this.workerState = 'ready'; this.delegate = m.delegate; this.where = 'background thread';
-          this.startMs = performance.now() - t0; this.loadError = '';
+          this.startMs = performance.now() - t0; this.readyAt = performance.now(); this.loadError = '';
           if (m.errors && m.errors.length) console.warn('Hand tracker:', m.errors.join(' · '));
           w.onmessage = (ev) => this.onWorker(ev.data);
           w.onerror = (ev) => { if (ev.preventDefault) ev.preventDefault(); this.recover(ev.message || 'worker error'); };
@@ -474,7 +474,11 @@ const Tracker = {
   // Page-grabbed frames (no direct camera feed): never queue them. While the tracker is busy, the newest frame waits
   // and goes the moment the tracker is free, rather than the next camera frame after that.
   sendFrame(v, tCap) {
-    if (this.inFlight && performance.now() - this.sentAt > 1000) { this.stalls++; this.inFlight = false; if (this.stalls % 5 === 0) this.recover('no answer'); }   // it lost that frame
+    const now = performance.now();
+    if (this.inFlight && now - this.sentAt > Math.max(1000, 4 * this.procMs)) {   // it lost that frame
+      this.stalls++; this.inFlight = false;
+      if (now - Math.max(this.st.lastRes, this.readyAt) > 8000) { this.recover('no answer'); return; }   // or it hung
+    }
     // Big camera pictures are shrunk first: the tracker works at 192-224 px anyway, and copying them costs.
     const o = v.videoWidth > 800 ? { resizeWidth: 640, resizeHeight: Math.round(640 / this.aspect), resizeQuality: 'medium' } : undefined;
     createImageBitmap(v, o).then((bmp) => {
@@ -492,7 +496,7 @@ const Tracker = {
   // The direct feed went quiet (no result for 2.5 s while the camera runs): fall back to page-grabbed frames.
   watchFeed() {
     const now = performance.now(), last = Math.max(this.st.lastRes, this.feed.t);
-    if (now - last < 2500) return;
+    if (now - last < Math.max(2500, 5 * this.procMs)) return;
     console.warn('The hand tracker’s camera feed stalled; sending it frames from the page instead.');
     this.stalls++; this.noFeed = true; this.endFeed();
   },

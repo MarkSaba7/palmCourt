@@ -120,7 +120,7 @@ console.log('Palm size and scale');
   check(tSettle !== null && tSettle < 2.5, `PalmScale follows the player stepping back (${tSettle && tSettle.toFixed(2)} s)`);
   // And back in close.
   tSettle = null;
-  for (let k = 600; k < 900; k++) { const t = k / 30; ps.push(t, PALM_REF * 1.2 * (0.6 + 0.4 * rnd()), 0.3); if (tSettle === null && Math.abs(ps.scale - 0.85) < 0.05) tSettle = t - 20; }
+  for (let k = 600; k < 900; k++) { const t = k / 30; ps.push(t, PALM_REF * 1.2 * (0.5 + 0.5 * Math.max(rnd(), rnd())), 0.3); if (tSettle === null && Math.abs(ps.scale - 1 / 1.2) < 0.07) tSettle = t - 20; }
   check(tSettle !== null && tSettle < 2.5, `PalmScale follows the player stepping closer (${tSettle && tSettle.toFixed(2)} s)`);
   const fresh = new PalmScale();
   check(fresh.scale === 1 && near(fresh.push(0, PALM_REF / 1.2, 0), PALM_REF / 1.2) && near(fresh.scale, 1.2, 1e-9), 'PalmScale: first sight is used at once');
@@ -168,7 +168,7 @@ function runWorker(o = {}) {
   const self = { postMessage: (m) => out.push(m), onmessage: null };
   const env = {
     self, importScripts: () => { self.Vision = fv.V; },
-    fetch: async (url) => o.fetch ? o.fetch(url) : { ok: true, headers: { get: () => '1000' }, body: { getReader: () => { let n = 0; return { read: async () => (n++ < 4 ? { done: false, value: new Uint8Array(250) } : { done: true }) }; } } },
+    fetch: async (url) => o.fetch ? o.fetch(url) : { ok: true, headers: { get: () => '1000' }, body: { getReader: () => { let n = 0; return { read: async () => { if (o.slow) await sleep(o.slow); return n++ < 4 ? { done: false, value: new Uint8Array(250) } : { done: true }; } }; } } },
     createImageBitmap: async () => ({ close() {} }), ImageData: class { constructor(w, h) { this.width = w; this.height = h; } },
     URL: { createObjectURL: () => 'blob:fake', revokeObjectURL() {} }, Blob: class {}, performance: { now: () => performance.now(), timeOrigin: performance.timeOrigin + 5 },
   };
@@ -181,7 +181,7 @@ const waitFor = async (fn, ms = 2000) => { const t0 = Date.now(); while (!fn()) 
 console.log('Tracker worker (fake MediaPipe)');
 {
   // Healthy GPU: ready on the GPU, with download progress on the way, warm-up frame run.
-  let w = runWorker({ gpu: 'ok', cpu: 'ok' });
+  let w = runWorker({ gpu: 'ok', cpu: 'ok', slow: 110 });
   w.send(INIT);
   await waitFor(() => w.out.some((m) => m.type === 'ready'));
   const ready = w.out.find((m) => m.type === 'ready');

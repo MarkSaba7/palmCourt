@@ -315,7 +315,7 @@ function handBox(lm, grow = 0.3) {
 // Tilted or half-closed hands read small and motion blur distorts, so the top of the range is the real size; it
 // settles within a second or two when the player steps closer or further back.
 class PalmScale {
-  constructor(o = {}) { this.win = o.win || 2; this.slow = o.slow || 1.2; this.q = o.q || 0.75; this.reset(); }
+  constructor(o = {}) { this.win = o.win || 2; this.slow = o.slow || 1.2; this.q = o.q || 0.85; this.reset(); }
   reset() { this.buf = []; this.size = 0; }
   // t seconds, size in frame widths (palmSize), speed of the hand in frame widths per second.
   push(t, size, speed = 0) {
