@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "palm-court",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["serve.py", "--no-browser", "--no-phone"],
+      "port": 8765
+    }
+  ]
+}

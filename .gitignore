@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+
+# Node / builds
+node_modules/
+dist/
+out/
+release/
+*.log
+
+# Certificates and keys (serve.py keeps its own outside this folder, but never commit any)
+*.pem
+*.key
+*.crt
+*.p12
+
+# Local tooling state
+.worklog/HEARTBEAT
+.worklog/agents/
+.claude/settings.local.json
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#09131d">
+<title>Palm Court Racket</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Barlow:wght@400;600;700&display=swap">
+<style>
+:root {
+  --ink: #09131d; --ink-2: #13263a; --edge: rgba(242,245,238,.14); --chalk: #f2f5ee; --mist: #93a7bb;
+  --optic: #d6f04a; --optic-ink: #1b2300; --coral: #ff7a62; --good: #7fe0a8; --sky: #7fd3ff;
+  --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --body: "Barlow", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--ink); color: var(--chalk); font: 16px/1.45 var(--body); }
+body { overscroll-behavior: none; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+[hidden] { display: none !important; }
+#app { min-height: 100dvh; display: flex; flex-direction: column;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 18px calc(18px + env(safe-area-inset-bottom, 0px)); gap: 18px; }
+.bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.brand { font: 900 22px/1 var(--display); letter-spacing: .04em; text-transform: uppercase; }
+.brand b { color: var(--optic); }
+.net { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; color: var(--mist); }
+.net i { width: 9px; height: 9px; border-radius: 50%; background: var(--coral); }
+.net.on i { background: var(--good); }
+.screen { flex: 1; display: flex; flex-direction: column; gap: 16px; }
+.eyebrow { margin: 0; font: 700 12px/1 var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--optic); }
+h1 { margin: 0; font: 900 clamp(46px, 14vw, 72px)/.86 var(--display); text-transform: uppercase; text-wrap: balance; }
+p { margin: 0; }
+.lede { color: var(--mist); font-size: 17px; }
+.tips { margin: 0; padding-left: 20px; display: grid; gap: 8px; color: var(--mist); }
+.tips b { color: var(--chalk); font-weight: 600; }
+.grip { margin: 4px 0; display: flex; justify-content: center; }
+.grip svg { width: min(58vw, 230px); height: auto; }
+label.field { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--mist); }
+label.field input { font: 900 34px/1 var(--display); letter-spacing: .3em; text-transform: uppercase; color: var(--chalk); text-align: center;
+  background: rgba(242,245,238,.06); border: 1px solid var(--edge); padding: 12px; width: 100%; }
+button { font: inherit; color: inherit; cursor: pointer; border: 0; }
+.big { width: 100%; padding: 20px 18px; background: var(--optic); color: var(--optic-ink); font: 900 30px/1 var(--display); text-transform: uppercase; letter-spacing: .03em; }
+.big:active { transform: translateY(1px); filter: brightness(1.08); }
+.big:disabled { opacity: .5; }
+.toss { flex: 1; min-height: 38dvh; font-size: 48px; }
+.ghost { background: transparent; border: 1px solid var(--edge); padding: 11px 14px; font-weight: 700; font-size: 14px; color: var(--chalk); }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row .ghost { flex: 1; }
+.msg { min-height: 1.4em; color: var(--mist); font-weight: 600; }
+.msg.err { color: var(--coral); }
+.msg.ok { color: var(--good); }
+.steps { display: flex; gap: 10px; }
+.step { flex: 1; padding: 12px; border: 1px solid var(--edge); color: var(--mist); font-weight: 700; text-align: center; }
+.step.now { border-color: var(--optic); color: var(--chalk); }
+.step.done { background: var(--good); border-color: var(--good); color: var(--ink); }
+.meter { height: 12px; background: rgba(242,245,238,.1); position: relative; overflow: hidden; }
+.meter i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--optic); }
+.last { font: 900 44px/1 var(--display); text-transform: uppercase; letter-spacing: .02em; min-height: 1em; }
+.last.fh { color: var(--optic); }
+.last.bh { color: var(--sky); }
+.last small { display: block; font: 600 14px/1.4 var(--body); letter-spacing: 0; text-transform: none; color: var(--mist); margin-top: 6px; }
+.spacer { flex: 1; }
+.flash { animation: flash .35s ease-out; }
+@keyframes flash { from { background: rgba(214,240,74,.28); } to { background: transparent; } }
+#hitFlash { position: fixed; inset: 0; pointer-events: none; background: var(--optic); opacity: 0; z-index: 5; }
+#hitFlash.go { animation: hit .28s ease-out; }
+@keyframes hit { from { opacity: .45; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .flash { animation: none; } #hitFlash.go { animation-duration: .12s; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="bar">
+    <span class="brand">Palm Court <b>Racket</b></span>
+    <span class="net" id="net"><i></i><span id="netText">Not connected</span></span>
+  </header>
+
+  <section class="screen" id="screenConnect">
+    <h1>Your phone is the racket</h1>
+    <figure class="grip" aria-hidden="true">
+      <svg viewBox="0 0 220 170" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M30 130 C 70 40, 150 40, 190 130" stroke="#93a7bb" stroke-width="3" stroke-dasharray="6 8"/>
+        <path d="M182 116 L190 130 L175 131" stroke="#93a7bb" stroke-width="3"/>
+        <rect x="92" y="34" width="36" height="72" rx="7" stroke="#f2f5ee" stroke-width="4"/>
+        <rect x="99" y="44" width="22" height="46" rx="2" fill="#d6f04a" opacity=".85"/>
+        <path d="M86 100 C 80 118, 88 134, 110 136 C 132 134, 140 118, 134 100" stroke="#f2f5ee" stroke-width="4"/>
+        <path d="M88 108 H 132 M90 118 H 130" stroke="#f2f5ee" stroke-width="3" opacity=".7"/>
+      </svg>
+    </figure>
+    <ol class="tips">
+      <li><b>Hold it like a racket handle,</b> screen facing sideways.</li>
+      <li><b>Grip it firmly</b> and use a wrist strap if your case has one.</li>
+      <li><b>Give yourself room.</b> Keep clear of people, lamps and TVs.</li>
+    </ol>
+    <label class="field" for="code">Code on the game screen<input id="code" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+    <button class="big" id="btnConnect">Start</button>
+    <p class="msg" id="connectMsg" role="status"></p>
+  </section>
+
+  <section class="screen" id="screenCalib" hidden>
+    <p class="eyebrow">Quick setup · learns your grip</p>
+    <h1 id="calibTitle">Swing a forehand</h1>
+    <p class="lede" id="calibText">A normal side-to-side forehand, like you're hitting a ball.</p>
+    <div class="steps"><span class="step now" id="stepFh">Forehand</span><span class="step" id="stepBh">Backhand</span></div>
+    <div class="meter"><i id="calMeter"></i></div>
+    <p class="msg" id="calibMsg" role="status"></p>
+    <div class="spacer"></div>
+    <div class="row">
+      <button class="ghost" id="btnCalibRestart">Start over</button>
+      <button class="ghost" id="btnCalibSkip">Skip</button>
+    </div>
+  </section>
+
+  <section class="screen" id="screenPlay" hidden>
+    <p class="eyebrow" id="playEyebrow">Connected</p>
+    <h1 id="playTitle">Ready</h1>
+    <p class="lede" id="playText">Start a match on the game screen.</p>
+    <div class="meter"><i id="meter"></i></div>
+    <p class="last" id="lastSwing">Swing to test<small>Your swings show up here.</small></p>
+    <p class="msg" id="gripNote"></p>
+    <button class="big toss" id="btnToss" hidden>Tap to toss</button>
+    <div class="spacer"></div>
+    <div class="row">
+      <button class="ghost" id="btnRecal">Forehand/backhand setup</button>
+      <button class="ghost" id="btnLeave">Disconnect</button>
+    </div>
+  </section>
+</div>
+<div id="hitFlash" aria-hidden="true"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const PREFIX = 'palmcourt-rk-';
+const CAL_KEY = 'palmcourt.racket.v1';
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const SID = Math.random().toString(36).slice(2, 10);   // this page load: lets the game tell a route change from another phone
+const params = new URLSearchParams(location.search);
+const ROUTE = params.get('link');                       // 'relay' or 'p2p' forces one route (for troubleshooting)
+
+// ---------- saved grip calibration ----------
+// fhSign: which way a forehand turns around the vertical (+1 or -1), from the setup swings or learned from your hits.
+let cal = { fhSign: 0, learned: false };
+try { cal = Object.assign(cal, JSON.parse(localStorage.getItem(CAL_KEY) || '{}')); } catch (e) { /* storage blocked */ }
+function saveCal() { try { localStorage.setItem(CAL_KEY, JSON.stringify(cal)); } catch (e) { /* storage blocked */ } }
+
+// ---------- screens ----------
+let screen = 'connect';
+function show(name) {
+  screen = name;
+  $('screenConnect').hidden = name !== 'connect';
+  $('screenCalib').hidden = name !== 'calib';
+  $('screenPlay').hidden = name !== 'play';
+  if (name === 'play') gripNote();
+}
+function msg(el, text, kind) { const m = $(el); m.textContent = text; m.className = 'msg' + (kind ? ' ' + kind : ''); }
+function setNet(on, text) { $('net').classList.toggle('on', on); $('netText').textContent = text; }
+
+// ---------- swing detection ----------
+// The gyroscope rate is projected onto gravity, so the sweep around the vertical axis tells a forehand
+// from a backhand however the phone sits in your hand. Rising vs falling hand speed gives topspin vs slice.
+const DET = { START: 240, MIN_PEAK: 380, END_FRAC: 0.5, MAX_MS: 450, GAP_MS: 320, REVERSE_MS: 60, RECOVER_MS: 650, SERVE_HOLD_MS: 120 };
+const S = { events: 0, g: null, state: 'idle', t0: 0, tPeak: 0, peak: 0, w: 0, yaw: 0, absInt: 0, vUp: 0, vIdle: 0, vUpPeak: 0, aMax: 0, lastT: 0, lastEnd: 0, lastSign: 0, meter: 0, prev: null };
+
+function onMotion(e) {
+  const r = e.rotationRate;
+  if (!r || (r.alpha == null && r.beta == null && r.gamma == null)) return;
+  S.events++;
+  const t = performance.now();
+  const wx = r.beta || 0, wy = r.gamma || 0, wz = r.alpha || 0;           // deg/s about the phone's x, y, z axes
+  const ag = e.accelerationIncludingGravity || {};
+  const gx = ag.x || 0, gy = ag.y || 0, gz = ag.z || 0;
+  const w = (S.w = Math.hypot(wx, wy, wz));
+  if (!S.g) S.g = { x: gx, y: gy, z: gz };
+  if (S.state === 'idle' && w < 150) { const k = 0.1; S.g.x += (gx - S.g.x) * k; S.g.y += (gy - S.g.y) * k; S.g.z += (gz - S.g.z) * k; }
+  const gm = Math.hypot(S.g.x, S.g.y, S.g.z) || 1, ux = S.g.x / gm, uy = S.g.y / gm, uz = S.g.z / gm;
+  const al = e.acceleration;
+  const lx = al && al.x != null ? al.x : gx - S.g.x, ly = al && al.y != null ? al.y : gy - S.g.y, lz = al && al.z != null ? al.z : gz - S.g.z;
+  const wUp = wx * ux + wy * uy + wz * uz;
+  const aUp = lx * ux + ly * uy + lz * uz;
+  const aMag = Math.hypot(lx, ly, lz);
+  const dt = S.lastT ? Math.min(0.05, (t - S.lastT) / 1000) : 1 / 60;
+  S.lastT = t;
+  S.meter = Math.max(S.meter, w);
+  if (S.state === 'idle') {
+    // Leaky vertical speed, so the lift that starts before the swing is fast enough to detect still counts.
+    S.vIdle = S.vIdle * Math.exp(-dt / 0.25) + aUp * dt;
+    checkLiftToss(t, w);
+    const sign = Math.abs(wUp) > 0.5 * w ? Math.sign(wUp) : 0;
+    // Just after a swing only a turn the other way may start a new one: the swing straight after a wind-up.
+    if (w > DET.START && t - S.lastEnd > (sign && sign === -S.lastSign ? DET.REVERSE_MS : DET.GAP_MS)) {
+      const v0 = S.vIdle + aUp * dt;
+      Object.assign(S, { state: 'swing', t0: t, tPeak: t, peak: w, yaw: wUp * dt, absInt: w * dt, vUp: v0, vUpPeak: v0, aMax: aMag });
+      onSwingStart(t, sign);
+    }
+    return;
+  }
+  S.yaw += wUp * dt; S.absInt += w * dt; S.vUp += aUp * dt;
+  if (w > S.peak) { S.peak = w; S.tPeak = t; S.vUpPeak = S.vUp; }
+  S.aMax = Math.max(S.aMax, aMag);
+  // End once the racket has clearly slowed down (a single odd reading right after the peak doesn't count).
+  if ((w < S.peak * DET.END_FRAC && t - S.tPeak > 35) || t - S.t0 > DET.MAX_MS) finishSwing(t);
+}
+
+// Lift to toss: raising the phone briskly without much rotation tosses the ball when it's your serve.
+let lastLiftToss = 0;
+function checkLiftToss(t, w) {
+  if (!lastState || !lastState.serving || lastState.tossed || screen !== 'play') return;
+  if (S.state === 'idle' && w < 220 && S.vIdle > 0.9 && t - lastLiftToss > 1200) { lastLiftToss = t; S.vIdle = 0; doToss(); }
+}
+
+function strokeDir(sign, yawFrac) { return cal.fhSign && sign && yawFrac > 0.3 ? (sign === cal.fhSign ? 'fh' : 'bh') : null; }
+
+function finishSwing(t) {
+  S.state = 'idle'; S.lastEnd = t; S.vIdle = 0; S.lastSign = Math.sign(S.yaw);
+  if (S.peak < DET.MIN_PEAK) return;
+  const yawFrac = S.absInt > 0 ? Math.abs(S.yaw) / S.absInt : 0;
+  const sign = Math.sign(S.yaw), dir = strokeDir(sign, yawFrac);
+  const power = clamp(Math.max((S.peak - 330) / 1250, (S.aMax - 12) / 38), 0.05, 1);
+  const spin = clamp(0.2 + S.vUpPeak * 0.7, -1, 1);   // hand rising at contact = topspin, falling = slice
+  // Bringing the racket back after a stroke turns the other way, more slowly: that isn't a new swing.
+  const p = S.prev, expect = lastState && lastState.stroke;
+  const recovery = !!p && t - p.t < DET.RECOVER_MS && sign === -p.sign && yawFrac > 0.3 && p.yawFrac > 0.3 && S.peak < p.peak * 0.7 && !(dir && dir === expect);
+  if (!recovery) S.prev = { t, sign, peak: S.peak, yawFrac };
+  onSwing({ tPeak: S.tPeak, tEnd: t, peak: Math.round(S.peak), power, spin, dir, yawFrac, sign, recovery });
+}
+
+// ---------- link to the game ----------
+// Two routes. When this page came from the PC running the game (play.cmd), its server relays our messages
+// over the Wi-Fi: no internet needed. Otherwise, or if that fails, a direct link through the PeerJS server.
+let code = '', link = '', ws = null, peer = null, pconn = null, lanInfo;
+let offset = 0, samples = [], rtt = 0, pingTimer = 0, retryTimer = 0, retries = 0, wakeLock = null, sensorsOn = false, armed = false, leaving = false;
+let game = { handed: 'R', name: '' };
+
+function send(m) {
+  try {
+    if (link === 'relay' && ws && ws.readyState === 1) ws.send(JSON.stringify(m));
+    else if (link === 'p2p' && pconn && pconn.open) pconn.send(m);
+  } catch (e) { /* link dropped */ }
+}
+
+async function relayAvailable() {
+  if (ROUTE === 'p2p') return false;
+  if (lanInfo === undefined) {
+    lanInfo = null;
+    try { const r = await fetch('lan.json', { cache: 'no-store' }); if (r.ok) lanInfo = await r.json(); } catch (e) { /* not served by play.cmd */ }
+  }
+  return !!(lanInfo && lanInfo.relay);
+}
+
+function connect() {
+  clearTimeout(retryTimer);
+  if (!code || leaving || link) return;
+  setNet(false, 'Connecting…');
+  relayAvailable().then((ok) => { if (link || leaving) return; if (ok) startRelay(); else startP2P(); });
+}
+
+function startRelay() {
+  if (ws) return;
+  const w = (ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/link?role=phone&code=${code}`));
+  w.onmessage = (e) => {
+    if (ws !== w) return;
+    let m; try { m = JSON.parse(e.data); } catch (x) { return; }
+    if (m.relay === 'open') linkUp('relay');
+    else if (m.relay === 'wait') { if (!link) { setNet(false, 'Waiting for the game…'); linkMsg('Connected to the PC. Waiting for the game to open…'); if (ROUTE !== 'relay') startP2P(); } }
+    else if (m.relay === 'close') { if (link === 'relay') linkDown(true); }
+    else if (link === 'relay') onData(m);
+  };
+  w.onclose = () => {
+    if (ws !== w) return;
+    ws = null;
+    if (link === 'relay') linkDown(false);
+    else if (!link && ROUTE !== 'relay') startP2P();
+    else if (!link) retry();
+  };
+}
+
+function startP2P() {
+  if (link || (pconn && pconn.open) || leaving) return;
+  if (typeof Peer !== 'function') { if (!ws) linkMsg('Can’t reach the game. Is this phone on the same Wi-Fi as the PC?', 'err'); retry(); return; }
+  if (!peer || peer.destroyed) {
+    const p = (peer = new Peer({ debug: 1 }));
+    p.on('open', dial);
+    p.on('disconnected', () => { if (!p.destroyed && peer === p && !leaving) setTimeout(() => { try { p.reconnect(); } catch (e) { /* retry later */ } }, 1000); });
+    p.on('error', onPeerError);
+  } else if (peer.open) dial();
+}
+
+function dial() {
+  if (link || (pconn && pconn.open) || !peer) return;
+  const c = (pconn = peer.connect(PREFIX + code.toLowerCase(), { reliable: true, serialization: 'json' }));
+  c.on('open', () => { if (pconn === c) linkUp('p2p'); });
+  c.on('data', (m) => { if (link === 'p2p' && pconn === c) onData(m); });
+  const gone = () => { if (pconn !== c) return; pconn = null; if (link === 'p2p') linkDown(false); };
+  c.on('close', gone);
+  c.on('error', gone);
+}
+
+function onPeerError(e) {
+  const t = e && e.type;
+  if (link) return;
+  if (!ws) {
+    if (t === 'peer-unavailable') linkMsg('No game found with that code yet. Check the code on the PC screen.', 'err');
+    else if (t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed') linkMsg('Can’t reach the connection server. Check your phone’s internet, or open the link from the QR code on the same Wi-Fi as the PC.', 'err');
+    else linkMsg('Couldn’t connect yet. Still trying…', 'err');
+  }
+  retry();
+}
+
+function retry() {
+  clearTimeout(retryTimer);
+  if (link || leaving) return;
+  if (retries++ < 40) retryTimer = setTimeout(() => { if (ws) { if (peer && peer.open) dial(); else startP2P(); } else connect(); }, 2000);
+  else { setNet(false, 'Not connected'); linkMsg('Lost the game. Check the PC is on and tap Start.', 'err'); }
+}
+
+function stopP2P() {
+  const c = pconn, p = peer;
+  pconn = null; peer = null;
+  try { if (c) c.close(); } catch (e) { /* closed */ }
+  try { if (p) p.destroy(); } catch (e) { /* gone */ }
+}
+
+function stopAll() {
+  clearTimeout(retryTimer); clearInterval(pingTimer);
+  link = '';
+  const w = ws;
+  ws = null;
+  try { if (w) w.close(); } catch (e) { /* closed */ }
+  stopP2P();
+}
+
+function linkUp(kind) {
+  if (link && link !== kind) return;
+  link = kind; retries = 0; samples = [];
+  clearTimeout(retryTimer);
+  if (kind === 'relay') stopP2P();
+  else if (ws) { const w = ws; ws = null; try { w.close(); } catch (e) { /* closed */ } }
+  setNet(true, 'Connected');
+  send({ type: 'hello', device: deviceName(), calibrated: !!cal.fhSign, armed, sid: SID, v: 2 });
+  clearInterval(pingTimer);
+  let n = 0;
+  const ping = () => send({ type: 'ping', t: performance.now() });
+  ping();
+  pingTimer = setInterval(() => { ping(); if (++n === 12) { clearInterval(pingTimer); pingTimer = setInterval(ping, 1500); } }, 300);
+  if (armed) afterStart();
+  else linkMsg('Connected to the game. Tap Start.', 'ok');
+}
+
+function linkDown(waitForGame) {
+  link = '';
+  clearInterval(pingTimer);
+  if (leaving) return;
+  if (waitForGame) { setNet(false, 'Waiting for the game…'); return; }   // the relay says when the game is back
+  setNet(false, 'Reconnecting…');
+  retry();
+}
+
+function linkMsg(text, kind) { if (screen === 'connect') msg('connectMsg', text, kind); }
+
+function deviceName() {
+  const ua = navigator.userAgent;
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  const m = ua.match(/Android[^;]*;\s*([^;)]+?)(?:\s+Build|\))/);
+  return m ? m[1].trim().slice(0, 30) : 'Phone';
+}
+
+function onData(m) {
+  if (!m || typeof m !== 'object') return;
+  if (m.type === 'pong') {
+    const now = performance.now(), r = now - m.t;
+    samples.push({ r, off: m.g + r / 2 - now });
+    if (samples.length > 6) samples.shift();
+    const best = samples.reduce((a, s) => (s.r < a.r ? s : a));
+    offset = best.off; rtt = r;
+    setNet(true, `Connected · ${Math.round(r)} ms`);
+    send({ type: 'rtt', rtt: Math.round(best.r) });
+  } else if (m.type === 'welcome') {
+    game = { handed: m.handed === 'L' ? 'L' : 'R', name: String(m.name || '').slice(0, 12) };
+  } else if (m.type === 'resync') {
+    // The game clock jumped (pause, new match): drop old timing samples and measure again quickly.
+    samples = [];
+    for (let i = 0; i < 5; i++) setTimeout(() => send({ type: 'ping', t: performance.now() }), i * 90);
+  } else if (m.type === 'state') playState(m);
+  else if (m.type === 'hit') { hitCue(m.power); learnFromHit(m.stroke); }
+  else if (m.type === 'point') pointNote(m);
+  else if (m.type === 'replaced' || m.type === 'busy') {
+    leaving = true; stopAll(); armed = false;
+    setNet(false, 'Not connected'); show('connect');
+    msg('connectMsg', 'Another phone took over as the racket. Tap Start to take it back.', 'err');
+  }
+}
+
+// ---------- starting up: one tap unlocks motion, vibration, sound and keeping the screen on ----------
+async function startSensors() {
+  if (sensorsOn) return true;
+  if (typeof DeviceMotionEvent === 'undefined') { msg('connectMsg', 'This browser has no motion sensors. Open this page on a phone.', 'err'); return false; }
+  if (typeof DeviceMotionEvent.requestPermission === 'function') {
+    let r;
+    try { r = await DeviceMotionEvent.requestPermission(); } catch (e) { r = 'needs-tap'; }
+    if (r !== 'granted') {
+      msg('connectMsg', r === 'needs-tap' ? 'Tap Start again to allow motion access.'
+        : IOS ? 'Motion access is off for this page. Close this tab, scan the code again and tap Allow when asked.'
+        : 'Motion sensors are blocked for this site. Tap the icon beside the address, then Permissions (or Site settings) → Motion sensors → Allow, and reload.', 'err');
+      return false;
+    }
+  }
+  window.addEventListener('devicemotion', onMotion, { passive: true });
+  sensorsOn = true;
+  setTimeout(() => {
+    if (S.events) return;
+    const text = window.isSecureContext ? 'No motion data is arriving. This needs a phone with a gyroscope.' : 'No motion data: this page must be opened with https.';
+    msg(screen === 'calib' ? 'calibMsg' : screen === 'play' ? 'gripNote' : 'connectMsg', text, 'err');
+  }, 2000);
+  return true;
+}
+
+async function keepAwake() {
+  try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) { /* not allowed right now */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (link) keepAwake();
+  else if (code && !leaving) { retries = 0; connect(); }    // the phone slept: get the link back straight away
+});
+
+async function startClicked() {
+  const c = $('code').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!/^[A-Z0-9]{5}$/.test(c)) { msg('connectMsg', 'Type the 5-character code shown on the game screen.', 'err'); return; }
+  const motion = startSensors();   // iOS wants the permission request inside the tap, before anything else
+  unlockCues();
+  keepAwake();
+  if (c !== code) {
+    stopAll(); code = c;
+    try { history.replaceState(null, '', '?c=' + code); } catch (e) { /* ignore */ }
+  }
+  leaving = false; retries = 0;
+  armed = await motion;
+  sendStatus();
+  if (!armed) return;
+  if (link) afterStart();
+  else { msg('connectMsg', 'Connecting to the game…'); connect(); }
+}
+
+function afterStart() {
+  if (screen !== 'connect') return;
+  if (!cal.fhSign) startCalib(); else { show('play'); playState(null); }
+}
+
+function sendStatus() { send({ type: 'status', armed, calibrated: !!cal.fhSign }); }
+
+// ---------- feeling each hit ----------
+// Android vibrates. iPhones give web pages no vibration, so they get a click (sound unlocked by the Start tap),
+// the tick iOS 18 plays when a switch flips (if it does it for web pages), and a flash of the screen.
+const cues = { vibrate: 0, click: 0, flash: 0, hits: 0 };
+let audio = null, hapticSwitch = null;
+function unlockCues() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!audio && AC) audio = new AC();
+    if (audio && audio.state === 'suspended') audio.resume();
+    if (audio) { const s = audio.createBufferSource(); s.buffer = audio.createBuffer(1, 1, 22050); s.connect(audio.destination); s.start(0); }
+  } catch (e) { audio = null; }
+  if (!navigator.vibrate && !hapticSwitch) {
+    const label = document.createElement('label'), input = document.createElement('input');
+    input.type = 'checkbox'; input.setAttribute('switch', ''); input.tabIndex = -1;
+    label.setAttribute('aria-hidden', 'true'); label.style.display = 'none';
+    label.append(input); document.body.append(label);
+    hapticSwitch = label;
+  }
+  buzz(20);
+}
+function buzz(p) { try { if (navigator.vibrate && navigator.vibrate(p)) { cues.vibrate++; return true; } } catch (e) { /* no vibration */ } return false; }
+function click(power) {
+  if (!audio || audio.state !== 'running') return;
+  const t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(700 + 600 * power, t); o.frequency.exponentialRampToValueAtTime(180, t + 0.06);
+  g.gain.setValueAtTime(0.25 + 0.45 * power, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  o.connect(g); g.connect(audio.destination);
+  o.start(t); o.stop(t + 0.09);
+  cues.click++;
+}
+function flash() {
+  const f = $('hitFlash');
+  f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+  cues.flash++;
+}
+function hitCue(power) {
+  const p = clamp(Number.isFinite(+power) ? +power : 0.5, 0, 1);
+  cues.hits++;
+  if (!buzz(Math.round(35 + 55 * p))) {
+    click(p);
+    try { if (hapticSwitch) hapticSwitch.click(); } catch (e) { /* no haptics */ }
+  }
+  flash();
+}
+
+// ---------- which way is a forehand? learned from your hits ----------
+// Each hit says which stroke the game played. Swings that clearly turned one way teach an unset phone which way
+// a forehand turns, and fix a setup that got it backwards (say, it caught the wind-up instead of the swing).
+let lastSent = null, votes = [];
+function learnFromHit(stroke) {
+  const sw = lastSent;
+  if (!sw || sw.used || performance.now() - sw.tEnd > 900 || sw.yawFrac < 0.45 || (stroke !== 'fh' && stroke !== 'bh')) return;
+  sw.used = true;
+  votes.push(stroke === 'fh' ? sw.sign : -sw.sign);
+  if (votes.length > 6) votes.shift();
+  const agree = (s) => votes.filter((v) => v === s).length;
+  if (!cal.fhSign) {
+    const s = agree(1) >= agree(-1) ? 1 : -1;
+    if (votes.length >= 3 && agree(s) >= votes.length - (votes.length >= 5 ? 1 : 0)) {
+      cal.fhSign = s; cal.learned = true; saveCal(); votes = []; sendStatus();
+      gripNote('Learned your forehand and backhand from your hits.', 'ok');
+    }
+  } else if (votes.length >= 5 && agree(-cal.fhSign) >= votes.length - 1) {
+    cal.fhSign = -cal.fhSign; cal.learned = true; saveCal(); votes = [];
+    gripNote('Swapped forehand and backhand to match your hits.', 'ok');
+  }
+}
+function gripNote(text, kind) {
+  if (text) { msg('gripNote', text, kind); return; }
+  msg('gripNote', cal.fhSign ? '' : 'Forehand or backhand? Not set up yet: it learns from your hits, or tap the setup button.');
+}
+
+// ---------- what the game is doing ----------
+let lastState = null, noteUntil = 0;
+function playState(s) {
+  if (s) lastState = s;
+  s = lastState || {};
+  if (screen !== 'play' || performance.now() < noteUntil) return;
+  const serving = !!s.serving;
+  $('btnToss').hidden = !(serving && !s.tossed);
+  if (!s.inMatch) { title('Connected', 'Ready', 'Start a match on the game screen. Swing here to test.'); return; }
+  if (serving && !s.tossed) title('Your serve', 'Tap to toss', 'Or lift the phone to toss. Then swing.');
+  else if (serving) title('Your serve', 'Swing!', '');
+  else if (s.stroke) title('Incoming', s.stroke === 'fh' ? 'Forehand' : 'Backhand', 'Swing when the ball reaches you.');
+  else title(s.text || 'Rally', 'Ready', '');
+}
+function title(eyebrow, big, small) { $('playEyebrow').textContent = eyebrow; $('playTitle').textContent = big; $('playText').textContent = small; }
+function pointNote(m) {
+  buzz(m.won ? [40, 60, 40] : [140]);
+  if (screen !== 'play') return;
+  title(m.won ? 'Point won' : 'Point lost', String(m.big || (m.won ? 'Nice!' : 'Unlucky')).slice(0, 18), String(m.small || '').slice(0, 60));
+  noteUntil = performance.now() + 1800;
+  setTimeout(() => playState(null), 1850);
+}
+
+// ---------- swings ----------
+function onSwingStart(t, sign) {
+  if (screen === 'play') send({ type: 'swingStart', tg: t + offset, dir: strokeDir(sign, 1) });
+}
+// The game serves off the first swing after the toss, and a serve starts with a wind-up. So while our toss is in the
+// air each swing waits a moment and only the strongest is sent: the game rewinds the ball to the swing's time.
+let held = null, holdTimer = 0;
+function holdServe(sw) {
+  if (!held || sw.peak > held.peak) held = sw;
+  clearTimeout(holdTimer);
+  holdTimer = setTimeout(flushServe, DET.SERVE_HOLD_MS);
+}
+function flushServe() {
+  if (!held) return;
+  // A swing under way that's already faster will replace this one; one still speeding up might (but don't wait long).
+  const since = performance.now() - held.tEnd;
+  if (S.state === 'swing' && ((S.peak > held.peak && since < 450) || (S.w > 0.9 * S.peak && since < 150))) { holdTimer = setTimeout(flushServe, 20); return; }
+  const sw = held;
+  held = null;
+  sendSwing(sw);
+}
+function onSwing(sw) {
+  if (screen === 'calib') { calibSwing(sw); return; }
+  if (screen !== 'play' || sw.recovery) return;
+  const el = $('lastSwing');
+  const kind = sw.dir === 'fh' ? 'Forehand' : sw.dir === 'bh' ? 'Backhand' : 'Swing';
+  const spin = sw.spin > 0.5 ? 'topspin' : sw.spin < 0 ? 'slice' : 'flat';
+  el.className = 'last' + (sw.dir ? ' ' + sw.dir : '');
+  el.textContent = `${kind} ${sw.dir === 'fh' ? '→' : sw.dir === 'bh' ? '←' : ''}`.trim();
+  const small = document.createElement('small');
+  small.textContent = `${Math.round(sw.power * 100)}% · ${spin} · ${sw.peak}°/s`;
+  el.append(small);
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  if (lastState && lastState.serving && lastState.tossed) holdServe(sw); else sendSwing(sw);
+}
+function sendSwing(sw) {
+  lastSent = sw;
+  send({ type: 'swing', tg: sw.tPeak + offset, peak: sw.peak, power: +sw.power.toFixed(3), spin: +sw.spin.toFixed(3), dir: sw.dir, yawFrac: +sw.yawFrac.toFixed(2) });
+}
+
+// ---------- grip setup ----------
+// A swing comes with a wind-up before it and a recovery after, both turning the other way. So each step
+// collects the swings that come close together and keeps the fastest side-to-side one: that's the stroke.
+let calStep = 0, calFhSign = 0, cluster = [], clusterTimer = 0;
+function startCalib() {
+  show('calib'); calStep = 1; calFhSign = 0; cluster = []; clearTimeout(clusterTimer);
+  $('calibTitle').textContent = 'Swing a forehand';
+  $('calibText').textContent = 'A normal side-to-side forehand, like you’re hitting a ball.';
+  $('stepFh').className = 'step now'; $('stepBh').className = 'step';
+  msg('calibMsg', '');
+}
+function calibSwing(sw) {
+  cluster.push(sw);
+  clearTimeout(clusterTimer);
+  clusterTimer = setTimeout(judgeCluster, 600);
+}
+function judgeCluster() {
+  const side = cluster.filter((s) => s.yawFrac >= 0.35);
+  cluster = [];
+  if (screen !== 'calib') return;
+  if (!side.length) { msg('calibMsg', 'That swing went mostly up or down. Swing side to side, like a groundstroke.', 'err'); return; }
+  const best = side.reduce((a, s) => (s.peak > a.peak ? s : a));
+  if (calStep === 1) {
+    calFhSign = best.sign; calStep = 2;
+    $('stepFh').className = 'step done'; $('stepBh').className = 'step now';
+    $('calibTitle').textContent = 'Now a backhand';
+    $('calibText').textContent = 'Swing across your body the other way.';
+    msg('calibMsg', 'Got your forehand.', 'ok');
+    buzz(30);
+  } else if (calStep === 2) {
+    if (best.sign === calFhSign) { msg('calibMsg', 'That looked like another forehand. Swing a backhand, across your body.', 'err'); return; }
+    cal.fhSign = calFhSign; cal.learned = false; votes = []; saveCal();
+    $('stepBh').className = 'step done';
+    buzz([30, 50, 30]);
+    sendStatus();
+    show('play'); playState(null);
+    gripNote('Setup done: it knows your forehand from your backhand.', 'ok');
+  }
+}
+
+// ---------- meters ----------
+function frame() {
+  const v = clamp(S.meter / 1500, 0, 1);
+  $('meter').style.width = $('calMeter').style.width = `${v * 100}%`;
+  S.meter *= 0.9;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ---------- buttons ----------
+$('btnConnect').addEventListener('click', startClicked);
+$('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') startClicked(); });
+let tossTimer = 0;
+function doToss() {
+  send({ type: 'toss' }); buzz(15);
+  $('btnToss').hidden = true; title('Your serve', 'Swing!', '');
+  // If the game didn't toss (the tap came too early or got lost), offer the button again.
+  clearTimeout(tossTimer);
+  tossTimer = setTimeout(() => { if (lastState && lastState.serving && !lastState.tossed) playState(null); }, 1500);
+}
+$('btnToss').addEventListener('click', doToss);
+$('btnRecal').addEventListener('click', startCalib);
+$('btnCalibRestart').addEventListener('click', startCalib);
+$('btnCalibSkip').addEventListener('click', () => { cluster = []; clearTimeout(clusterTimer); show('play'); playState(null); });
+let leaveArmed = 0;
+$('btnLeave').addEventListener('click', () => {
+  if (performance.now() - leaveArmed > 2500) { leaveArmed = performance.now(); $('btnLeave').textContent = 'Tap again to disconnect'; setTimeout(() => ($('btnLeave').textContent = 'Disconnect'), 2500); return; }
+  leaving = true; armed = false; stopAll();
+  setNet(false, 'Not connected'); show('connect'); msg('connectMsg', '');
+  $('btnLeave').textContent = 'Disconnect';
+});
+
+// Opened from the game's QR code: the code is in the address, so link up straight away. Motion still needs a tap.
+const preset = (params.get('c') || params.get('code') || location.hash.slice(1) || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+$('code').value = preset;
+if (/^[A-Z0-9]{5}$/.test(preset)) { code = preset; msg('connectMsg', 'Finding your game… Tap Start when you’re ready.'); connect(); }
+window.PalmRacket = { S, DET, cal, cues, onMotion, get link() { return link; }, get armed() { return armed; }, get screen() { return screen; }, get offset() { return offset; }, get votes() { return votes.slice(); } };
+</script>
+</body>
+</html>
