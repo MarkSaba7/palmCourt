@@ -636,8 +636,17 @@ const Tracker = {
     const c = this.ctxO || (this.ctxO = o.getContext('2d'));
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.clearRect(0, 0, W, H);
-    // Camera check: tint what matches the paddle color (yellow: the paddle, red: anything else that matches).
-    if (big && this.kind === 'paddle' && Settings.paddle && this.seg.mask) this.drawMask(c, W, H);
+    if (big && this.guide === 'frame') this.drawGuide(c, W, H);
+    // Camera check: tint what matches the paddle color (yellow: the paddle, red: anything else that matches). While
+    // locking (the camera check sets preview) it shows what the color in the circle would match instead.
+    if (big && this.kind === 'paddle') {
+      if (this.preview) {
+        const now = performance.now();
+        if (!this.lockPrev || now - this.lockPrev.at > 120) this.previewLock(now);
+        const p = this.lockPrev;
+        if (p.col) this.drawMask(c, W, H, p.seg, p.w, p.h);
+      } else if (Settings.paddle && this.seg.mask) this.drawMask(c, W, H);
+    }
     c.strokeStyle = 'rgba(214,240,74,0.5)'; c.lineWidth = 1; c.setLineDash([5, 5]);
     c.beginPath(); c.moveTo(0, H * TOSS_LINE); c.lineTo(W, H * TOSS_LINE); c.stroke(); c.setLineDash([]);
     c.fillStyle = 'rgba(214,240,74,0.8)'; c.font = '600 10px Barlow, sans-serif'; c.fillText('TOSS LINE', 6, H * TOSS_LINE - 5);
@@ -646,8 +655,10 @@ const Tracker = {
       for (const [a, b] of HAND_BONES) { c.beginPath(); c.moveTo((1 - lms[a].x) * W, lms[a].y * H); c.lineTo((1 - lms[b].x) * W, lms[b].y * H); c.stroke(); }
     }
     if (this.kind === 'paddle') {
-      c.strokeStyle = Settings.paddle ? 'rgba(242,245,238,0.35)' : '#d6f04a'; c.lineWidth = 2;
-      c.beginPath(); c.arc(W / 2, H / 2, (W * 12) / 160, 0, Math.PI * 2); c.stroke();
+      const r = (W * 12) / 160, hot = big && (this.guide === 'lock' || this.preview);
+      c.strokeStyle = hot || !Settings.paddle ? '#d6f04a' : 'rgba(242,245,238,0.35)'; c.lineWidth = hot ? 3 : 2;
+      c.beginPath(); c.arc(W / 2, H / 2, r, 0, Math.PI * 2); c.stroke();
+      if (hot) { c.fillStyle = 'rgba(214,240,74,0.95)'; c.font = '700 11px Barlow, sans-serif'; c.textAlign = 'center'; c.fillText('PADDLE FACE HERE', W / 2, H / 2 + r + 16); c.textAlign = 'start'; }
     }
     // The last half second of movement: red where it counted as a swing.
     const tr = this.trail;
@@ -663,19 +674,49 @@ const Tracker = {
       if (sw && sw.dir && big) { c.fillStyle = '#f2f5ee'; c.font = '700 13px Barlow, sans-serif'; c.fillText(sw.dir === 'fh' ? 'FH' : 'BH', pt.x * W + 13, pt.y * H + 4); }
     }
   },
-  drawMask(c, W, H) {
-    const w = this.segW, h = this.segH, m = this.seg.mask, lab = this.seg.lab, best = this.seg.best;
+  // A segmentation mask (S: segmentColor's scratch, w × h, unmirrored) tinted over the picture. Also counts its pixels
+  // into S.count ({ mine, other, k }: the tracked blob, everything else that matched, k = pixel scale vs 160×120).
+  drawMask(c, W, H, S = this.seg, w = this.segW, h = this.segH) {
+    const m = S.mask, lab = S.lab, best = S.best;
     if (!m || m.length !== w * h) return;
     const mc = this.maskCanvas || (this.maskCanvas = document.createElement('canvas'));
     if (mc.width !== w || mc.height !== h) { mc.width = w; mc.height = h; this.maskImg = null; }
     const mx = mc.getContext('2d'), img = this.maskImg || (this.maskImg = mx.createImageData(w, h)), d = img.data;
+    let nMine = 0, nOther = 0;
     for (let p = 0, i = 0; p < m.length; p++, i += 4) {
       if (!m[p]) { d[i + 3] = 0; continue; }
       const mine = best && lab[p] === best;
+      if (mine) nMine++; else nOther++;
       d[i] = mine ? 214 : 255; d[i + 1] = mine ? 240 : 122; d[i + 2] = mine ? 74 : 98; d[i + 3] = mine ? 150 : 120;
     }
+    S.count = { mine: nMine, other: nOther, k: (w * h) / 19200 };
     mx.putImageData(img, 0, 0);
     c.save(); c.translate(W, 0); c.scale(-1, 1); c.imageSmoothingEnabled = false; c.drawImage(mc, 0, 0, W, H); c.restore();
+  },
+  // Camera check, before a lock: the color in the circle now (read the way lockColor reads it) and what it would match.
+  previewLock(now) {
+    const [W, H] = this.workSize(), c = this.ensureWork(W, H), p = this.lockPrev || (this.lockPrev = { seg: {} });
+    c.drawImage(this.video, 0, 0, W, H);
+    p.col = lockColorFromPatch(c.getImageData(Math.round(W / 2 - 10), Math.round(H / 2 - 10), 20, 20).data);
+    p.w = W; p.h = H; p.at = now;
+    if (p.col) segmentColor(c.getImageData(0, 0, W, H).data, W, H, { h: p.col.h, s: p.col.s, v: p.col.v, tol: p.col.tol || 16 }, { scratch: p.seg });
+    else p.seg.count = null;
+    return p;
+  },
+  // Camera check, framing step: a head-and-shoulders outline the size a player about 2 m from a typical webcam appears.
+  drawGuide(c, W, H) {
+    const u = Math.min(W, (H * 4) / 3), cx = W / 2, hr = u * 0.032, hy = H * 0.24, ny = hy + hr * 1.3, sy = ny + u * 0.028, sw = u * 0.082;
+    c.save();
+    c.strokeStyle = 'rgba(242,245,238,0.55)'; c.lineWidth = 2; c.setLineDash([6, 5]);
+    c.beginPath(); c.ellipse(cx, hy, hr, hr * 1.3, 0, 0, Math.PI * 2); c.stroke();
+    for (const s of [-1, 1]) {
+      c.beginPath();
+      c.moveTo(cx + s * hr * 0.5, ny); c.lineTo(cx + s * hr * 0.55, sy);
+      c.lineTo(cx + s * sw * 0.6, sy); c.quadraticCurveTo(cx + s * sw, sy, cx + s * sw, sy + hr * 0.9);
+      c.lineTo(cx + s * sw * 0.97, H);
+      c.stroke();
+    }
+    c.restore();
   },
 };
 
