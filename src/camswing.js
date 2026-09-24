@@ -402,9 +402,9 @@ function segmentColor(px, W, H, tg, opt = {}) {
   const n = W * H, S = opt.scratch || {};
   if (!S.mask || S.mask.length !== n) {
     S.mask = new Uint8Array(n); S.lab = new Int32Array(n); S.stack = new Int32Array(n); S.wt = new Float32Array(n); S.hd = new Float32Array(n);
-    S.rA = new Int32Array(H); S.rB = new Int32Array(H); S.cA = new Int32Array(W); S.cB = new Int32Array(W);
+    S.rA = new Int32Array(H); S.rB = new Int32Array(H); S.cA = new Int32Array(W); S.cB = new Int32Array(W); S.nbr = new Uint8Array(n);
   }
-  const { mask, lab, stack, wt, hd } = S;
+  const { mask, lab, stack, wt, hd, nbr } = S;
   const th = tg.h, tol = tg.tol || 16, smin = Math.max(0.28, tg.s * 0.68), vmin = Math.max(0.12, tg.v * 0.38);
   const ls = Math.max(0.15, smin * 0.5), lv = Math.max(0.07, vmin * 0.6) * 255, vm = vmin * 255, ltol = Math.max(8, tol * 0.75), wk = 0.65 / Math.max(0.05, smin - ls);
   const P = opt.pred, k2 = (W * W) / (160 * 160);
@@ -430,6 +430,11 @@ function segmentColor(px, W, H, tg, opt = {}) {
       hd[p] = dd;
     }
   }
+  // Lone pixels and pairs are noise (dim rooms): keep only pixels with at least two matching neighbours.
+  for (let y = Y0; y < Y1; y++) for (let x = X0, p = y * W + X0; x < X1; x++, p++) {
+    if (mask[p]) nbr[p] = (x > 0 && mask[p - 1] ? 1 : 0) + (x < W - 1 && mask[p + 1] ? 1 : 0) + (y > 0 && mask[p - W] ? 1 : 0) + (y < H - 1 && mask[p + W] ? 1 : 0);
+  }
+  for (let y = Y0; y < Y1; y++) for (let p = y * W + X0, pe = y * W + X1; p < pe; p++) if (mask[p] && nbr[p] < 2) mask[p] = 0;
   // Blobs (4-connected), with their weighted centroid and second moments.
   lab.fill(0);
   S.alt = null;
@@ -450,7 +455,7 @@ function segmentColor(px, W, H, tg, opt = {}) {
     let sp = 0, np = 0, ns = 0, sw = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, sh = 0, ss = 0, sv = 0, cm = 0, sin = 0, x0 = W, x1 = 0, yA = H, yB = 0;
     stack[sp++] = p0; lab[p0] = id;
     while (sp) {
-      const q = stack[--sp], x = q % W, yy = (q / W) | 0, w = wt[q], fx = x + 0.5, fy = yy + 0.5;
+      const q = stack[--sp], x = q % W, yy = (q / W) | 0, w = CL ? wt[q] * Math.max(0.02, 1 - 1.2 * CL.C[q]) : wt[q], fx = x + 0.5, fy = yy + 0.5;
       np++; sw += w; sx += fx * w; sy += fy * w; sxx += fx * fx * w; syy += fy * fy * w; sxy += fx * fy * w;
       if (x < x0) x0 = x; if (x > x1) x1 = x; if (yy < yA) yA = yy; if (yy > yB) yB = yy;
       if (mask[q] === 2) {
@@ -526,7 +531,13 @@ function finishBlob(b, S, W, H, E, CL) {
     if (lab[p] !== id) continue;
     if (x < rA[y]) rA[y] = x; if (x > rB[y]) rB[y] = x; if (y < cA[x]) cA[x] = y; if (y > cB[x]) cB[x] = y;
   }
-  const A = 0.785 * D * D, big = D > 0 && b.n > 2.2 * A + 1.2 * sm * D;
+  // Holes are only filled in a solid blob: a ragged one (noise, blur) would grow into its surroundings.
+  let own = 0, gaps = 0;
+  for (let y = y0; y <= y1; y++) for (let x = x0, p = y * W + x0; x <= x1; x++, p++) {
+    if (lab[p] === id) own++;
+    else if (x > rA[y] && x < rB[y] && y > cA[x] && y < cB[x]) gaps++;
+  }
+  const fill = gaps <= 0.35 * own, A = 0.785 * D * D, big = D > 0 && b.n > 2.2 * A + 1.2 * sm * D;
   let wx = 0, wy = 0, wr = Infinity;
   if (big) { wx = (1 - E.x) * W; wy = E.y * H; wr = 0.7 * D + 0.5 * sm; }
   let sw = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, holes = 0;
@@ -534,13 +545,13 @@ function finishBlob(b, S, W, H, E, CL) {
     sw = sx = sy = sxx = syy = sxy = holes = 0;
     for (let y = y0; y <= y1; y++) for (let x = x0, p = y * W + x0; x <= x1; x++, p++) {
       let w;
-      if (lab[p] === id) w = wt[p];
-      else if (x > rA[y] && x < rB[y] && y > cA[x] && y < cB[x]) {   // inside the blob both across and down: a hole
+      if (lab[p] === id) w = wt[p] * (CL ? Math.max(0.02, 1 - 1.2 * CL.C[p]) : 1);   // known clutter it touches hardly counts
+      else if (fill && x > rA[y] && x < rB[y] && y > cA[x] && y < cB[x]) {   // inside the blob both across and down: a hole
         w = 1; holes++;
         if (!it) { mask[p] = 1; wt[p] = 1; lab[p] = id; }
       } else continue;
       const fx = x + 0.5, fy = y + 0.5;
-      if (big) { if ((fx - wx) ** 2 + (fy - wy) ** 2 > wr * wr) continue; if (CL) w *= 1 - 0.8 * CL.C[p]; }
+      if (big && (fx - wx) ** 2 + (fy - wy) ** 2 > wr * wr) continue;
       sw += w; sx += fx * w; sy += fy * w; sxx += fx * fx * w; syy += fy * fy * w; sxy += fx * fy * w;
     }
     if (!(sw > 0)) break;
@@ -634,10 +645,10 @@ class PaddleTrack {
     const strict = b.strict > 0.5 * b.n;
     this.conf = (tracking ? (dist < E.reach ? 0.5 : 0.2) : 0.3) + (sizeOk ? 0.3 : 0) + (strict ? 0.2 : 0);
     this.weak = this.conf >= 0.8 ? 0 : this.weak + 1;
-    if (this.conf >= 0.8 || !d) {
-      if (strict && !b.big && b.minor > 0.6 * b.d && sp < 0.6) this.d = d ? d + (clamp(b.d, d * 0.7, d * 1.4) - d) * 0.08 : b.d;
-      if (tracking && !o.roi) this.others = this.learnClutter(W, H, b.id, 0.04);
-    }
+    // The size follows a clearly seen paddle on a continuous track even when it's off (the player locked it up close,
+    // then stepped back).
+    if ((this.conf >= 0.8 || onTrack || !d) && strict && !b.big && b.cm < 0.3 && b.minor > 0.6 * b.d && sp < 0.6) this.d = d ? d + (clamp(b.d, d * 0.7, d * 1.4) - d) * 0.12 : b.d;
+    if (this.conf >= 0.8 && tracking && !o.roi) this.others = this.learnClutter(W, H, b.id, 0.04);
     return b;
   }
   // Right after a lock, on the same frame: the paddle is the blob in the lock circle. Its size seeds the tracker and

@@ -167,7 +167,7 @@ export function keyPath(keys) {
       if (t <= b.t) {
         if (a.gone || b.gone) return null;
         const k = mj((t - a.t) / (b.t - a.t)), m = (f) => a[f] + (b[f] - a[f]) * k;
-        return { x: m('x'), y: m('y'), ang: m('ang'), tilt: m('tilt') };
+        return { x: m('x'), y: m('y'), ang: m('ang'), tilt: m('tilt'), d: a.d && b.d ? m('d') : undefined };
       }
     }
     const e = keys[keys.length - 1];
@@ -175,20 +175,20 @@ export function keyPath(keys) {
   };
 }
 // Rally of forehands and backhands with peak speed v (frame widths per second), after `hold` seconds held still in the
-// middle (for the lock). Sweeps span from x 0.2 to 0.82.
+// middle, nearer the camera (lockD across, for the lock), then played at diameter d. Sweeps span from x 0.2 to 0.82.
 export function rally(v, n, o = {}) {
-  const keys = [{ t: 0, x: 0.5, y: 0.5, ang: 1.9, tilt: 1 }], hold = o.hold ?? 1, L = 0.2, Rr = 0.82, dist = Math.hypot(Rr - L, 0.12 * 0.75);
-  const D = (1.875 * dist) / v, pause = o.pause ?? 0.35;
+  const d = o.d ?? 0.075, lockD = o.lockD ?? 0.13, keys = [{ t: 0, x: 0.5, y: 0.5, ang: 1.9, tilt: 1, d: lockD }], hold = o.hold ?? 1, L = 0.2, Rr = 0.82;
+  const D = (1.875 * Math.hypot(Rr - L, 0.12 * 0.75)) / v, pause = o.pause ?? 0.35;
   let t = hold;
-  keys.push({ t, x: 0.5, y: 0.5, ang: 1.9, tilt: 1 });
-  t += 0.4; keys.push({ t, x: Rr, y: 0.62, ang: 2.3, tilt: o.edge ? 0.12 : 0.7 });     // take it back
+  keys.push({ t, x: 0.5, y: 0.5, ang: 1.9, tilt: 1, d: lockD });
+  t += 0.4; keys.push({ t, x: Rr, y: 0.62, ang: 2.3, tilt: 0.7, d });     // step back and take it back
   for (let i = 0; i < n; i++) {
     const fh = i % 2 === 0;
     t += pause; keys.push({ ...keys[keys.length - 1], t });
-    t += D; keys.push({ t, x: fh ? L : Rr, y: fh ? 0.46 : 0.62, ang: fh ? 0.9 : 2.3, tilt: o.edge ? 0.12 : 0.7 });
+    t += D; keys.push({ t, x: fh ? L : Rr, y: fh ? 0.46 : 0.62, ang: fh ? 0.9 : 2.3, tilt: 0.7, d });
   }
   t += pause; keys.push({ ...keys[keys.length - 1], t });
-  t += 0.5; keys.push({ t, x: 0.55, y: 0.55, ang: 1.9, tilt: 1 });
+  t += 0.5; keys.push({ t, x: 0.55, y: 0.55, ang: 1.9, tilt: 1, d });
   keys.push({ ...keys[keys.length - 1], t: t + 0.4 });
   return { pose: keyPath(keys), end: t + 0.4, D };
 }
@@ -316,7 +316,7 @@ function crop(px, W, x0, y0, w, h) {
   return out;
 }
 // Before: a 20×20 lock patch from one frame; the swing detector's prediction steers the blur rescue.
-function oldTracker() {
+export function oldTracker() {
   const det = new SwingDetector(), S = {};
   let lock = null, tg = null;
   return {
@@ -333,7 +333,7 @@ function oldTracker() {
   };
 }
 // After: the lock circle from the last few frames, PaddleTrack, adaptation only while it's sure.
-function newTracker() {
+export function newTracker() {
   const pt = new PaddleTrack(), det = new SwingDetector(), ring = [];
   let lock = null, tg = null;
   const tr = {
@@ -363,20 +363,21 @@ function newTracker() {
 
 // Render a clip and run every tracker on the same frames. The lock happens at lockT (the paddle held in the circle).
 // Found: within 60% of the paddle's diameter of the truth (the true centre at mid-exposure). Wrong: anywhere else.
-function runClip(sc, clip, trackers, o = {}) {
+export function runClip(sc, clip, trackers, o = {}) {
   const W = o.W || 160, H = o.H || 120, fps = clip.fps || 30, lockT = clip.lockT ?? 0.8, d = sc.o.d, tolF = Math.max(0.6 * d, 3 / W);
   const res = trackers.map(() => ({ vis: 0, found: 0, extra: 0, wrong: 0, err: [], ms: 0, n: 0, pos: [], locked: false }));
   let locked = false;
   for (let k = 0; k / fps < clip.end; k++) {
     const t = k / fps, cam = { exposure: 1 / 60, ...clip.cam, ...(clip.camAt ? clip.camAt(t) : {}), pose: clip.pose, dyn: clip.dyn, seed: k * 7 + 1 };
-    const px = renderFrame(sc, t, W, H, cam), truth = clip.pose(t);
+    // (a paddle leaving view is still in the frame for part of the exposure: finding it there isn't wrong)
+    const px = renderFrame(sc, t, W, H, cam), e2 = cam.exposure / 2, truth = clip.pose(t) || clip.pose(t - e2) || clip.pose(t + e2);
     if (!locked) {
       if (t < lockT) { for (const tr of trackers) if (tr.keep) tr.keep(px, W, H); continue; }
       trackers.forEach((tr, j) => { res[j].locked = !!tr.lock(px, W, H); });
       locked = true;
       continue;
     }
-    const vis = !!truth && (truth.tilt ?? 1) >= 0.3 && truth.x > 0.03 && truth.x < 0.97 && truth.y > 0.03 && truth.y < 0.97;
+    const q = clip.pose(t), vis = !!q && (q.tilt ?? 1) >= 0.3 && q.x > 0.03 && q.x < 0.97 && q.y > 0.03 && q.y < 0.97;
     trackers.forEach((tr, j) => {
       const R = res[j], t0 = performance.now(), b = tr.step(px, W, H, t);
       R.ms += performance.now() - t0; R.n++;
@@ -407,12 +408,12 @@ function jitter(R, W = 160, H = 120) {
 }
 
 // Clips: a rally of forehands and backhands after the lock, with variations.
-function still(dur, amp = 0.0015) {
+export function still(dur, amp = 0.0015) {
   return { end: dur, pose: (t) => ({ x: 0.5 + amp * Math.sin(t * 5.1), y: 0.5 + amp * Math.cos(t * 3.7), ang: 1.9, tilt: 1 }) };
 }
-function hide(clip, ranges) { const p = clip.pose; return { ...clip, pose: (t) => (ranges.some(([a, b]) => t >= a && t <= b) ? null : p(t)) }; }
+export function hide(clip, ranges) { const p = clip.pose; return { ...clip, pose: (t) => (ranges.some(([a, b]) => t >= a && t <= b) ? null : p(t)) }; }
 // Edge-on at the middle of every swing (when it's fastest), face-on at the ends.
-function edgeOn(clip) {
+export function edgeOn(clip) {
   const p = clip.pose;
   return { ...clip, pose: (t) => { const a = p(t), b = p(t + 0.01); if (!a || !b) return a; const v = Math.hypot(b.x - a.x, b.y - a.y) / 0.01; return { ...a, tilt: Math.max(0.1, 1 - v / 2.2) }; } };
 }
