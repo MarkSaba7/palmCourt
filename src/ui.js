@@ -110,23 +110,30 @@ const UI = {
     $('latVal').textContent = `${Settings.latency > 0 ? '+' : Settings.latency < 0 ? '−' : ''}${Math.abs(Math.round(Settings.latency * 1000))} ms`;
   },
   menuNote(msg, kind) { const el = $('menuNote'); if (!el) return; el.textContent = msg; el.className = 'status' + (kind ? ' ' + kind : ''); },
+  // One line on the menu, with the fix folded away so it doesn't push the buttons off a laptop screen.
   gpuWarning() {
-    const p = document.createElement('p');
-    p.className = 'gpu-note';
-    p.innerHTML = '<b>Your browser is drawing the 3D court without your graphics card</b>, so it will be slow. In Chrome or Edge open Settings → System, turn on “Use graphics acceleration when available”, then press Relaunch.';
-    $('menu').querySelector('.actions').before(p);
+    const d = document.createElement('details');
+    d.className = 'gpu-note';
+    d.innerHTML = '<summary><span><b>No graphics card in use:</b> the 3D court will be slow.</span></summary><p>Your browser is drawing without your graphics card. In Chrome or Edge open Settings → System, turn on “Use graphics acceleration when available”, then press Relaunch.</p>';
+    $('menu').querySelector('.actions').before(d);
   },
 
   go(screen) {
+    const from = this.screen;
     this.screen = screen;
     Bus.emit('screen', { screen });
     for (const el of document.querySelectorAll('.screen')) el.hidden = el.id !== screen;   // modules add their own .screen elements
     const playing = Game.mode === 'cpu' || Game.mode === 'online';
     $('hud').hidden = !playing || screen === 'menu' || screen === 'lobby';
+    $('hud').classList.toggle('ended', screen === 'over');
     if (screen === 'menu' && Tracker.stream && Game.mode === 'attract') Tracker.stop();
     this.placeCam();
     this.prompt();
     this.netInfo();
+    // Keyboard players land on the screen's main button; back in play nothing keeps focus, so Space always swings.
+    const main = { menu: 'btnPractice', pause: 'btnResume', over: 'btnRematch' }[screen];
+    if (main && from !== screen && !$(main).disabled) $(main).focus({ preventScroll: true });
+    else if (screen === null && document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   },
   placeCam() {
     const w = Tracker.wrap, on = !!Tracker.stream;
@@ -1081,6 +1088,7 @@ const UI = {
     if (Game.mode === 'cpu') Clock.pause();
     $('pauseEyebrow').textContent = Game.mode === 'online' ? 'Match still running' : 'Paused';
     $('perfInfo').textContent = `Running at ${Math.round(Perf.fps)} fps · ${Math.round(Perf.scale * 100)}% resolution · ${Perf.gpuName()}${Tracker.stream ? ` · tracking ${Tracker.info()}` : ''}`;
+    this.scoreTable($('pauseScore'), false);
     this.go('pause');
   },
   resume() { Clock.resume(); this.go(null); Phone.send({ type: 'resync' }); },
@@ -1088,6 +1096,7 @@ const UI = {
     if ((Game.mode === 'cpu' || Game.mode === 'online') && Game.state !== 'over') Bus.emit('match:quit', { mode: Game.mode, cfg: Game.cfg });
     if (Game.mode === 'online') { Net.send({ type: 'bye' }); Net.reset(); }
     Clock.resume();
+    this.clearHud();
     Game.startAttract();
     this.go('menu');
   },
@@ -1098,16 +1107,79 @@ const UI = {
     } else this.startCpu();
   },
   showOver() {
-    const m = Game.match, w = m.winner, me = Game.localIdx, n = Game.names, st = m.stats;
-    $('overTitle').textContent = w === me ? 'You win' : `${n[w]} wins`;
-    const score = m.tbOnly ? `${m.pts[0]}–${m.pts[1]}` : `${m.games[0]}–${m.games[1]}${m.tb ? ` (${Math.min(m.pts[0], m.pts[1])})` : ''}`;
-    $('overScore').textContent = `${n[0]} ${score} ${n[1]}`;
-    const pair = (a) => `${a[0]}–${a[1]}`;
-    $('overStats').textContent = `Aces ${pair(st.aces)} · Double faults ${pair(st.df)} · Winners ${pair(st.winners)} · Errors ${pair(st.errors)} · Fastest serves ${st.fastest[0]} / ${st.fastest[1]} km/h · Longest rally ${st.longest} shots`;
+    const m = Game.match, w = m.winner, me = Game.localIdx;
+    $('overTitle').textContent = w === me ? 'You win' : `${this.shortName(w)} wins`;
+    this.scoreTable($('overScore'), true);
+    this.renderStats($('overStats'));
     $('btnRematch').textContent = Game.mode === 'online' ? 'Rematch' : 'Play again';
     $('btnRematch').disabled = false;
     this.go('over');
     if (w === me) Sound.applause(1);
+  },
+  // The score as a small table, for the pause and match-over screens. The final score puts the loser's tiebreak
+  // points in superscript (7–6⁵).
+  scoreTable(el, final) {
+    const m = Game.match;
+    if (!m) { el.replaceChildren(); return; }
+    const labels = m.pointLabels(), tbl = document.createElement('div');
+    tbl.className = 'mini-sb' + (final ? ' final' : '');
+    for (const i of [0, 1]) {
+      const row = document.createElement('div');
+      const cell = (cls, text) => { const s = document.createElement('span'); s.className = cls; s.textContent = text; row.append(s); return s; };
+      row.className = 'ms-row' + (final ? (m.winner === i ? ' win' : '') : m.currentServer === i ? ' serving' : '');
+      cell('ms-serve', ''); cell('ms-cc', this.country(i));
+      cell('ms-name', this.shortName(i)).title = Game.names[i];
+      const g = cell('ms-g', m.tbOnly ? (final ? String(m.pts[i]) : '') : String(m.games[i]));
+      if (final && m.tb && !m.tbOnly && m.winner !== i) { const sup = document.createElement('sup'); sup.textContent = m.pts[i]; g.append(sup); }
+      if (!final) cell('ms-p', labels[i]);
+      tbl.append(row);
+    }
+    const meta = document.createElement('p');
+    meta.className = 'score-meta';
+    meta.textContent = this.metaText(m, !final).join(' · ');
+    el.replaceChildren(tbl, meta);
+  },
+  metaText(m, live) {
+    const f = FORMATS[m.fmtKey], s = SURFACES[World.surface];
+    return [f && f.label, s && `${s.label} court`, live && m.tb && !m.tbOnly ? 'Tiebreak' : null, live && m.serveNo === 2 ? 'Second serve' : null].filter(Boolean);
+  },
+  // Broadcast match stats: both players' numbers either side of the label, a bar out from the middle for each.
+  renderStats(el) {
+    const m = Game.match, st = m.stats, T = this.track && this.track.m === m ? this.track : null;
+    const pct = (a, b) => (b ? Math.round((100 * a) / b) : null), P = T ? T.p : null;
+    const rows = [['Aces', st.aces], ['Double faults', st.df, { low: true }]];
+    if (P) {
+      rows.push(['1st serve in', P.map((p) => pct(p.fsIn, p.fsTot)), { pct: true, of: P.map((p) => `${p.fsIn}/${p.fsTot}`) }],
+        ['Won on 1st serve', P.map((p) => pct(p.fsWon, p.fsIn)), { pct: true, of: P.map((p) => `${p.fsWon}/${p.fsIn}`) }],
+        ['Won on 2nd serve', P.map((p) => pct(p.ssWon, p.ssTot)), { pct: true, of: P.map((p) => `${p.ssWon}/${p.ssTot}`) }]);
+    }
+    rows.push(['Winners', st.winners], ['Errors', st.errors, { low: true }]);
+    if (P && !m.tbOnly) rows.push(['Break points won', P.map((p) => p.bpWon), { text: P.map((p) => `${p.bpWon}/${p.bpTot}`) }]);
+    rows.push(['Fastest serve', st.fastest.map((v) => v || null), { unit: 'km/h' }], ['Total points won', st.points]);
+    const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+    const head = mk('div', 'st-head');
+    head.append(mk('span', '', this.shortName(0)), mk('span'), mk('span', '', this.shortName(1)));
+    const out = [head];
+    for (const [label, v, o = {}] of rows) {
+      const [a, b] = v, lead = a == null || b == null || a === b ? -1 : (o.low ? a < b : a > b) ? 0 : 1;
+      const row = mk('div', 'st-row'), bar = mk('div', 'st-bar'), top = Math.max(a || 0, b || 0);
+      const val = (i) => {
+        const x = v[i], e = mk('b', lead === i ? 'lead' : '', x == null ? '–' : o.text ? o.text[i] : `${x}${o.pct ? '%' : ''}`);
+        if (x != null && (o.unit || o.of)) e.append(mk('small', '', o.unit || o.of[i]));
+        const half = mk('i', lead === i ? 'lead' : '');
+        half.style.setProperty('--w', `${x == null ? 0 : o.pct ? x : top ? (100 * x) / top : 0}%`);
+        bar.append(half);
+        return e;
+      };
+      row.append(val(0), mk('span', '', label), val(1), bar);
+      out.push(row);
+    }
+    const foot = mk('p', 'stats-foot'), secs = T ? Math.max(0, Clock.now() - T.t0) : 0;
+    const item = (label, value, unit) => { const s = mk('span', '', `${label} `); s.append(mk('b', '', value), unit ? ` ${unit}` : ''); foot.append(s); };
+    item('Longest rally', String(st.longest), st.longest === 1 ? 'shot' : 'shots');
+    if (T) item('Match time', `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`);
+    out.push(foot);
+    el.replaceChildren(...out);
   },
 
   // ---- HUD ----
@@ -1119,15 +1191,107 @@ const UI = {
     this.board = { names: Game.names.slice(), games: m.games.slice(), points: labels, server: srv, note: m.tb && !m.tbOnly ? 'TIEBREAK' : 'PALM COURT' };
     Stadium.updateBoard(this.board);
     if (Game.mode === 'attract') return;
+    const T = this.trackScore(m), anim = !!T.prev, ch = T.snap.chance;
+    const tagText = { break: (n) => (n > 1 ? `${n} break points` : 'Break point'), set: (n) => (n > 1 ? `${n} set points` : 'Set point'), match: (n) => (n > 1 ? `${n} match points` : 'Match point') };
+    $('scoreboard').classList.toggle('tb-only', !!m.tbOnly);
     for (const i of [0, 1]) {
-      const row = $('sbRow' + i);
+      const row = $('sbRow' + i), name = this.shortName(i), nm = row.querySelector('.sb-name');
       row.classList.toggle('serving', srv === i);
-      row.querySelector('.sb-name').textContent = Game.names[i];
-      row.querySelector('.sb-games').textContent = m.games[i];
-      row.querySelector('.sb-pts').textContent = labels[i];
+      if (nm.textContent !== name) { nm.textContent = name; nm.title = Game.names[i]; }
+      row.querySelector('.sb-cc').textContent = this.country(i);
+      this.setCells(row.querySelector('.sb-sets'), m, i);
+      const gWon = this.roll(row.querySelector('.sb-games'), m.tbOnly ? '' : String(m.games[i]), anim);
+      const pWon = this.roll(row.querySelector('.sb-pts'), labels[i], anim);
+      if (T.w === i) {
+        row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash');   // restart the sweep
+        if (!this.calm()) (gWon && m.games[i] > T.prev.games[i] ? row.querySelector('.sb-games') : pWon ? row.querySelector('.sb-pts') : row).animate([{ filter: 'brightness(1.8)' }, { filter: 'none' }], { duration: 700, easing: 'ease-out' });
+      }
+      const tag = row.querySelector('.sb-tag'), t = ch && ch.p === i ? tagText[ch.kind](ch.n) : '';
+      if (t) { tag.textContent = t; tag.dataset.kind = ch.kind; }
+      tag.classList.toggle('show', !!t);
     }
-    $('sbMeta').textContent = [FORMATS[m.fmtKey].label, SURFACES[World.surface].label, m.tb && !m.tbOnly ? 'Tiebreak' : null, m.serveNo === 2 ? 'Second serve' : null].filter(Boolean).join(' · ');
+    const meta = $('sbMeta'), parts = this.metaText(m, false), info = document.createElement('span');
+    if (m.tb && !m.tbOnly) parts.push('Tiebreak');
+    info.textContent = parts.join(' · ');
+    const second = m.serveNo === 2 && !m.over ? document.createElement('b') : '';
+    if (second) second.textContent = '2nd serve';
+    meta.replaceChildren(info, second);
     this.prompt();
+  },
+  // A cell's number rolls up into place when it changes. Returns whether it changed.
+  roll(cell, text, anim) {
+    const el = cell.firstElementChild || cell;
+    if (el.textContent === text) return false;
+    el.textContent = text;
+    if (anim && text && !this.calm()) el.animate([{ transform: 'translateY(75%)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 380, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    return true;
+  },
+  // Completed sets, for match formats that have more than one (Match.sets = [[a, b], ...]); empty otherwise.
+  setCells(el, m, i) {
+    const sets = Array.isArray(m.sets) ? m.sets : [], key = sets.map((s) => s.join('-')).join(' ');
+    if (el.dataset.key === key) return;
+    el.dataset.key = key;
+    el.replaceChildren(...sets.map((s) => { const c = document.createElement('i'); c.textContent = s[i]; if (s[i] > s[1 - i]) c.className = 'won'; return c; }));
+  },
+  calm() { return matchMedia('(prefers-reduced-motion: reduce)').matches; },
+  // Broadcast names: a pro's short name, else the surname of a long full name; a country code if the player has one.
+  shortName(i) {
+    const pl = Game.players[i], full = String(Game.names[i] || '').trim(), parts = full.split(/\s+/);
+    const short = pl && (pl.short || (pl.pro && pl.pro.short));
+    return String(short || (parts.length > 1 && full.length > 11 ? parts[parts.length - 1] : full) || `Player ${i + 1}`);
+  },
+  country(i) {
+    const pl = Game.players[i], cfg = Game.cfg || {};
+    const c = (pl && (pl.country || (pl.pro && pl.pro.country))) || (cfg.countries && cfg.countries[i]) || '';
+    return /^[A-Za-z]{3}$/.test(c) ? c.toUpperCase() : '';
+  },
+  // Serve and break-point stats the Match doesn't keep, read off the score each time it changes (every point, fault
+  // and let calls updateScore), so an online match counts them the same way on both machines.
+  trackScore(m) {
+    let T = this.track;
+    if (!T || T.m !== m) {
+      T = this.track = { m, t0: Clock.now(), prev: null, snap: null, w: -1, serves: 0, p: [0, 1].map(() => ({ fsIn: 0, fsTot: 0, fsWon: 0, ssTot: 0, ssWon: 0, bpWon: 0, bpTot: 0 })) };
+      this.clearHud();
+    }
+    const S = T.snap, cur = { won: m.stats.points.slice(), games: m.games.slice(), server: m.currentServer, serveNo: m.serveNo, tb: m.tb, chance: this.chance(m) };
+    T.w = -1;
+    if (S) {
+      const d0 = cur.won[0] - S.won[0], d1 = cur.won[1] - S.won[1];
+      if (d0 + d1 === 1) {
+        const w = T.w = d0 ? 0 : 1, P = T.p[S.server], held = w === S.server;
+        if (S.serveNo === 1) { P.fsIn++; P.fsTot++; if (held) P.fsWon++; } else { P.ssTot++; if (held) P.ssWon++; }
+        if (S.chance && S.chance.brk) { T.p[S.chance.p].bpTot++; if (cur.games[S.chance.p] > S.games[S.chance.p]) T.p[S.chance.p].bpWon++; }
+      } else if (d0 + d1 === 0 && S.serveNo === 1 && cur.serveNo === 2) T.p[S.server].fsTot++;   // a first-serve fault
+    }
+    T.prev = S; T.snap = cur;
+    return T;
+  },
+  // Who is one point from the match, the set, or a game on the other's serve, and how many chances in a row they have
+  // (30–40 is one break point, 0–40 three). Played out on copies of the Match so it follows the Match's own rules.
+  chance(m) {
+    if (m.over) return null;
+    const copy = (src) => Object.assign(Object.create(Object.getPrototypeOf(src)), structuredClone({ ...src }));
+    const what = (c, p) => {
+      const ev = copy(c).pointTo(p), brk = !!ev.game && !c.tb && c.currentServer !== p;
+      return { kind: ev.match ? 'match' : ev.set ? 'set' : brk ? 'break' : '', brk };
+    };
+    try {
+      for (const p of [0, 1]) {
+        const { kind, brk } = what(m, p);
+        if (!kind) continue;
+        const c = copy(m);
+        let n = 1;
+        while (n < 9 && !c.pointTo(1 - p).game && what(c, p).kind === kind) n++;
+        return { p, kind, n, brk };
+      }
+    } catch (e) { /* a Match that can't be copied: no tags */ }
+    return null;
+  },
+  clearHud() {
+    clearTimeout(this.calloutTimer); clearTimeout(this.shotTimer); clearTimeout(this.timingTimer);
+    $('callout').classList.remove('show', 'swap');
+    $('shotInfo').classList.remove('show');
+    $('timingFb').classList.remove('show');
   },
   prompt() {
     const el = $('prompt'), me = Game.me(), m = Game.match;
@@ -1139,21 +1303,59 @@ const UI = {
       else if (Game.state === 'serve' && Game.mode === 'online') t = `${Game.names[m.currentServer]} to serve`;
     }
     el.textContent = t;
+    el.classList.toggle('go', t === 'Swing!');
   },
+  // The call (OUT, FAULT, ACE...), then, when the point decided a game, a GAME graphic with the games score (or the
+  // match winner). Called after the Match has scored the point but before updateScore, so the track snapshot still
+  // holds the score from before it.
   callout(big, small) {
-    const el = $('callout');
-    el.textContent = big;
-    if (small) { const s = document.createElement('small'); s.textContent = small; el.append(s); }
-    el.classList.add('show');
+    const el = $('callout'), m = Game.match, T = this.track, S = T && m && T.m === m ? T.snap : null;
+    const w = S ? [0, 1].find((i) => m.games[i] > S.games[i]) : undefined;
+    const tone = { ace: 'good', winner: 'good', out: 'bad', net: 'bad', fault: 'bad', 'double fault': 'bad' }[String(big).toLowerCase()] || 'neutral';
+    const phases = [];
+    if (w === undefined) phases.push({ word: big, sub: small, tone, ms: 1900 });
+    else {
+      const name = this.shortName(w), gw = m.tbOnly ? m.pts[w] : m.games[w], gl = m.tbOnly ? m.pts[1 - w] : m.games[1 - w];
+      phases.push({ word: big, tone, ms: 1000 });
+      if (m.over) phases.push({ eyebrow: 'Game, set and match', word: name, sub: `${gw}–${gl}${m.tb && !m.tbOnly ? ` (${m.pts[1 - w]})` : ''}`, tone: 'game', ms: 2300 });
+      else phases.push({ word: 'Game', sub: `${name} · ${gw}–${gl}${m.tb && !S.tb ? ' · Tiebreak' : ''}`, tone: 'game', ms: 1500 });
+    }
+    const mk = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; return d; };
+    const show = (i) => {
+      const p = phases[i];
+      if (!p) { el.classList.remove('show', 'swap'); return; }
+      el.dataset.tone = p.tone;
+      el.replaceChildren(...[p.eyebrow && mk('co-eyebrow', p.eyebrow), mk('co-word', p.word), mk('co-bar', ''), p.sub && mk('co-sub', p.sub)].filter(Boolean));
+      el.classList.remove('swap'); el.classList.add('show');
+      this.calloutTimer = setTimeout(() => {
+        if (!phases[i + 1]) return show(i + 1);
+        el.classList.add('swap');   // a quick fade between the call and the game graphic
+        this.calloutTimer = setTimeout(() => show(i + 1), 150);
+      }, p.ms);
+    };
     clearTimeout(this.calloutTimer);
-    this.calloutTimer = setTimeout(() => el.classList.remove('show'), 1900);
+    show(0);
   },
   flashShot(nodes, ms) {
-    const el = $('shotInfo');
+    const el = $('shotInfo'), was = el.classList.contains('show');
     el.replaceChildren(...nodes);
-    el.style.opacity = 1;
+    el.classList.add('show');
+    if (was && !this.calm()) el.animate([{ opacity: 0.3, transform: 'translateX(-6px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'ease-out' });
     clearTimeout(this.shotTimer);
-    this.shotTimer = setTimeout(() => (el.style.opacity = 0), ms);
+    this.shotTimer = setTimeout(() => el.classList.remove('show'), ms);
+  },
+  // The timing read under the court: a mark on an early | on time | late scale (tau: -1.8 very early .. 1.8 very late;
+  // undefined = no scale) and a short verdict.
+  showTiming(tau, head, rest, tone) {
+    const el = $('timingFb'), b = document.createElement('b');
+    el.dataset.tone = tone || '';
+    el.classList.toggle('nometer', tau === undefined);
+    if (tau !== undefined) el.style.setProperty('--x', `${clamp(50 + (tau / 1.8) * 50, 3, 97)}%`);
+    b.textContent = head;
+    $('timingText').replaceChildren(b, rest ? ` · ${rest}` : '');
+    el.classList.add('show');
+    clearTimeout(this.timingTimer);
+    this.timingTimer = setTimeout(() => el.classList.remove('show'), 1900);
   },
   // Show a short message on the stadium's big screens, then go back to the score.
   boardNote(note, ms) {
@@ -1166,24 +1368,30 @@ const UI = {
   shot(pl, s) {
     if (Game.mode === 'attract') return;
     if (s.serve) this.boardNote(`SERVE ${s.kmh} KM/H`, 3500);   // the stadium screens flash every serve's speed, like on TV
-    const mine = pl.idx === Game.localIdx;
+    const mine = pl.idx === Game.localIdx, m = Game.match, T = this.track;
+    if (s.serve && T && T.m === m) T.serves++;
     if (!mine && !s.serve) return;
-    const mk = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; return d; };
-    const k = mk('kmh', String(s.kmh || 0));
-    const u = document.createElement('small'); u.textContent = 'km/h'; k.append(u);
-    const spin = s.rpm ? `${s.rpm > 0 ? 'topspin' : 'backspin'} ${(Math.round(Math.abs(s.rpm) / 50) * 50).toLocaleString()} rpm` : '';
-    const who = mine ? '' : `${Game.names[pl.idx]} · `;
-    const nodes = [k, mk('detail', `${who}${s.kind || 'Shot'}${spin ? ' · ' + spin : ''}`)];
+    const mk = (tag, cls, text) => { const d = document.createElement(tag); if (cls) d.className = cls; d.textContent = text; return d; };
+    const kmh = Math.round(s.kmh || 0), stroke = !s.serve && pl.plan ? (pl.plan.stroke === 'bh' ? 'Backhand' : 'Forehand') : '';
+    const label = mk('div', 'si-label', s.serve ? `${m && m.serveNo === 2 ? '2nd' : '1st'} serve${mine ? '' : ` · ${this.shortName(pl.idx)}`}` : stroke ? `${stroke} ${String(s.kind || 'shot').toLowerCase()}` : s.kind || 'Shot');
+    // The fastest serve of the match so far (once there have been a few) gets a badge, like the TV graphic.
+    if (s.serve && m && T && T.serves > 6 && kmh >= Math.max(...m.stats.fastest)) label.append(mk('em', '', 'Match best'));
+    const speed = mk('div', 'si-speed', String(kmh));
+    speed.append(mk('small', '', 'km/h'), mk('small', '', `${Math.round(kmh * 0.6214)} mph`));
+    const rpm = (Math.round(Math.abs(s.rpm || 0) / 50) * 50).toLocaleString('en-US');
+    const spin = s.rpm > 0 ? 'Topspin' : 'Backspin', said = label.textContent.toLowerCase().includes(spin.toLowerCase());
+    const nodes = [label, speed, mk('div', 'si-detail', s.rpm ? `${said ? '' : `${spin} · `}${rpm} rpm` : 'Flat')];
     if (mine && !s.serve && s.tau != null) {
-      const when = Math.abs(s.tau) < 0.35 ? 'On time' : Math.abs(s.tau) > 1 ? (s.tau < 0 ? 'Very early' : 'Very late') : s.tau < 0 ? 'Early' : 'Late';
-      const where = s.aim == null ? '' : s.aim < -0.9 ? ' · to your left' : s.aim > 0.9 ? ' · to your right' : ' · through the middle';
-      nodes.push(mk('timing', when + where));
+      const a = Math.abs(s.tau), when = a < 0.35 ? 'On time' : a > 1 ? (s.tau < 0 ? 'Very early' : 'Very late') : s.tau < 0 ? 'Early' : 'Late';
+      const where = s.aim == null ? '' : s.aim < -0.9 ? 'to your left' : s.aim > 0.9 ? 'to your right' : 'through the middle';
+      this.showTiming(s.tau, when, where, a < 0.35 ? 'good' : a > 1 ? 'bad' : 'warn');
     }
-    this.flashShot(nodes, 2600);
+    this.flashShot(nodes, s.serve ? 3200 : 2600);
   },
+  // Swing feedback from the game: 'Too early', 'Too late' (the mark sits at that end of the scale), 'Missed', or a hint.
   timing(text) {
-    const d = document.createElement('div'); d.className = 'kmh'; d.style.fontSize = '30px'; d.textContent = text;
-    this.flashShot([d], 1500);
+    const t = String(text || ''), early = /early/i.test(t), late = /late/i.test(t);
+    this.showTiming(early ? -1.8 : late ? 1.8 : undefined, t, '', early || late || /miss/i.test(t) ? 'bad' : '');
   },
   frame() {
     const now = performance.now();
