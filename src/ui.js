@@ -541,7 +541,7 @@ const UI = {
     $('stepBody').innerHTML = {
       frame: '<ul class="checks" id="calChecks" aria-label="Framing checks"></ul>',
       paddle: '<ul class="checks" id="calChecks" aria-label="Paddle checks"></ul>',
-      sens: '<div class="pips" id="calPips" aria-hidden="true"><div class="pip"><i></i><small></small></div><div class="pip"><i></i><small></small></div><div class="pip"><i></i><small></small></div><div class="pip"><i></i><small></small></div></div>',
+      sens: '<div class="pips" id="calPips" aria-hidden="true"><div class="spip"><i></i><small></small></div><div class="spip"><i></i><small></small></div><div class="spip"><i></i><small></small></div><div class="spip"><i></i><small></small></div></div>',
       swing: '<div class="tiles" id="calTiles"><p class="tile" data-k="fh"><b>FH</b><small>Forehand</small></p><p class="tile" data-k="bh"><b>BH</b><small>Backhand</small></p><p class="tile" data-k="toss"><b>↑</b><small>Toss</small></p></div>',
       timing: '<div class="tstrip-wrap" aria-hidden="true"><div class="tstrip" id="calStrip"><span>Early</span><span>On the ball</span><span>Late</span></div></div>',
     }[id];
