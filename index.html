@@ -91,6 +91,30 @@ details.howto b { color: var(--chalk); font-weight: 600; }
 .status.ok { color: var(--good); }
 .status.err { color: var(--coral); }
 
+/* ---------- pro picker (menu) ---------- */
+.pro-picker { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pp-side { margin: 0; min-width: 0; padding: 10px; border: 1px solid var(--edge); display: grid; gap: 8px; align-content: start;
+  background: linear-gradient(150deg, var(--pp-tint, rgba(242,245,238,.08)), rgba(242,245,238,.03) 62%); }
+.pp-side legend { float: left; width: 100%; padding: 0; font: 700 11px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--mist); }
+.pp-card { display: grid; grid-template-columns: 52px minmax(0, 1fr); column-gap: 9px; row-gap: 4px; align-items: end; }
+.pp-face { grid-row: span 2; width: 52px; height: 52px; overflow: hidden; background: rgba(0,0,0,.28); box-shadow: inset 0 0 0 1px var(--edge); }
+.pp-face svg, .pp-chip svg { display: block; width: 100%; height: 100%; }
+.pp-name { min-width: 0; font: 900 25px/.9 var(--display); text-transform: uppercase; letter-spacing: .01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-meta { align-self: start; font: 700 11px/1.2 var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--optic); }
+.pp-blurb { margin: 0; font-size: 12px; line-height: 1.3; color: var(--mist); min-height: 2.6em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pp-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.pp-chip { position: relative; flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; overflow: hidden; cursor: pointer; background: rgba(0,0,0,.3);
+  box-shadow: 0 0 0 1px var(--edge); transition: box-shadow .15s, transform .12s, opacity .15s; }
+.pp-chip input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+.pp-chip:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px var(--chalk); }
+.pp-chip:has(input:checked) { box-shadow: 0 0 0 2px var(--optic); }
+.pp-chip:has(input:focus-visible) { outline: 2px solid var(--optic); outline-offset: 3px; }
+.pp-chip:has(input:disabled) { opacity: .28; cursor: not-allowed; transform: none; }
+.pp-vs { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--ink); border: 1px solid var(--edge); font: 900 14px/1 var(--display); text-transform: uppercase; color: var(--optic); pointer-events: none; }
+@media (max-width: 440px) { .pro-picker { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .pp-chip { transition: none; } }
+
 /* ---------- camera check ---------- */
 .setup-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 @media (max-width: 720px) { .setup-grid { grid-template-columns: 1fr; } }
@@ -251,6 +275,21 @@ details.howto b { color: var(--chalk); font-weight: 600; }
       <h1>Palm<br>C<span class="ball" aria-hidden="true"></span>urt</h1>
       <p class="tag">Swing your phone like a racket. Your player does the running.</p>
     </header>
+    <section class="pro-picker" id="proPicker" aria-label="Players">
+      <fieldset class="pp-side" id="pp-you">
+        <legend>You play as</legend>
+        <div class="pp-card"><span class="pp-face"></span><b class="pp-name"></b><span class="pp-meta"></span></div>
+        <p class="pp-blurb"></p>
+        <div class="pp-chips"></div>
+      </fieldset>
+      <fieldset class="pp-side" id="pp-opp">
+        <legend>CPU opponent</legend>
+        <div class="pp-card"><span class="pp-face"></span><b class="pp-name"></b><span class="pp-meta"></span></div>
+        <p class="pp-blurb"></p>
+        <div class="pp-chips"></div>
+      </fieldset>
+      <span class="pp-vs" aria-hidden="true">vs</span>
+    </section>
     <div class="actions">
       <button id="btnPractice" class="btn primary">Practice vs CPU</button>
       <button id="btnOnline" class="btn">Play a friend online</button>
