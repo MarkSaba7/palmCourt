@@ -9,6 +9,7 @@ import { UI } from './ui.js';
 import { Replay, lineMargin } from './replay.js';
 import { judgeCameraSwing, strokeDir } from './camswing.js';
 import { Bus } from './events.js';
+import { proById, randomPro } from './pros.js';
 
 // =====================================================================
 // GAME: players, CPU, serve and rally flow, line calls
@@ -28,8 +29,35 @@ function makePlayer(idx) {
     idx, side, ctl: 'cpu', handed: 'R', name: '', level: LEVELS.club,
     x: 0, z: side * 12, vx: 0, vz: 0, tx: 0, tz: side * 12, maxSpeed: 6, acc: 13, react: 0,
     plan: null, path: null, chase: null, moveAfter: 0, hitFor: -1, cpuServeAt: 0, net: null,
+    pro: null, persona: null,   // roster id (null: the standard player) and, for the CPU, how that pro plays
     avatar: new Avatar(KITS[idx]),
   };
+}
+
+// Shirts too alike to tell the two ends apart.
+const rgb = (h) => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
+const clash = (a, b) => { const p = rgb(a), q = rgb(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < 80; };
+
+// Dress both players for a match: each pro's body, kit, strokes and (on the CPU) playing personality; ids that aren't
+// pros get the standard player. Deterministic online, so both screens match. Player 1 changes kit on a clash: a pro
+// wears their second kit, the standard player an outfit from the rotation (a random one against the CPU, as before).
+function dressPlayers(players, ids, mode) {
+  players.forEach((pl, i) => {
+    const pro = proById(ids[i]), av = pl.avatar;
+    let kit = pro ? pro.kit : KITS[i];
+    if (i === 1) {
+      const mine = players[0].avatar.kit.shirt, fits = (o) => !clash(o.shirt, mine);
+      if (pro && (pro.id === players[0].pro || !fits(kit))) kit = pro.alt;
+      else if (!pro && mode !== 'online') kit = pick(OUTFITS.filter(fits));
+      else if (!pro && !fits(kit)) kit = OUTFITS.find(fits);
+    }
+    av.kit = { ...KITS[i], accent: undefined, ...kit };   // a whole kit: nothing carries over from the last match
+    av.setLook(pro ? pro.look : {});
+    if (av.setStyle) av.setStyle(pro ? pro.style : {});   // every pro sets all five fields; {} is today's style
+    pl.pro = pro ? pro.id : null;
+    pl.persona = pro && pl.ctl === 'cpu' ? { ...pro.persona } : null;
+  });
+  Replay.bones = players.map((p) => Object.values(p.avatar.B));   // replays drive the rebuilt skeletons
 }
 
 const Game = {
@@ -57,18 +85,17 @@ const Game = {
       pl.maxSpeed = cpu ? pl.level.speed : 6.0; pl.acc = cpu ? pl.level.acc : 8.8; pl.react = cpu ? pl.level.react : 0.04;
       pl.net = null;
     });
-    // The opponent turns up in a different outfit each match (online games keep the standard kits both sides see).
-    if (cfg.mode !== 'online') {
-      const mine = this.players[0].avatar.kit.shirt;
-      this.players[1].avatar.setKit(pick(OUTFITS.filter((o) => o.shirt !== mine)));
-    }
+    // Pros (cfg.pros: roster ids, anything else is the standard player); a standard CPU opponent turns up in a
+    // different outfit each match.
+    dressPlayers(this.players, cfg.pros || [], cfg.mode);
     Cam.mode = this.localIdx >= 0 ? 'play' : 'orbit';
     this.startPoint();
     if (this.localIdx >= 0) { Cam.snap(this.me()); Phone.send({ type: 'resync' }); }
     Bus.emit('match:start', { cfg });
   },
   startAttract() {
-    this.startMatch({ mode: 'attract', localIdx: -1, names: ['Vega', 'Okafor'], handed: ['R', 'L'], ctl: ['cpu', 'cpu'], surface: Settings.surface, format: 'full', first: 0, level: 'pro' });
+    const a = randomPro(), b = randomPro([a.id]);   // an exhibition between two pros behind the menu
+    this.startMatch({ mode: 'attract', localIdx: -1, names: [a.short, b.short], handed: [a.handed, b.handed], ctl: ['cpu', 'cpu'], surface: Settings.surface, format: 'full', first: 0, level: 'pro', pros: [a.id, b.id] });
   },
 
   startPoint() {

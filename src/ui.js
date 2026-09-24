@@ -1,12 +1,13 @@
 import { clamp, SURFACES, FORMATS, Clock, Settings } from './core.js';
 import { Sound } from './match.js';
 import { renderer, scene, camera, Crowd, World, Perf, Env, Stadium } from './render/world.js';
-import { Cam } from './render/actors.js';
+import { Cam, KITS } from './render/actors.js';
 import { Input, swingPower, swingSpin, Tracker } from './input.js';
 import { Game } from './game.js';
 import { Net } from './net.js';
 import { Phone, drawQR } from './phone.js';
 import { Bus } from './events.js';
+import { PROS, REAL_PROS, proById, proName, randomPro, proPortrait, randomPortrait } from './pros.js';
 
 // =====================================================================
 // UI: menus, lobby, camera check, HUD, main loop
@@ -33,6 +34,7 @@ const UI = {
   screen: 'menu', calloutTimer: 0, shotTimer: 0, ambLevel: -1, setupReturn: 'menu', hostPrepped: false,
   init() {
     this.buildSettings();
+    this.initPros();
     const note = document.createElement('p');
     note.id = 'menuNote'; note.className = 'status'; note.setAttribute('role', 'status');
     $('menu').querySelector('.actions').after(note);
@@ -177,12 +179,88 @@ const UI = {
     $('btnPractice').disabled = false;
     if (!ok) return;
     const { opponent, oppHanded, tod, ...rest } = opts;
+    // Who you play as, and the CPU: drawn once per opts, so Play again keeps the same random pro.
+    const pros = opts.pros || (opts.pros = [Settings.playAs, opponent ? 'custom' : this.cpuPro()]), cpu = proById(pros[1]);
     Env.setTimeOfDay(tod || Settings.tod);
     Game.startMatch({
-      mode: 'cpu', localIdx: 0, names: [Settings.name, opponent || 'CPU'], handed: [Settings.handed, oppHanded || (Math.random() < 0.8 ? 'R' : 'L')], ctl: ['human', 'cpu'],
-      surface: Settings.surface, format: Settings.format, first: Math.random() < 0.5 ? 0 : 1, level: Settings.level, ...rest,
+      mode: 'cpu', localIdx: 0, names: [proName(pros[0], Settings.name), opponent || proName(pros[1], 'CPU')], handed: [Settings.handed, oppHanded || (cpu ? cpu.handed : Math.random() < 0.8 ? 'R' : 'L')], ctl: ['human', 'cpu'],
+      surface: Settings.surface, format: Settings.format, first: Math.random() < 0.5 ? 0 : 1, level: Settings.level, pros, ...rest,
     });
     this.go(null);
+  },
+
+  // ---- pro picker (menu): who you play as, and the CPU opponent ----
+  // The CPU for the next match: the picked pro, a random one (never your own pro), or 'custom' for the club player.
+  cpuPro() {
+    const o = Settings.opponent, me = Settings.playAs;
+    if (o === 'custom') return 'custom';
+    return proById(o) && o !== me ? o : randomPro([me]).id;
+  },
+  // Online names: a pro's name, or your own when you both picked the same pro (two "Nadal"s on the board help nobody).
+  onlineNames(pros, own) {
+    const same = !!proById(pros[0]) && pros[0] === pros[1];
+    return own.map((n, i) => (same ? n : proName(pros[i], n)));
+  },
+  // Card contents for a picker option: side 'you' or 'opp'.
+  proCard(id, side) {
+    const pro = proById(id), hand = (h) => (h === 'L' ? 'Lefty' : 'Righty');
+    if (pro) {
+      const h = side === 'you' ? Settings.handed : pro.handed;
+      return { name: pro.short, full: pro.name, meta: `${pro.country} · ${hand(h)}`, blurb: pro.blurb, look: { ...pro.kit, ...pro.look }, note: side === 'you' && h !== pro.handed ? `Plays ${h === 'L' ? 'left' : 'right'}-handed: your Plays setting decides the swinging hand` : '' };
+    }
+    if (id === 'random') return { name: 'Random', full: 'Random pro', meta: 'Any pro', blurb: 'A different pro every match', look: null };
+    if (side === 'you') return { name: Settings.name, full: 'Your player', meta: `You · ${hand(Settings.handed)}`, blurb: 'Your own player, under your name', look: KITS[0] };
+    return { name: 'Club', full: 'Club player', meta: 'House CPU', blurb: 'The club regular, in a new kit each match', look: KITS[1] };
+  },
+  initPros() {
+    if (!$('proPicker')) return;
+    const opts = { you: PROS.map((p) => p.id), opp: ['random', ...REAL_PROS.map((p) => p.id), 'custom'] };
+    if (!opts.you.includes(Settings.playAs)) Settings.playAs = 'custom';
+    if (!opts.opp.includes(Settings.opponent)) Settings.opponent = 'random';
+    for (const side of ['you', 'opp']) {
+      const key = side === 'you' ? 'playAs' : 'opponent', chips = $('pp-' + side).querySelector('.pp-chips');
+      chips.innerHTML = opts[side].map((id) => {
+        const c = this.proCard(id, side);
+        return `<label class="pp-chip" title="${c.full}"><input type="radio" name="pp-${side}" value="${id}" aria-label="${c.full}">${c.look ? proPortrait(c.look) : randomPortrait()}</label>`;
+      }).join('');
+      chips.addEventListener('change', (e) => {
+        Settings[key] = e.target.value;
+        if (key === 'playAs' && Settings.opponent === Settings.playAs) Settings.opponent = 'random';
+        Settings.save(); this.renderPros();
+      });
+    }
+    $('settings').addEventListener('change', (e) => { if (e.target.name === 'opt-handed') this.renderPros(); });
+    $('optName').addEventListener('input', () => this.renderPros());
+    Bus.on('screen', ({ screen }) => { if (screen === 'menu') queueMicrotask(() => this.fitNames()); });   // once it's shown
+    addEventListener('resize', () => this.fitNames());
+    if (document.fonts) document.fonts.addEventListener('loadingdone', () => this.fitNames());
+    this.renderPros();
+  },
+  // Long names (or a wide fallback font) shrink to fit the card instead of being cut off.
+  fitNames() {
+    for (const el of document.querySelectorAll('.pp-name')) {
+      el.style.fontSize = '';
+      if (!el.clientWidth) continue;   // the menu is hidden: fitted when it shows
+      for (let px = parseFloat(getComputedStyle(el).fontSize); el.scrollWidth > el.clientWidth && px > 15;) el.style.fontSize = `${--px}px`;
+    }
+  },
+  renderPros() {
+    for (const side of ['you', 'opp']) {
+      const box = $('pp-' + side), id = side === 'you' ? Settings.playAs : Settings.opponent, c = this.proCard(id, side), s = (c.look && c.look.shirt) ?? 0xd6f04a;
+      box.style.setProperty('--pp-tint', `rgba(${(s >> 16) & 255}, ${(s >> 8) & 255}, ${s & 255}, .3)`);
+      box.querySelector('.pp-face').innerHTML = c.look ? proPortrait(c.look) : randomPortrait();
+      box.querySelector('.pp-name').textContent = c.name;
+      box.querySelector('.pp-name').title = c.full;
+      box.querySelector('.pp-meta').textContent = c.meta;
+      box.querySelector('.pp-meta').title = c.note || '';
+      box.querySelector('.pp-blurb').textContent = c.blurb;
+      for (const inp of box.querySelectorAll('input')) {
+        inp.checked = inp.value === id;
+        inp.disabled = side === 'opp' && !!proById(inp.value) && inp.value === Settings.playAs;   // no mirror matches
+        inp.parentElement.title = inp.disabled ? `${inp.getAttribute('aria-label')} (you)` : inp.getAttribute('aria-label');
+      }
+    }
+    this.fitNames();
   },
 
   // ---- online lobby ----
@@ -238,10 +316,10 @@ const UI = {
     Sound.init();
     const ok = await this.ensureControls();
     if (!ok || !Net.remote) return;
-    const first = Math.random() < 0.5 ? 0 : 1, names = [Settings.name, Net.remote.name], handed = [Settings.handed, Net.remote.handed];
-    Net.send({ type: 'start', surface: Settings.surface, format: Settings.format, tod: Settings.tod, first, names, handed });
+    const first = Math.random() < 0.5 ? 0 : 1, pros = [Settings.playAs, Net.remote.pro], names = this.onlineNames(pros, [Settings.name, Net.remote.name]), handed = [Settings.handed, Net.remote.handed];
+    Net.send({ type: 'start', surface: Settings.surface, format: Settings.format, tod: Settings.tod, first, names, handed, pros });
     Env.setTimeOfDay(Settings.tod);
-    Game.startMatch({ mode: 'online', localIdx: 0, names, handed, ctl: ['human', 'remote'], surface: Settings.surface, format: Settings.format, first });
+    Game.startMatch({ mode: 'online', localIdx: 0, names, handed, ctl: ['human', 'remote'], surface: Settings.surface, format: Settings.format, first, pros });
     this.go(null);
   },
   startOnlineFromHost(m) {
@@ -249,7 +327,8 @@ const UI = {
     Env.setTimeOfDay(['day', 'golden', 'night'].includes(m.tod) ? m.tod : 'day');
     const hostName = String((Array.isArray(m.names) && m.names[0]) || (Net.remote && Net.remote.name) || 'Friend').slice(0, 12);
     const hostHand = Array.isArray(m.handed) && m.handed[0] === 'L' ? 'L' : 'R';
-    Game.startMatch({ mode: 'online', localIdx: 1, names: [hostName, Settings.name], handed: [hostHand, Settings.handed], ctl: ['remote', 'human'], surface, format, first: m.first === 1 ? 1 : 0 });
+    const pros = [0, 1].map((i) => (Array.isArray(m.pros) && typeof m.pros[i] === 'string' ? m.pros[i] : 'custom'));   // an older host sends none
+    Game.startMatch({ mode: 'online', localIdx: 1, names: [hostName, this.onlineNames(pros, [hostName, Settings.name])[1]], handed: [hostHand, Settings.handed], ctl: ['remote', 'human'], surface, format, first: m.first === 1 ? 1 : 0, pros });
     this.go(null);
   },
   rematchFromRemote() { if (Net.role === 'host' && Game.mode === 'online' && Game.state === 'over') this.startOnlineAsHost(); },

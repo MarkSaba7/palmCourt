@@ -161,6 +161,28 @@ export class Avatar {
   setHanded(h) { this.body.scale.x = h === 'L' ? -1 : 1; this.handed = h; }
   // Swap outfits between matches (shirt, shorts, shoes, headband, accent, design); body and hair stay.
   setKit(kit) { recolorCharacter(this.char, kit); this.kit = { ...this.kit, ...kit }; }
+  // A new body (build, face, hair, headwear, clothing cut) over the current kit. The racket, handedness, pose and
+  // place carry over. The look isn't merged into this.kit, so nothing from the last look leaks into the next one.
+  // When only colours differ it recolours in place instead of rebuilding.
+  setLook(look = {}) {
+    const all = { ...this.kit, ...look }, shaping = Object.keys(all).sort().filter((k) => !/^(skin|hairColor|shirt|pants|shoe|band|accent|design|racket)$/.test(k));
+    const key = JSON.stringify(shaping.map((k) => [k, all[k]]));
+    this.look = look;
+    if (key === this.lookKey) { recolorCharacter(this.char, all); return; }
+    const old = this.char, ch = createCharacter(all), d = new THREE.Vector3();
+    for (const [n, b] of Object.entries(ch.bones)) {
+      const ob = old.bones[n];
+      if (!ob) continue;
+      b.quaternion.copy(ob.quaternion);
+      if (this.rest[n]) b.position.add(d.copy(ob.position).sub(this.rest[n]));   // keep offsets from rest (hips height)
+    }
+    ch.bones.handR.add(this.racket);
+    this.body.remove(old.mesh);
+    this.body.add(ch.mesh);
+    old.mesh.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+    old.mesh.skeleton.dispose();
+    this.char = ch; this.B = ch.bones; this.rest = ch.rest; this.lookKey = key;
+  }
   swing(stroke, contactT) { this.mode = 'swing'; this.stroke = stroke; this.contactT = contactT; }
   serveToss(t) { this.mode = 'serve'; this.tossT = t; this.contactT = 0; }
   serveHit(t) { this.mode = 'serve'; this.contactT = t; }
