@@ -138,6 +138,7 @@ export function analyse(suite, frames, events, o = {}) {
     const s = segOf(f.g);
     if (!s || !s.truth.paddle) continue;
     const c = byClip(s.name), k = (((Math.floor(f.g) % N) + N) % N) - s.start, tp = s.truth.paddle[k];
+    if (o.lockedAt && o.lockedAt[s.name] != null && k / fps <= o.lockedAt[s.name]) continue;   // before its color was locked
     c.frames++; if (Number.isFinite(f.ms)) c.ms.push(f.ms);
     seen.add(Math.floor(f.g));
     const pr = s.truth.paddle[(k + s.frames - 1) % s.frames], nx = s.truth.paddle[(k + 1) % s.frames];

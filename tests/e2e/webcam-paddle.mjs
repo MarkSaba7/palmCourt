@@ -99,7 +99,7 @@ async function runVideo() {
 
 function finish(raw, locks, lockstep) {
   const { frames, events } = toSuiteFrames(raw, lockstep);
-  const res = analyse(suite, frames, events);
+  const res = analyse(suite, frames, events, { lockedAt: Object.fromEntries(locks.map((l) => [l.clip, l.at])) });
   const stamps = count(raw.frames.map((f) => (f.meta && f.meta.stamp) || '?'));
   const pipe = raw.frames.filter((f) => f.meta && f.meta.cap && f.meta.pres).map((f) => f.meta.pres - f.meta.cap);
   console.log(report(res, `paddle: scripted clips (${lockstep ? 'lockstep, every frame' : 'fake webcam video, real time'})`, { aux: A.aux }));
