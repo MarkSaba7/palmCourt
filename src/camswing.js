@@ -258,20 +258,37 @@ function peakTime(pk) {
 }
 
 // ---- hand tracking helpers ----
-// Which of the detected hands is the racket hand. hands: [{x, y, label}] palm centres in mirrored coordinates, with
-// MediaPipe's label. Our frames aren't mirrored, so the player's right hand is labelled "Left". Returns -1 to skip the
-// frame: only the other hand is in view, well away from where the racket hand was heading (it is probably blurred).
+// MediaPipe's handedness label for the racket hand. It assumes a mirrored selfie image and our frames aren't mirrored,
+// so the player's right hand is labelled "Left".
+const racketLabel = (handed) => (handed === 'L' ? 'Right' : 'Left');
+// How sure the label is that this is the racket hand: +1 sure it is, -1 sure it's the other hand, 0 no idea.
+// score is MediaPipe's handedness confidence (0.5..1); without one the label counts as fairly sure.
+function labelVote(h, handed) {
+  if (!h.label) return 0;
+  const conf = h.score == null ? 0.8 : clamp((h.score - 0.5) * 2, 0, 1);
+  return h.label === racketLabel(handed) ? conf : -conf;
+}
+// Which of the detected hands is the racket hand. hands: [{x, y, label, score}] palm centres in mirrored coordinates,
+// with MediaPipe's label and its confidence. Returns -1 to skip the frame.
+// While the racket hand's track is fresh (pred), a hand only continues it if it is near where the racket hand should
+// be: within 0.3 frame widths if it is labelled as the racket hand, 0.2 if the label can't tell, but only 0.1 if it
+// reads as the other hand. So when the racket hand blurs out of a frame, the other hand isn't taken for it (the
+// swing detector bridges the gap), unless the two are together (a two-handed backhand).
 function pickHand(hands, handed, pred) {
   if (!hands.length) return -1;
-  const mine = handed === 'L' ? 'Right' : 'Left';
+  const mine = racketLabel(handed);
   if (pred && pred.age < 0.35) {
-    let best = 0, bd = Infinity;
-    hands.forEach((h, i) => { const d = Math.hypot(h.x - pred.x, h.y - pred.y) + (h.label === mine ? 0 : 0.08); if (d < bd) { bd = d; best = i; } });
-    const h = hands[best];
-    if (h.label !== mine && h.label && Math.hypot(h.x - pred.x, h.y - pred.y) > 0.3) return -1;
+    let best = -1, bd = Infinity;
+    hands.forEach((h, i) => {
+      const d = Math.hypot(h.x - pred.x, h.y - pred.y);
+      if (d > clamp(0.2 + 0.125 * labelVote(h, handed), 0.1, 0.3)) return;
+      const c = d + (h.label === mine ? 0 : 0.08);
+      if (c < bd) { bd = c; best = i; }
+    });
     return best;
   }
-  const i = hands.findIndex((h) => h.label === mine);
+  let i = -1;   // the most confident racket-hand label
+  hands.forEach((h, j) => { if (h.label === mine && (i < 0 || labelVote(h, handed) > labelVote(hands[i], handed))) i = j; });
   if (i >= 0 || hands.length === 1) return Math.max(i, 0);
   let best = 0;   // neither is labelled as the racket hand: take the one on the racket side of the picture
   hands.forEach((h, j) => { if ((h.x - hands[best].x) * (handed === 'L' ? -1 : 1) > 0) best = j; });
@@ -284,6 +301,75 @@ function palmSize(lm, aspect = 4 / 3) {
   return Math.max(d(0, 5), d(0, 9), d(0, 17) * 1.1, d(5, 17) * 1.3);
 }
 const PALM_REF = 0.042;   // palm size about 1.7 m from a typical webcam: speeds are scaled to what they'd be there
+
+// The tracked point: the middle of the palm (wrist and the four knuckles), mirrored. The fingertips smear and flail
+// in a fast swing; the palm stays put on the hand and averages five points, so it jitters least.
+function palmCentre(lm) {
+  let sx = 0, sy = 0;
+  for (const k of [0, 5, 9, 13, 17]) { sx += lm[k].x; sy += lm[k].y; }
+  return { x: 1 - sx / 5, y: sy / 5 };
+}
+// Bounding box of a hand's landmarks in raw (unmirrored) image fractions, grown by `grow` of its size on every side.
+function handBox(lm, grow = 0.3) {
+  let x0 = 1, x1 = 0, y0 = 1, y1 = 0;
+  for (const p of lm) { if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x; if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y; }
+  const gx = (x1 - x0) * grow, gy = (y1 - y0) * grow;
+  return { x0: clamp(x0 - gx, 0, 1), y0: clamp(y0 - gy, 0, 1), x1: clamp(x1 + gx, 0, 1), y1: clamp(y1 + gy, 0, 1) };
+}
+
+// Palm size, steadied: a high percentile of the sizes seen over the last two seconds while the hand moved slowly.
+// Tilted or half-closed hands read small and motion blur distorts, so the top of the range is the real size; it
+// settles within a second or two when the player steps closer or further back.
+class PalmScale {
+  constructor(o = {}) { this.win = o.win || 2; this.slow = o.slow || 1.2; this.q = o.q || 0.85; this.reset(); }
+  reset() { this.buf = []; this.size = 0; }
+  // t seconds, size in frame widths (palmSize), speed of the hand in frame widths per second.
+  push(t, size, speed = 0) {
+    if (!(size > 0.004 && size < 0.5)) return this.size;
+    const b = this.buf;
+    if (b.length && t < b[b.length - 1].t) b.length = 0;   // clock went back
+    if (!this.size) this.size = size;                      // first sight: better than nothing
+    if (speed < this.slow) { b.push({ t, size }); if (b.length > 90) b.shift(); }
+    while (b.length && t - b[0].t > this.win) b.shift();
+    if (b.length >= 3) {
+      const s = b.map((e) => e.size).sort((p, q) => p - q);
+      this.size = s[Math.min(s.length - 1, Math.floor(s.length * this.q))];
+    }
+    return this.size;
+  }
+  get scale() { return this.size ? clamp(PALM_REF / this.size, 0.8, 1.5) : 1; }
+}
+
+// Follows the racket hand from frame to frame (pickHand), and keeps a running vote of what MediaPipe's labels say
+// about the hand it follows. A hand that keeps reading as the off hand while another reads as the racket hand is the
+// wrong one: switch. Labels are unreliable on a blurred hand, so they count for little mid-swing.
+class HandPicker {
+  constructor(o = {}) { this.settle = o.settle || 6; this.reset(); }
+  reset() { this.vote = 0; this.n = 0; this.wait = 0; }
+  // Returns {i, switched}: i = -1 skips the frame; switched: now following a different hand (restart its track).
+  pick(hands, handed, pred, moving = false) {
+    const fresh = !!pred && pred.age < 0.35;
+    let i = pickHand(hands, handed, fresh ? pred : null), switched = false;
+    if (i < 0) { if (!hands.length) this.wait = 0; return { i, switched }; }
+    if (!fresh) {
+      // Picking a hand up afresh. One labelled as the racket hand is taken at once; any other must stay in view for a
+      // few frames first: the racket hand may only be blurred or just out of the picture while the other hand is still.
+      if (labelVote(hands[i], handed) > 0.3) this.wait = 0;
+      else if (++this.wait < this.settle) return { i: -1, switched };
+      this.vote = 0; this.n = 0;
+    }
+    if (hands.length > 1 && !moving && this.n >= 5 && this.vote < -0.45) {
+      let j = -1;
+      hands.forEach((h, k) => { if (k !== i && labelVote(h, handed) > 0.5 && (j < 0 || labelVote(h, handed) > labelVote(hands[j], handed))) j = k; });
+      if (j >= 0) { i = j; switched = true; this.vote = labelVote(hands[j], handed); this.n = 1; return { i, switched }; }
+    }
+    const k = moving ? 0.04 : 0.15;
+    this.vote += (labelVote(hands[i], handed) - this.vote) * k;
+    this.n++;
+    return { i, switched };
+  }
+}
+export { racketLabel, labelVote, palmCentre, handBox, PalmScale, HandPicker };
 
 // ---- paddle color tracking ----
 function hsv(r, g, b) {
