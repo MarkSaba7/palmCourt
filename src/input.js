@@ -23,7 +23,7 @@ if (Settings.camTiming !== 2) {
 
 // Positions are normalised to the mirrored camera image: x 0..1 left to right as the player sees it, y 0..1 top to bottom.
 const Input = {
-  x: 0.5, y: 0.5, valid: false, vx: 0, vy: 0, speed: 0, hist: [], handlers: [], lastFeed: 0,
+  x: 0.5, y: 0.5, valid: false, vx: 0, vy: 0, speed: 0, hist: [], handlers: [], lastFeed: 0, tossHeld: false,
   det: new SwingDetector({ tossLine: TOSS_LINE }),   // camera swings (see camswing.js)
   // The camera swing in progress. The game clears it, and the pause after the last one, when the ball is tossed.
   get swing() { return this.det.active; },
@@ -47,7 +47,33 @@ const Input = {
     const d = this.det, evs = d.push(t, x, y, { sens: Settings.sens, handed: Settings.handed, src, aspect: o && o.aspect, scale: o && o.scale });
     this.x = d.x; this.y = d.y; this.valid = d.valid; this.vx = d.vx; this.vy = d.vy; this.speed = d.speed;
     const lag = Math.max(0, Clock.now() - t);   // camera frame to here
-    for (const ev of evs) { if (ev.type === 'swing') ev.swing.lag = lag; this.emit(ev); }
+    if (this.tossHeld && this.y > TOSS_LINE + 0.1) this.tossHeld = false;   // the hand came down: that raise is over
+    for (const ev of evs) {
+      if (ev.type === 'swing') ev.swing.lag = lag;
+      else if (ev.type === 'toss') this.tossHeld = true;   // the game uses it now, or as soon as the serve may start
+      this.emit(ev);
+    }
+  },
+  // Each camera tracker's usual stroke speed, learned from the swings that hit the ball (and kept between sessions),
+  // so power means the same for a small hand swing far from the camera and a big paddle swing close to it.
+  typ: { hand: [], paddle: [], handServe: [], paddleServe: [] },
+  learn(sw) {
+    const k = sw.src + (sw.serve ? 'Serve' : ''), a = this.typ[k];
+    if (!a || sw.learned || !(sw.peak > 0)) return;
+    sw.learned = true;
+    a.push(sw.peak);
+    if (a.length > 12) a.shift();
+    Settings.swingTyp = { ...(Settings.swingTyp || {}), [k]: +this.typical(k).toFixed(3) };
+    Settings.save();
+  },
+  // Median of the recent strokes (a remembered value counts as three of them); 0 until there's enough to go on.
+  typical(k) {
+    const a = this.typ[k], saved = Settings.swingTyp && +Settings.swingTyp[k];
+    if (!a) return 0;
+    const all = saved > 0 && a.length < 12 ? a.concat([saved, saved, saved]) : a.slice();
+    if (all.length < 3) return 0;
+    all.sort((p, q) => p - q);
+    return all[all.length >> 1];
   },
   // A camera frame at game time t without the hand / paddle in it. Short gaps (motion blur) are bridged.
   miss(t) {
@@ -55,7 +81,7 @@ const Input = {
     if (!this.det.valid) { this.valid = false; this.vx = this.vy = this.speed = 0; }
     for (const ev of evs) this.emit(ev);
   },
-  lost() { this.valid = false; this.hist.length = 0; this.vx = this.vy = this.speed = 0; this.det.reset(); },
+  lost() { this.valid = false; this.tossHeld = false; this.hist.length = 0; this.vx = this.vy = this.speed = 0; this.det.reset(); },
   press(power, spin, src = 'button') {
     const s = { t0: Clock.now(), peak: 0, power, spin, vx: 0, vy: 0, src, x: this.x, y: this.y };
     this.emit({ type: 'swing', swing: s });
@@ -77,11 +103,17 @@ const Input = {
 };
 
 // Motion swings: speed sets power, the vertical part of the swing sets spin.
-function swingPower(s) { return s.power != null ? s.power : clamp((s.peak * Settings.sens - 1.1) / 2.9, 0.06, 1); }
+// Camera power is mostly relative to this player's usual swing on this tracker (a normal swing is a solid drive, a
+// third faster nearly flat out), so it doesn't depend on how far from the camera they stand or how big their swing is.
+function swingPower(s) {
+  if (s.power != null) return s.power;
+  const abs = clamp((s.peak * Settings.sens - 1.1) / 2.9, 0.06, 1), typ = Input.typical(s.src + (s.serve ? 'Serve' : ''));
+  return typ ? 0.3 * abs + 0.7 * clamp(0.6 + 0.8 * (s.peak / typ - 1), 0.08, 1) : abs;
+}
+// By the swing's angle: a flat swing hits a drive, about 10° low-to-high is topspin, high-to-low is slice.
 function swingSpin(s) {
   if (s.spin != null) return s.spin;
-  const m = Math.hypot(s.vx, s.vy) || 1;
-  return clamp(0.3 + (-s.vy / m) * 1.2, -1, 1);
+  return clamp(0.3 + Math.atan2(-s.vy, Math.abs(s.vx) + 1e-6) * 1.9, -1, 1);
 }
 
 // Runs inside a Web Worker (serialised with toString), so hand tracking never blocks the frame that draws the court.
