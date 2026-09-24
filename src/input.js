@@ -4,7 +4,7 @@ import { canvas } from './render/world.js';
 import { Game } from './game.js';
 import { UI } from './ui.js';
 import { SwingDetector, pickHand, palmSize, PALM_REF, segmentColor, lockColorFromPatch, adaptColor } from './camswing.js';
-import { racketLabel, palmCentre, PalmScale, HandPicker } from './camswing.js';
+import { racketLabel, palmCentre, handBox, PalmScale, HandPicker } from './camswing.js';
 
 // =====================================================================
 // INPUT: swings from hand tracking, paddle color tracking, mouse or keyboard
@@ -89,7 +89,7 @@ function swingSpin(s) {
 // Where the browser allows it the camera's frames come straight here (a MediaStreamTrackProcessor stream), so a frame
 // never waits for the page to draw one; otherwise the page posts ImageBitmaps. Only the newest frame is ever tracked.
 function handWorkerMain() {
-  let lm = null, lastTs = -1, feedId = 0, paused = false, clockOff = 0, seen = 0;
+  let lm = null, lastTs = -1, feedId = 0, paused = false, clockOff = 0, seen = 0, nh = 2, avoid = null, cv = null, cx = null;
   const post = (m, tr) => self.postMessage(m, tr || []);
   const msg = (err) => String((err && err.message) || err);
   // Every step of starting up has a time limit: a GPU that never finishes setting up must not hang the tracker.
@@ -118,6 +118,7 @@ function handWorkerMain() {
   }
   async function init(m) {
     clockOff = performance.timeOrigin - m.origin;   // worker clock → page clock
+    nh = m.opts.numHands || 2;
     post({ type: 'progress', stage: 'download', frac: 0 });
     importScripts(m.base + '/vision_bundle.js');
     const V = self.Vision, files = await V.FilesetResolver.forVisionTasks(m.base + '/wasm');
@@ -144,11 +145,21 @@ function handWorkerMain() {
     }
     throw new Error(errs.join(' · '));
   }
+  // The picture with the given boxes (raw image fractions) painted over, so MediaPipe can't pick those hands up.
+  function masked(img, boxes) {
+    const w = img.displayWidth || img.width, h = img.displayHeight || img.height;
+    if (!cv || cv.width !== w || cv.height !== h) { cv = new OffscreenCanvas(w, h); cx = cv.getContext('2d'); }
+    cx.drawImage(img, 0, 0, w, h);
+    cx.fillStyle = '#7f7f7f';
+    for (const b of boxes) cx.fillRect(b.x0 * w, b.y0 * h, (b.x1 - b.x0) * w, (b.y1 - b.y0) * h);
+    return cv;
+  }
   // Track one image. t: the page-clock time the result is reported under; ts: the frame's own timestamp (ms).
   function track(img, t, ts, extra) {
-    const out = { type: 'result', t, landmarks: [], handedness: [], ms: 0, seen, ...extra }, t0 = performance.now();
+    const out = { type: 'result', t, landmarks: [], handedness: [], ms: 0, seen, nh, ...extra }, t0 = performance.now();
     try {
       lastTs = Math.max(Math.round(ts), lastTs + 1);   // video mode needs strictly increasing timestamps
+      if (avoid && avoid.n > 0) { avoid.n--; img = masked(img, avoid.boxes); out.masked = true; }
       const res = lm.detectForVideo(img, lastTs);
       out.landmarks = res.landmarks || [];
       out.handedness = (res.handedness || res.handednesses || []).map((h) => (h && h[0] ? { label: h[0].categoryName, score: h[0].score } : { label: '', score: 0 }));
@@ -190,7 +201,14 @@ function handWorkerMain() {
       else post({ type: 'result', t: m.t, landmarks: [], handedness: [], ms: 0, src: 'frame', error: 'not ready' });
       try { m.bitmap.close(); } catch (err) { /* already closed */ }
     } else if (m.type === 'options' && lm) {
-      lm.setOptions(m.opts).then(() => post({ type: 'options', ok: true }), (err) => post({ type: 'options', ok: false, message: msg(err) }));
+      // How many hands to look for. Changing it restarts MediaPipe's tracking, so the next frame searches the whole
+      // picture; `avoid` paints over the other hand for two frames so that search can only find the racket hand.
+      try {
+        const p = lm.setOptions(m.opts);
+        if (m.opts.numHands) nh = m.opts.numHands;
+        avoid = m.avoid && m.avoid.length && typeof OffscreenCanvas === 'function' ? { boxes: m.avoid, n: 2 } : null;
+        Promise.resolve(p).catch((err) => post({ type: 'optionsError', message: msg(err) }));
+      } catch (err) { post({ type: 'optionsError', message: msg(err) }); }
     }
   };
 }
@@ -198,6 +216,7 @@ function handWorkerMain() {
 // Hand tracker settings, and how long each way of running it may take to start (ms) before the next is tried.
 const HAND_OPTS = { runningMode: 'VIDEO', numHands: 2, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.4 };
 const HAND_WAIT = { GPU: 15000, CPU: 25000, download: 30000 };
+const STREAM_DELAY = 5;   // ms from a camera frame's capture to the tracker reading it straight from the stream (Chrome)
 const handLabels = (res) => (res.handedness || res.handednesses || []).map((h) => (h && h[0] ? { label: h[0].categoryName, score: h[0].score } : { label: '', score: 0 }));
 const timeLimit = (p, ms, what) => new Promise((ok, no) => {
   const id = setTimeout(() => no(new Error(`${what} took too long.`)), ms);
@@ -210,10 +229,10 @@ const Tracker = {
   status: document.getElementById('camStatus'),
   wrap: document.getElementById('camWrap'),
   stream: null, kind: null, running: false, gen: 0, camGen: 0, loopGen: 0, opening: null,
-  worker: null, workerState: 'none', workerLoading: null, inFlight: false, sentAt: 0, stalls: 0, next: null, feed: null, noFeed: false,
+  worker: null, workerState: 'none', workerLoading: null, inFlight: false, sentAt: 0, stalls: 0, next: null, feed: null, noFeed: false, noSteer: false,
   landmarker: null, loading: null, lastMain: 0, lastTs: 0, lastVT: -1, delegate: '', where: '', loadError: '', startMs: 0, readyAt: 0,
-  procMs: 0, lagMs: 0, rate: 0, rateN: 0, rateT: 0, stamp: '', aspect: 4 / 3, tsOffs: [], tsOff: NaN, arrOff: Infinity,
-  palm: 0, scale: 1, offHand: 0, trail: [], picker: new HandPicker(), palmScale: new PalmScale(),
+  procMs: 0, lagMs: 0, rate: 0, rateN: 0, rateT: 0, stamp: '', aspect: 4 / 3, arrOff: Infinity,
+  palm: 0, scale: 1, offHand: 0, trail: [], picker: new HandPicker(), palmScale: new PalmScale(), nh: HAND_OPTS.numHands, good: 0, locks: 0,
   st: { t: 0, res: 0, found: 0, cam: 0, seen: 0, errors: 0, errRun: 0, lastRes: 0 }, per: { rate: 0, cam: 0, found: 0, dropped: 0 },
   work: null, workCtx: null, ctxO: null, blobN: 0, seg: {}, segW: 160, segH: 120, paddleTg: null, paddleFor: null, maskCanvas: null, maskImg: null,
   handsReady() { return this.workerState === 'ready' || !!this.landmarker; },
@@ -303,7 +322,7 @@ const Tracker = {
           else { this.setStatus(m.delegate === 'GPU' ? 'Starting hand tracker…' : 'Starting hand tracker (without the graphics chip)…'); arm((HAND_WAIT[m.delegate] || 20000) + 8000, 'starting'); }
         } else if (m.type === 'ready') {
           done = true; clearTimeout(timer); URL.revokeObjectURL(url);
-          this.worker = w; this.workerState = 'ready'; this.delegate = m.delegate; this.where = 'background thread';
+          this.worker = w; this.workerState = 'ready'; this.delegate = m.delegate; this.where = 'background thread'; this.nh = HAND_OPTS.numHands;
           this.startMs = performance.now() - t0; this.readyAt = performance.now(); this.loadError = '';
           if (m.errors && m.errors.length) console.warn('Hand tracker:', m.errors.join(' · '));
           w.onmessage = (ev) => this.onWorker(ev.data);
@@ -322,7 +341,7 @@ const Tracker = {
     const again = performance.now() - (this.recoveredAt || -1e9) > 60000;
     this.recoveredAt = performance.now();
     try { this.worker.terminate(); } catch (e) { /* gone */ }
-    this.worker = null; this.workerState = again ? 'none' : 'failed'; this.feed = null; this.inFlight = false; this.dropNext();
+    this.worker = null; this.workerState = again ? 'none' : 'failed'; this.feed = null; this.inFlight = false; this.dropNext(); this.nh = HAND_OPTS.numHands;
     this.st.errRun = 0;
     if (!this.running || this.kind !== 'hand') return;
     this.setStatus('Restarting hand tracker…');
@@ -356,7 +375,7 @@ const Tracker = {
     this.feed = null;
   },
   dropNext() { if (this.next) { try { this.next.bmp.close(); } catch (e) { /* closed */ } this.next = null; } },
-  resetHand() { this.picker.reset(); this.palmScale.reset(); this.palm = 0; this.scale = 1; },
+  resetHand() { this.picker.reset(); this.palmScale.reset(); this.palm = 0; this.scale = 1; this.setHands(2); },
   onWorker(m) {
     if (!m) return;
     if (m.type === 'feedError') {
@@ -364,6 +383,7 @@ const Tracker = {
       this.noFeed = true; this.endFeed();
       return;
     }
+    if (m.type === 'optionsError') { console.warn('hand tracker options:', m.message); this.noSteer = true; return; }
     if (m.type !== 'result') return;
     if (m.src === 'frame') {
       this.inFlight = false;
@@ -387,18 +407,13 @@ const Tracker = {
     if (!this.running || this.kind !== 'hand') return;
     this.handleHands(m.landmarks || [], m.handedness || [], tCap);
   },
-  // Capture time (page clock) of a frame the worker read from the camera itself. Its timestamp runs on the camera
-  // stream's clock; the video element's frame callbacks report both clocks for the same frame, which gives the offset.
-  // Until they have, or if that looks wrong: the earliest the frame could have arrived, less the usual delay.
+  // Capture time (page clock) of a frame the worker read from the camera itself. Its timestamp is on the camera
+  // stream's own clock: map it with the smallest gap yet seen between a frame's timestamp and when it was read (a floor
+  // that creeps up slowly in case the clocks drift), less the few ms a frame takes to reach the page.
   streamTime(ts, at) {
     this.arrOff = Math.min(this.arrOff + 0.02, at - ts);
-    const est = ts + this.arrOff - 30;
-    if (Number.isFinite(this.tsOff)) {
-      const t = ts + this.tsOff;
-      if (t <= at + 2 && at - t < 400) { this.stamp = 'camera'; return t; }
-    }
-    this.stamp = 'arrival';
-    return est;
+    this.stamp = 'stream';
+    return ts + this.arrOff - STREAM_DELAY;
   },
   async loadHands() {
     const vision = await timeLimit(import(`${MP_BASE}/vision_bundle.mjs`), HAND_WAIT.download * 2, 'Loading the hand tracker');
@@ -432,16 +447,7 @@ const Tracker = {
   // one, otherwise when the frame reached the page less the usual delay before that.
   frameTime(meta) {
     const p = performance.now(), ok = (t) => Number.isFinite(t) && t <= p + 1 && p - t < 400;
-    if (meta && ok(meta.captureTime)) {
-      // The same frame on the stream's own clock: calibrates frames the hand tracker reads straight from the camera.
-      if (Number.isFinite(meta.mediaTime) && meta.mediaTime > 0) {
-        const o = this.tsOffs;
-        o.push(meta.captureTime - meta.mediaTime * 1000);
-        if (o.length > 31) o.shift();
-        if (o.length >= 5) this.tsOff = o.slice().sort((a, b) => a - b)[o.length >> 1];
-      }
-      this.stamp = 'camera'; return meta.captureTime;
-    }
+    if (meta && ok(meta.captureTime)) { this.stamp = 'camera'; return meta.captureTime; }
     this.stamp = 'arrival';
     return (meta && ok(meta.presentationTime) ? meta.presentationTime : p) - 30;
   },
@@ -502,9 +508,10 @@ const Tracker = {
   },
   handleHands(hands, labels, tCap) {
     const cands = hands.map((lm, i) => { const l = labels[i]; return { ...palmCentre(lm), label: (l && l.label) || (typeof l === 'string' ? l : ''), score: l && l.score }; });
-    const t = Clock.fromPerf(tCap / 1000);
-    const { i, switched } = this.picker.pick(cands, Settings.handed, Input.det.predict(t), !!Input.swing || Input.speed > 1.2);
+    const t = Clock.fromPerf(tCap / 1000), moving = !!Input.swing || Input.speed > 1.2;
+    const { i, switched } = this.picker.pick(cands, Settings.handed, Input.det.predict(t), moving);
     if (switched) Input.lost();   // now following the other hand: start its track afresh rather than read the jump as a swing
+    this.steer(hands, i, moving);
     let pt = null, lms = null;
     if (i >= 0) {
       pt = cands[i]; lms = hands[i];
@@ -515,6 +522,29 @@ const Tracker = {
     }
     this.tally(i >= 0);
     this.handlePoint(pt, lms, tCap);
+  },
+  // MediaPipe looks for two hands only while it has to. With two, every frame the other hand is out of view it searches
+  // the whole picture for it (about twice the work of following one hand). So once the racket hand has been followed
+  // steadily for a few frames, track just that one; when it's lost or reads as the other hand, look for two again.
+  // Tracking one hand restarts MediaPipe's search, so the other hand is painted over for that moment.
+  steer(hands, i, moving) {
+    if (!this.worker || this.workerState !== 'ready' || this.noSteer) return;
+    const p = this.picker;
+    if (this.nh === 1) {
+      if (i < 0 || (p.n > 10 && p.vote < -0.45)) this.setHands(2);
+      return;
+    }
+    if (i < 0 || moving || p.vote < -0.3) { this.good = 0; return; }
+    if (++this.good < 8) return;
+    const mine = handBox(hands[i], 0.2), others = hands.filter((h, k) => k !== i).map((h) => handBox(h, 0.5));
+    if (others.some((b) => b.x0 < mine.x1 && b.x1 > mine.x0 && b.y0 < mine.y1 && b.y1 > mine.y0)) return;   // hands too close to paint one over
+    this.setHands(1, others);
+  },
+  setHands(n, avoid = null) {
+    if (!this.worker || this.nh === n) return;
+    this.nh = n; this.good = 0;
+    if (n === 1) this.locks++;
+    this.worker.postMessage({ type: 'options', opts: { numHands: n }, avoid });
   },
   // Tracking health over the last second, for stats().
   tally(found) {
@@ -543,7 +573,7 @@ const Tracker = {
     const hand = this.kind === 'hand';
     const where = hand ? `${this.delegate || '…'} · ${this.where || 'loading'}${this.feed ? ' (direct)' : ''}` : 'color tracking';
     return `${where} · ${Math.round(this.rate)} fps${this.procMs ? ` · ${Math.round(this.procMs)} ms per frame` : ''}` +
-      `${this.lagMs ? ` · ${Math.round(this.lagMs)} ms behind${this.stamp === 'camera' ? '' : ' (est.)'}` : ''}` +
+      `${this.lagMs ? ` · ${Math.round(this.lagMs)} ms behind${this.stamp === 'arrival' ? ' (est.)' : ''}` : ''}` +
       `${hand && this.per.cam ? ` · hand found ${Math.round(this.per.found * 100)}%` : ''}`;
   },
   // The same as numbers, for the camera check. rate: frames tracked per second; camFps: camera frames per second;
@@ -556,7 +586,7 @@ const Tracker = {
       state, kind: this.kind, delegate: hand ? this.delegate : '', where: hand ? this.where : '', direct: !!this.feed,
       rate: this.rate, camFps: hand ? p.cam : this.rate, dropped: hand ? p.dropped : 0, found: hand ? p.found : NaN,
       procMs: this.procMs, lagMs: this.lagMs, stamp: this.stamp, stalls: this.stalls, errors: this.st.errors,
-      startMs: this.startMs, numHands: HAND_OPTS.numHands, palm: this.palm, scale: this.scale, status: this.status.textContent, error: this.loadError,
+      startMs: this.startMs, numHands: this.landmarker && !this.worker ? HAND_OPTS.numHands : this.nh, locks: this.locks, palm: this.palm, scale: this.scale, status: this.status.textContent, error: this.loadError,
     };
   },
   ensureWork(W, H) {
