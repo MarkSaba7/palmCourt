@@ -269,16 +269,22 @@ function labelVote(h, handed) {
   return h.label === racketLabel(handed) ? conf : -conf;
 }
 // Which of the detected hands is the racket hand. hands: [{x, y, label, score}] palm centres in mirrored coordinates,
-// with MediaPipe's label and its confidence. Returns -1 to skip the frame: only the other hand is in view, well away
-// from where the racket hand was heading (it is probably blurred).
+// with MediaPipe's label and its confidence. Returns -1 to skip the frame.
+// While the racket hand's track is fresh (pred), a hand only continues it if it is near where the racket hand should
+// be: within 0.3 frame widths if it is labelled as the racket hand, 0.2 if the label can't tell, but only 0.1 if it
+// reads as the other hand. So when the racket hand blurs out of a frame, the other hand isn't taken for it (the
+// swing detector bridges the gap), unless the two are together (a two-handed backhand).
 function pickHand(hands, handed, pred) {
   if (!hands.length) return -1;
   const mine = racketLabel(handed);
   if (pred && pred.age < 0.35) {
-    let best = 0, bd = Infinity;
-    hands.forEach((h, i) => { const d = Math.hypot(h.x - pred.x, h.y - pred.y) + (h.label === mine ? 0 : 0.08); if (d < bd) { bd = d; best = i; } });
-    const h = hands[best];
-    if (h.label !== mine && h.label && Math.hypot(h.x - pred.x, h.y - pred.y) > 0.3) return -1;
+    let best = -1, bd = Infinity;
+    hands.forEach((h, i) => {
+      const d = Math.hypot(h.x - pred.x, h.y - pred.y);
+      if (d > clamp(0.2 + 0.125 * labelVote(h, handed), 0.1, 0.3)) return;
+      const c = d + (h.label === mine ? 0 : 0.08);
+      if (c < bd) { bd = c; best = i; }
+    });
     return best;
   }
   let i = -1;   // the most confident racket-hand label
@@ -338,12 +344,20 @@ class PalmScale {
 // about the hand it follows. A hand that keeps reading as the off hand while another reads as the racket hand is the
 // wrong one: switch. Labels are unreliable on a blurred hand, so they count for little mid-swing.
 class HandPicker {
-  constructor() { this.reset(); }
-  reset() { this.vote = 0; this.n = 0; }
+  constructor(o = {}) { this.settle = o.settle || 6; this.reset(); }
+  reset() { this.vote = 0; this.n = 0; this.wait = 0; }
   // Returns {i, switched}: i = -1 skips the frame; switched: now following a different hand (restart its track).
   pick(hands, handed, pred, moving = false) {
-    let i = pickHand(hands, handed, pred), switched = false;
-    if (i < 0) return { i, switched };
+    const fresh = !!pred && pred.age < 0.35;
+    let i = pickHand(hands, handed, fresh ? pred : null), switched = false;
+    if (i < 0) { if (!hands.length) this.wait = 0; return { i, switched }; }
+    if (!fresh) {
+      // Picking a hand up afresh. One labelled as the racket hand is taken at once; any other must stay in view for a
+      // few frames first: the racket hand may only be blurred or just out of the picture while the other hand is still.
+      if (labelVote(hands[i], handed) > 0.3) this.wait = 0;
+      else if (++this.wait < this.settle) return { i: -1, switched };
+      this.vote = 0; this.n = 0;
+    }
     if (hands.length > 1 && !moving && this.n >= 5 && this.vote < -0.45) {
       let j = -1;
       hands.forEach((h, k) => { if (k !== i && labelVote(h, handed) > 0.5 && (j < 0 || labelVote(h, handed) > labelVote(hands[j], handed))) j = k; });

@@ -43,6 +43,18 @@ console.log('Hand picking');
   // Neither labelled as the racket hand: the one on the racket side of the (mirrored) picture.
   check(pickHand([{ x: 0.3, y: 0.5, label: Lb }, { x: 0.7, y: 0.5, label: Lb }], 'R', null) === 1 && pickHand([{ x: 0.3, y: 0.5, label: R }, { x: 0.7, y: 0.5, label: R }], 'L', null) === 0, 'pickHand: racket side');
   check(pickHand([{ x: 0.3, y: 0.5, label: Lb }], 'R', { x: 0.7, y: 0.5, age: 0.5 }) === 0, 'pickHand: a stale prediction does not skip the only hand');
+  // A06's bug: mid-swing the racket hand blurs out of a frame while the off hand is in view 0.1-0.3 away from where
+  // the racket hand should be. The old pickHand took the off hand (a jump); now the frame is skipped.
+  const pred = { x: 0.52, y: 0.62, age: 0.03 }, off = { x: 0.33, y: 0.8, label: Lb };
+  check(pickHand([off], 'R', pred) === -1 && pickHand([off, { x: 0.9, y: 0.1, label: R }], 'R', pred) === -1, 'pickHand: racket hand lost mid-swing, off hand 0.26 away → skip');
+  const p12 = { x: 0.43, y: 0.74, age: 0.03 };   // 0.12 from the off hand
+  check(pickHand([{ ...off, score: 0.99 }], 'R', p12) === -1, 'pickHand: off hand 0.12 away with a sure label is skipped');
+  check(pickHand([{ ...off, score: 0.6 }], 'R', p12) === 0, 'pickHand: an unsure off-hand label near where the racket hand should be continues the track');
+  check(pickHand([{ ...off, score: 0.99 }], 'R', { x: 0.4, y: 0.75, age: 0.03 }) === 0, 'pickHand: off hand within 0.1 (hands together) continues the track');
+  check(pickHand([off, { x: 0.47, y: 0.55, label: R }], 'R', pred) === 1, 'pickHand: racket hand back (0.09 away) is taken, not the off hand');
+  check(pickHand([off, { x: 0.3, y: 0.45, label: R }], 'R', pred) === 1 && pickHand([off, { x: 0.25, y: 0.35, label: R }], 'R', pred) === -1, 'pickHand: a racket-labelled hand continues within 0.3, not beyond');
+  // Two-handed backhand: both hands together at the prediction; either continues the track.
+  check(pickHand([{ x: 0.5, y: 0.6, label: Lb }, { x: 0.53, y: 0.63, label: R }], 'R', pred) === 1, 'pickHand: hands together → the racket-labelled one');
 }
 
 console.log('HandPicker');
@@ -52,8 +64,13 @@ console.log('HandPicker');
   // have said so for a few frames, but never mid-swing.
   const p = new HandPicker();
   let pred = null, got = [];
-  for (let k = 0; k < 3; k++) { const r = p.pick([{ x: 0.3, y: 0.5, label: Lb, score: 0.95 }], 'R', pred); got.push(r.i); pred = { x: 0.3, y: 0.5, age: 0.03 }; }
-  check(got.every((i) => i === 0), 'HandPicker: a lone hand is followed whatever its label');
+  for (let k = 0; k < 8; k++) { const r = p.pick([{ x: 0.3, y: 0.5, label: Lb, score: 0.95 }], 'R', pred); got.push(r.i); if (r.i >= 0) pred = { x: 0.3, y: 0.5, age: 0.03 }; }
+  check(got.join() === '-1,-1,-1,-1,-1,0,0,0', `HandPicker: a lone hand read as the off hand is only taken after 6 frames in view (${got.join()})`);
+  const p2 = new HandPicker();
+  check(p2.pick([{ x: 0.3, y: 0.5, label: R, score: 0.95 }], 'R', null).i === 0, 'HandPicker: a hand read as the racket hand is taken at once');
+  let g2 = [];
+  for (let k = 0; k < 8; k++) g2.push(p2.pick(k % 2 ? [] : [{ x: 0.3, y: 0.5, label: Lb, score: 0.95 }], 'R', null).i);
+  check(g2.every((i) => i === -1), 'HandPicker: an off hand that keeps dropping out is never taken without a prediction');
   let switchedAt = -1;
   for (let k = 0; k < 40; k++) {
     const r = p.pick([{ x: 0.3, y: 0.5, label: Lb, score: 0.95 }, { x: 0.72, y: 0.52, label: R, score: 0.95 }], 'R', pred, false);
@@ -70,7 +87,7 @@ console.log('HandPicker');
   for (let k = 0; k < 60; k++) {
     const lab = k % 10 < 3 ? Lb : R;
     const r = q.pick([{ x: 0.3, y: 0.5, label: Lb, score: 0.9 }, { x: 0.7 + 0.001 * k, y: 0.5, label: lab, score: 0.8 }], 'R', pred, false);
-    if (r.i !== 1) flips++;
+    if (r.i === 0) flips++;
     pred = { x: 0.7 + 0.001 * k, y: 0.5, age: 0.03 };
   }
   check(flips === 0, `HandPicker: label flips don't lose the racket hand (${flips} frames on the wrong hand)`);

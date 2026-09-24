@@ -503,7 +503,7 @@ const Tracker = {
   handleHands(hands, labels, tCap) {
     const cands = hands.map((lm, i) => { const l = labels[i]; return { ...palmCentre(lm), label: (l && l.label) || (typeof l === 'string' ? l : ''), score: l && l.score }; });
     const t = Clock.fromPerf(tCap / 1000);
-    const { i, switched } = this.picker.pick(cands, Settings.handed, Input.det.predict(t), !!Input.swing);
+    const { i, switched } = this.picker.pick(cands, Settings.handed, Input.det.predict(t), !!Input.swing || Input.speed > 1.2);
     if (switched) Input.lost();   // now following the other hand: start its track afresh rather than read the jump as a swing
     let pt = null, lms = null;
     if (i >= 0) {
