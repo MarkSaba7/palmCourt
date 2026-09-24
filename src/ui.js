@@ -229,7 +229,18 @@ const UI = {
     }
     $('settings').addEventListener('change', (e) => { if (e.target.name === 'opt-handed') this.renderPros(); });
     $('optName').addEventListener('input', () => this.renderPros());
+    Bus.on('screen', ({ screen }) => { if (screen === 'menu') queueMicrotask(() => this.fitNames()); });   // once it's shown
+    addEventListener('resize', () => this.fitNames());
+    if (document.fonts) document.fonts.addEventListener('loadingdone', () => this.fitNames());
     this.renderPros();
+  },
+  // Long names (or a wide fallback font) shrink to fit the card instead of being cut off.
+  fitNames() {
+    for (const el of document.querySelectorAll('.pp-name')) {
+      el.style.fontSize = '';
+      if (!el.clientWidth) continue;   // the menu is hidden: fitted when it shows
+      for (let px = parseFloat(getComputedStyle(el).fontSize); el.scrollWidth > el.clientWidth && px > 15;) el.style.fontSize = `${--px}px`;
+    }
   },
   renderPros() {
     for (const side of ['you', 'opp']) {
@@ -247,6 +258,7 @@ const UI = {
         inp.parentElement.title = inp.disabled ? `${inp.getAttribute('aria-label')} (you)` : inp.getAttribute('aria-label');
       }
     }
+    this.fitNames();
   },
 
   // ---- online lobby ----
