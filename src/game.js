@@ -164,7 +164,9 @@ const Game = {
   },
   cpuThink(pl, now) {
     const b = this.ball, m = this.match;
+    this.cpuTune(pl);
     if (this.state === 'serve') {
+      const ai = this.cpuMind(pl); ai.mode = 'base'; ai.leave = false;
       if (m.currentServer === pl.idx && now > pl.cpuServeAt && now > this.serveReadyAt) this.toss(pl);
     } else if (this.state === 'toss') {
       if (m.currentServer === pl.idx && !this.pending && pl.hitFor !== -2) {
@@ -179,8 +181,68 @@ const Game = {
         pl.avatar.prepStroke = plan.stroke;
         pl.avatar.prep = clamp(1 - (plan.t - now - 0.22) / 0.5, 0, 1);
         if (plan.t - now < 0.5) { pl.hitFor = b.rally; this.pending = { t: plan.t, pl, kind: 'ground' }; pl.avatar.swing(plan.stroke, plan.t); }
-      } else if (!plan) pl.avatar.prep = Math.max(0, pl.avatar.prep - 0.08);
+      } else if (!plan) { pl.avatar.prep = Math.max(0, pl.avatar.prep - 0.08); this.cpuPosition(pl, now); }
     }
+  },
+  // The CPU's personality: player.persona (0..1 per trait, 0.5 = neutral; missing traits or no persona = neutral).
+  cpuStyle(pl) {
+    const p = pl.persona;
+    if (pl.styleOf === p && pl.style) return pl.style;
+    const s = { aggression: 0.5, topspin: 0.5, slice: 0.5, drop: 0.5, net: 0.5, serve: 0.5, consistency: 0.5, defense: 0.5, speed: 0.5 };
+    if (p) for (const k in s) if (Number.isFinite(p[k])) s[k] = clamp(p[k], 0, 1);
+    pl.styleOf = p; pl.style = s;
+    return s;
+  },
+  // Tactical state: 'base' (baseline) or 'net', where it aimed last, whether it is letting a ball go, recent serves.
+  cpuMind(pl) { return pl.ai || (pl.ai = { mode: 'base', aim: null, leave: false, serves: [], snv: false }); },
+  // Legs from the level, scaled by persona.speed (startMatch resets maxSpeed, which triggers a retune).
+  cpuTune(pl) {
+    if (pl.maxSpeed === pl.tunedSpeed && pl.tunedFor === pl.persona && pl.tunedLevel === pl.level) return;
+    const L = pl.level, k = this.cpuStyle(pl).speed - 0.5;
+    pl.maxSpeed = L.speed * (1 + 0.16 * k); pl.acc = L.acc * (1 + 0.2 * k); pl.react = L.react * (1 - 0.3 * k);
+    pl.tunedSpeed = pl.maxSpeed; pl.tunedFor = pl.persona; pl.tunedLevel = L;
+  },
+  // Reaction to a new ball: a little variable, and slower when caught moving the wrong way.
+  cpuReact(pl) {
+    const plan = pl.plan;
+    let r = pl.react * rand(0.8, 1.3);
+    if (plan) {
+      const dx = plan.bx - pl.x, dz = plan.bz - pl.z, d = Math.hypot(dx, dz) || 1, along = (pl.vx * dx + pl.vz * dz) / d;
+      if (along < -0.5) r += 0.05 * Math.min(1.5, -along / 3);
+    }
+    return r;
+  },
+  // Between shots (no ball to play): recover to the spot that splits the opponent's angles, at the baseline or the
+  // net, and split-step as they strike. A ball it won't reach it still chases; one landing clearly out it watches go.
+  cpuPosition(pl, now) {
+    const b = this.ball, ai = this.cpuMind(pl), S = this.cpuStyle(pl), opp = this.players[1 - pl.idx];
+    if (b.lastHitter < 0) return;
+    if (b.lastHitter !== pl.idx) {
+      const b1 = pl.path && pl.path.bounce1;
+      if (ai.leave || !b1 || (b1.z > 0 ? 1 : -1) !== pl.side) { pl.tx = pl.x; pl.tz = pl.z; return; }
+      const vh = Math.hypot(b.v.x, b.v.z) || 1;
+      pl.tx = clamp(b1.x + (b.v.x / vh) * 1.5, -9, 9); pl.tz = b1.z + (b.v.z / vh) * 1.5;
+      return;
+    }
+    const op = opp.plan, tHit = this.pending && this.pending.pl === opp ? this.pending.t : op ? op.t : null;
+    if (tHit != null && tHit - now < 0.12 && Math.hypot(pl.x - pl.tx, pl.z - pl.tz) < 1.5) { pl.tx = pl.x; pl.tz = pl.z; return; }
+    const net = ai.mode === 'net';
+    const zc = pl.side * (net ? lerp(4.4, 2.6, S.net) : 12.2 + 1.3 * (S.defense - 0.5) - 0.8 * (S.aggression - 0.5));
+    // The opponent's contact point: where they will play our ball, else where we aimed it.
+    const ox = op ? op.x : ai.aim ? ai.aim.x : opp.x, oz = op ? op.z : ai.aim ? ai.aim.z : opp.z;
+    // Bisect the angle between the two sidelines as seen from there.
+    const W = 4.115, ux = -W - ox, vx = W - ox, dz = zc - oz, l1 = Math.hypot(ux, dz), l2 = Math.hypot(vx, dz);
+    const bx = ox + ((ux / l1 + vx / l2) / (dz / l1 + dz / l2)) * dz;
+    pl.tx = clamp(bx, net ? -2.8 : -2.3, net ? 2.8 : 2.3); pl.tz = zc;
+  },
+  // Where the CPU waits for a serve: splitting the server's wide and T serves, further back against first serves
+  // (defenders further still, attackers closer; everyone steps in for a second serve).
+  cpuReceive(R, srv, court) {
+    const S = this.cpuStyle(R), first = this.match.serveNo === 1, bs = court === 'deuce' ? R.side : -R.side;
+    const d = first ? 12.7 + 1.6 * (S.defense - 0.5) - 0.9 * (S.aggression - 0.5) : 11.9 + 1.0 * (S.defense - 0.5) - 1.0 * (S.aggression - 0.5);
+    const zr = R.side * clamp(d, 11.2, 14.2), k = (zr - srv.z) / (R.side * 5.6 - srv.z);
+    const xw = srv.x + (bs * 3.75 - srv.x) * k, xt = srv.x + (bs * 0.3 - srv.x) * k;
+    R.x = clamp((xw + xt) / 2, -3.8, 3.8); R.z = zr;
   },
 
   updateBall(now) {

@@ -31,10 +31,14 @@ const FORMATS = {
   short:    { label: 'Short set', games: 4 },
   full:     { label: 'Full set', games: 6 },
 };
+// CPU opponents. speed/acc/react: legs (m/s, m/s², s). err: shot scatter. power/serve: pace ranges (0..1).
+// iq: shot choice (0 hits anywhere, 1 plays the percentages). pos: footwork, how far from the ideal contact point it
+// tends to arrive (m). judge: how far out (m) a ball must be before it lets it go. sErr: serve scatter. risk: how close
+// to the lines first serves go.
 const LEVELS = {
-  rookie: { label: 'Rookie', speed: 5.0, acc: 7.0, react: 0.30, err: 2.2,  power: [0.25, 0.55], serve: [0.35, 0.6] },
-  club:   { label: 'Club',   speed: 5.8, acc: 8.2, react: 0.20, err: 1.2,  power: [0.35, 0.75], serve: [0.5, 0.78] },
-  pro:    { label: 'Pro',    speed: 6.4, acc: 9.5, react: 0.12, err: 0.75, power: [0.45, 0.9],  serve: [0.62, 0.92] },
+  rookie: { label: 'Rookie', speed: 4.8, acc: 6.2, react: 0.30, err: 1.7,  power: [0.22, 0.55], serve: [0.08, 0.34], iq: 0.25, pos: 0.26, judge: 0.9, sErr: 1.6, risk: 0.25 },
+  club:   { label: 'Club',   speed: 5.5, acc: 7.2, react: 0.21, err: 1.05, power: [0.32, 0.76], serve: [0.3, 0.62],  iq: 0.55, pos: 0.18, judge: 0.45, sErr: 1.1, risk: 0.5 },
+  pro:    { label: 'Pro',    speed: 6.2, acc: 8.2, react: 0.15, err: 0.62, power: [0.45, 0.92], serve: [0.58, 0.95], iq: 0.9,  pos: 0.1,  judge: 0.2, sErr: 0.8, risk: 0.8 },
 };
 
 function netHeight(x) {
