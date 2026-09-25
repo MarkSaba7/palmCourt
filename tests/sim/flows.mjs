@@ -137,7 +137,8 @@ export const FLOWS = {
     if (!S.runUntil(() => G.state === 'over', 1500)) return fail('match did not finish');
     if (UI.screen !== 'over' || $('over').hidden) fail('over screen not shown');
     const score = $('overScore').textContent, title = $('overTitle').textContent;
-    if (!/\\d+–\\d+/.test(score)) fail('over score ' + score);
+    const fin = G.match.tbOnly ? G.match.pts : G.match.games;
+    if (!score.includes(String(fin[0])) || !score.includes(String(fin[1]))) fail('over score "' + score + '" lacks the final ' + fin.join('-'));
     S.run(10);   // the over screen stays up
     if (G.state !== 'over' || UI.screen !== 'over') fail('left the over screen by itself');
     UI.rematch();
@@ -211,7 +212,7 @@ export const FLOWS = {
     await S.startPractice({ format: 'short', cpu: false });
     const me = G.players[0];
     let swings = 0, hits = 0;
-    const end = S.V.t + 1200;
+    const end = S.V.t + 4000;
     while (S.V.t < end && G.state !== 'over') {
       S.run(1 / 60);
       const now = Clock.now(), m = G.match;
@@ -257,6 +258,31 @@ export const FLOWS = {
         res.push(off + ': ' + shown + ' ' + $('hawkDist').textContent);
         S.runUntil(() => G.state === 'serve', 10);
       } else { res.push(off + ': in (' + (Math.abs(bl.x) - 4.115).toFixed(4) + ')'); S.runUntil(() => G.state === 'serve', 30); }
+    }
+    return res.join('; ');
+  `),
+  // A second serve into the net that drops back near the centre line is a double fault, and no Hawk-Eye may call it
+  // "In" (the bounce is on the server's own half, nowhere near the service box lines).
+  'double fault into the net: no Hawk-Eye': (page) => inPage(page, `
+    await S.startPractice({ format: 'full', level: 'club' });
+    const res = [];
+    for (const x of [0.005, -0.03, 0.02, -0.005, 0.03, -0.02]) {
+      if (!S.runUntil(() => G.state === 'serve', 60)) return fail('no serve');
+      G.match.serveNo = 2;
+      if (!S.runUntil(() => G.state === 'rally' && G.ball.serve, 10)) return fail('serve not struck');
+      const b = G.ball, side = G.players[b.lastHitter].side, T = Math.abs(b.p.z) / 22, box = { rSide: -side, court: b.serve.court };
+      // straight into the net body at x, half a metre up
+      b.v = { x: (x - b.p.x) / T, y: (0.45 - b.p.y) / T + 0.5 * 9.81 * T, z: -side * 22 }; b.w = { x: 0, y: 0, z: 0 };
+      G.bounceLog.length = 0; G.hist.length = 0; Replay.lastAt = -99;
+      const df0 = C.counts['reason:df'] || 0;
+      S.runUntil(() => G.state === 'dead', 3);
+      if ((C.counts['reason:df'] || 0) !== df0 + 1) { res.push(x + ': not a double fault (' + G.deadKind + ')'); continue; }
+      const bl = G.bounceLog[0];
+      S.runUntil(() => Replay.phase === 'hold' || G.state === 'serve', 12);
+      if (Replay.phase === 'hold') fail('Hawk-Eye shown for a double fault into the net (bounce x ' + (bl && bl.x.toFixed(3)) + ', says ' + $('hawkCall').textContent + ')');
+      const lm = bl && (await import('/src/replay.js')).lineMargin(bl.x, bl.z, box);
+      res.push(x + ': df, bounce ' + (bl ? bl.x.toFixed(3) + ',' + bl.z.toFixed(2) : '?') + ' margin ' + (lm ? lm.d.toFixed(3) : '?') + ', replay ' + (Replay.spec && Replay.phase !== 'idle' ? Replay.spec.style : 'none'));
+      S.runUntil(() => G.state === 'serve', 15);
     }
     return res.join('; ');
   `),

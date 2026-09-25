@@ -539,17 +539,19 @@ function labelVote(h, handed) {
 // Which of the detected hands is the racket hand. hands: [{x, y, label, score}] palm centres in mirrored coordinates,
 // with MediaPipe's label and its confidence. Returns -1 to skip the frame.
 // While the racket hand's track is fresh (pred), a hand only continues it if it is near where the racket hand should
-// be: within 0.3 frame widths if it is labelled as the racket hand, 0.2 if the label can't tell, but only 0.1 if it
-// reads as the other hand. So when the racket hand blurs out of a frame, the other hand isn't taken for it (the
+// be: within 0.3 frame widths (more if the track is a few frames old) if it is labelled as the racket hand, 0.15 if the
+// label can't tell, but only 0.07 if it reads as the other hand. So when the racket hand blurs out of a frame, the other hand isn't taken for it (the
 // swing detector bridges the gap), unless the two are together (a two-handed backhand).
 function pickHand(hands, handed, pred) {
   if (!hands.length) return -1;
   const mine = racketLabel(handed);
   if (pred && pred.age < 0.35) {
     let best = -1, bd = Infinity;
+    const reach = Math.min(0.6, 0.3 + 1.5 * Math.max(pred.age, 0));   // a fast swing seen again after a blurred frame or two
     hands.forEach((h, i) => {
       const d = Math.hypot(h.x - pred.x, h.y - pred.y);
-      if (d > clamp(0.2 + 0.125 * labelVote(h, handed), 0.1, 0.3)) return;
+      const v = labelVote(h, handed);
+      if (d > (v > 0.3 ? reach : v >= -0.3 ? 0.15 : 0.07)) return;
       const c = d + (h.label === mine ? 0 : 0.08);
       if (c < bd) { bd = c; best = i; }
     });
@@ -626,12 +628,12 @@ class HandPicker {
       else if (++this.wait < this.settle) return { i: -1, switched };
       this.vote = 0; this.n = 0;
     }
-    if (hands.length > 1 && !moving && this.n >= 5 && this.vote < -0.45) {
+    if (hands.length > 1 && !moving && this.n >= 4 && this.vote < -0.3) {
       let j = -1;
-      hands.forEach((h, k) => { if (k !== i && labelVote(h, handed) > 0.5 && (j < 0 || labelVote(h, handed) > labelVote(hands[j], handed))) j = k; });
+      hands.forEach((h, k) => { if (k !== i && labelVote(h, handed) > 0.3 && (j < 0 || labelVote(h, handed) > labelVote(hands[j], handed))) j = k; });
       if (j >= 0) { i = j; switched = true; this.vote = labelVote(hands[j], handed); this.n = 1; return { i, switched }; }
     }
-    const k = moving ? 0.04 : 0.15;
+    const k = moving ? 0.04 : 0.25;
     this.vote += (labelVote(hands[i], handed) - this.vote) * k;
     this.n++;
     return { i, switched };
@@ -918,14 +920,15 @@ function finishBlob(b, S, W, H, E, CL) {
 }
 
 // Follows the paddle from frame to frame: where it should be (constant velocity from the last two sightings), how big
-// it is (learned while it's held fairly still), and which pixels of its color belong to things in the room that stay
-// put (a red book, a poster, a shirt: the clutter map), so a lost paddle is never swapped for one of them. step() runs segmentColor with all that
-// and decides whether its blob is believable. Positions are mirrored like segmentColor's; t in seconds.
+// it is (seeded by the lock, then learned while it's clearly seen), and which pixels of its color belong to things in
+// the room that stay put (a red book, a poster, a shirt: the clutter map), so a lost paddle is never swapped for one of
+// them. step() runs segmentColor with all that and decides whether its blob is believable. Positions are mirrored like
+// segmentColor's; t in seconds.
 class PaddleTrack {
   constructor() { this.S = {}; this.CL = null; this.reset(); }
   reset(lock) {
     this.hist = []; this.cand = null; this.home = { x: 0.5, y: 0.5 }; this.d = lock && lock.d > 0 ? lock.d : 0;
-    this.last = null; this.found = false; this.conf = 0; this.weak = 0; this.frames = 0; this.hits = 0; this.jumps = 0; this.others = 0;
+    this.dN = 0; this.odd = 0; this.last = null; this.found = false; this.conf = 0; this.weak = 0; this.frames = 0; this.hits = 0; this.jumps = 0; this.others = 0;
     if (this.CL) this.CL.C.fill(0);
   }
   predict(t) {
@@ -970,11 +973,18 @@ class PaddleTrack {
     } else E = { x: this.home.x, y: this.home.y, d, reach: 0.4, far: 0.2, acquire: true };
     const b = segmentColor(px, W, H, tg, { pred, expect: E, keep, scratch: this.S, roi: o.roi, clutter: CL }), alt = this.S.alt;
     if (!b) { this.weak++; return null; }
-    const dist = Math.hypot(b.x - E.x, (b.y - E.y) / asp), sizeOk = !d || (b.d > 0.6 * d && b.d < 1.6 * d + (E.smear || 0) && !b.big);
-    // Not paddle-sized (half hidden, or lips, a toy): only if it carries straight on from the track. On known clutter:
-    // only if paddle-sized, and that much surer when it carries on the track.
-    const onTrack = tracking && dist < 0.5 * E.reach;
-    if ((!sizeOk && !onTrack) || b.cm > (!sizeOk ? 0.3 : onTrack ? 0.7 : 0.45)) { this.weak++; return null; }
+    // Paddle-sized? Until the size has been seen a while, it may still be the lock's (held up close to the camera).
+    const lo = this.dN >= 15 ? 0.6 : 0.3, dist = Math.hypot(b.x - E.x, (b.y - E.y) / asp);
+    const sizeOk = !d || (b.d > lo * d && b.d < (lo > 0.5 ? 1.6 : 2.2) * d + (E.smear || 0) && !b.big);
+    // While tracking, something not paddle-sized (half hidden, or lips, a toy) only counts if it carries straight on
+    // from the track; a new track needs at least a smallish paddle's worth of color. On known clutter: only if
+    // paddle-sized, and that much surer when it carries on the track.
+    const onTrack = tracking && dist < 0.5 * E.reach, tiny = !tracking && b.n < 0.3 * (lo * d * W) ** 2;
+    if ((!sizeOk && tracking && !onTrack) || tiny || b.cm > (!sizeOk ? 0.3 : onTrack ? 0.7 : 0.45)) { this.weak++; return null; }
+    // A track that stays the wrong size for a few frames is on something else (lips next to where the paddle
+    // vanished): drop it and look again.
+    if (sizeOk) this.odd = 0; else if (!this.odd) this.odd = t;
+    if (this.odd && t - this.odd > 0.12) { this.hist.length = 0; this.odd = 0; this.weak++; return null; }
     // Something far from where the paddle can be: another thing of its color, unless it keeps showing up there while
     // the paddle stays out of sight (then it's the paddle, found again). Also a blob far more paddle-like than the one
     // being followed while that one looks wrong: the track latched onto something (lips, a toy) while the paddle was
@@ -1001,7 +1011,7 @@ class PaddleTrack {
     this.weak = this.conf >= 0.8 ? 0 : this.weak + 1;
     // The size follows a clearly seen paddle on a continuous track even when it's off (the player locked it up close,
     // then stepped back).
-    if ((this.conf >= 0.8 || onTrack || !d) && strict && !b.big && b.cm < 0.3 && b.minor > 0.6 * b.d && sp < 0.6) this.d = d ? d + (clamp(b.d, d * 0.7, d * 1.4) - d) * 0.12 : b.d;
+    if ((this.conf >= 0.8 || onTrack || !d) && strict && !b.big && b.cm < 0.3 && b.minor > 0.6 * b.d && sp < 0.6) { this.d = d ? d + (clamp(b.d, d * 0.7, d * 1.4) - d) * 0.12 : b.d; this.dN++; }
     if (this.conf >= 0.8 && tracking && !o.roi) this.others = this.learnClutter(W, H, b.id, 0.04);
     return b;
   }

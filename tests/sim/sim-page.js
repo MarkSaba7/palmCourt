@@ -9,6 +9,7 @@ import { Input } from '/src/input.js';
 import { Clock, Settings, COURT, BALL_R, LINE_TOL, FORMATS, LEVELS, netHeight } from '/src/core.js';
 import { BallView, Cam } from '/src/render/actors.js';
 import { BallKids } from '/src/render/ballkids.js';
+import { Net } from '/src/net.js';
 
 // ---- virtual time: Clock.perf drives Clock.now() and the replay timers, so a match runs as fast as the CPU allows ----
 export const V = { t: 0, on: false, frames: 0 };
@@ -50,12 +51,38 @@ export function cpuBoth() {
 // Start a practice match through the real UI entry point.
 export async function startPractice({ format = 'short', surface = 'hard', level = 'club', cpu = true, replays = true, first } = {}) {
   Settings.control = 'mouse'; Settings.format = format; Settings.surface = surface; Settings.level = level; Settings.replays = replays;
-  const rnd = Math.random;
-  if (first != null) Math.random = () => (first === 0 ? 0.1 : 0.9);   // startCpu picks the first server with Math.random() < 0.5
-  const p = UI.startCpu({});
-  Math.random = rnd;
-  await p;
+  await UI.startCpu(first != null ? { first } : {});   // extra options pass through to the match config
   if (cpu) cpuBoth();
+}
+
+// ---- online without PeerJS: a fake connection whose messages the runner carries to the other page ----
+export const Link = { out: [], inbox: [], on: false };
+export function linkUp(role, remoteName, t0 = 5000, skew = 0) {
+  Net.reset();
+  Net.conn = { open: true, send: (m) => Link.out.push({ t: V.t, m: JSON.parse(JSON.stringify(m)) }), close() { this.open = false; } };
+  Net.role = role; Net.remote = { name: remoteName, handed: 'R' }; Net.remoteReady = true;
+  Link.on = true; Link.out.length = 0; Link.inbox.length = 0;
+  V.t = t0; Clock.paused = false; Clock.pausedTotal = 0; Clock.offset = skew;   // both machines on (nearly) the same clock
+}
+function pump() { while (Link.inbox.length && Link.inbox[0].at <= V.t) { const { m } = Link.inbox.shift(); Net.onData(m); } }
+// A scripted player behind the mouse: tosses, swings at the top of the toss, and swings at the ball on time
+// (with some scatter, and the odd miss).
+export const Bot = { scatter: 0.06, miss: 0.08, tossAt: 0.66 };
+export function humanBot() {
+  const pl = Game.me(), m = Game.match, b = Game.ball, now = Clock.now();
+  if (!pl || pl.ctl !== 'human' || !Game.inPlay()) return;
+  if (Game.state === 'serve' && m.currentServer === pl.idx && now >= Game.serveReadyAt && !Game.bouncing(now)) Input.press(0.6, 0.3, 'mouse');
+  else if (Game.state === 'toss' && m.currentServer === pl.idx && now - Game.tossT >= Bot.tossAt && pl.hitFor !== -3) Input.press(0.5 + 0.4 * Math.random(), 0.3, 'mouse');
+  else if (Game.state === 'rally' && pl.plan && b.lastHitter === 1 - pl.idx && pl.hitFor !== b.rally && pl.botFor !== b.hitT) {
+    // (keyed by the time of the opponent's stroke: rally numbers repeat every point)
+    if (pl.botShot !== b.hitT) { pl.botShot = b.hitT; pl.botAt = pl.plan.t + (Math.random() - 0.5) * 2 * Bot.scatter; pl.botMiss = Math.random() < Bot.miss; }
+    if (now >= pl.botAt - 0.02 && !pl.botMiss) { pl.botFor = b.hitT; Input.press(0.35 + 0.5 * Math.random(), Math.random() * 1.4 - 0.4, 'mouse'); }
+  }
+}
+export function onlineStep(secs, dt = 1 / 60, bot = true) {
+  const end = V.t + secs - 1e-9;
+  while (V.t < end) { if (Link.on) pump(); frame(dt); if (bot) humanBot(); }
+  return { out: Link.out.splice(0), st: Game.state, mode: Game.mode, screen: UI.screen, m: Game.match && Game.match.toJSON(), t: V.t };
 }
 
 // ---- an independent scorer (not the Match class) ----
@@ -112,11 +139,11 @@ class Checker {
     const w = (name, before, after) => {
       const orig = G[name];
       G[name] = function (...args) {
-        const s0 = G.state, ctx = before ? before.apply(self, args) : null;
+        const ctx = before ? before.apply(self, args) : null;
         self.depth++;
         let r;
         try { r = orig.apply(this, args); } finally { self.depth--; }
-        if (G.state !== s0) self.transition(s0, G.state, name);
+        if (G.state !== self.state) self.transition(self.state, G.state, name);   // nested wrappers already recorded theirs
         if (after) after.call(self, ctx, args, r);
         return r;
       };
@@ -183,6 +210,22 @@ class Checker {
       this.calls.push({ kind: 'let' }); this.count('let');
       if (G.match.serveNo !== ctx.no || JSON.stringify(G.match.pts) !== JSON.stringify(ctx.pts)) this.err('a let changed the score or serve number');
     });
+    // online: the other machine's messages
+    for (const n of ['onRemoteToss', 'onRemoteRetoss', 'onRemoteHit']) w(n, null, function () { this.count(n); if (n !== 'onRemoteRetoss' && G.state !== 'serve') this.frameFlags.reset = true; });
+    w('onRemoteCall', function (m) { return { st: G.state, pts: G.match.pts.slice(), no: G.match.serveNo }; }, function (ctx, [m]) {
+      this.count('call:' + m.kind);
+      if (ctx.st !== 'rally') this.err(`'${m.kind}' call arrived in state ${ctx.st}`);
+      const mm = G.match, r = this.ref;
+      if (m.kind === 'point') {
+        this.count('reason:' + m.reason); this.points++;
+        if (r) {
+          r.point(m.w);
+          const got = { pts: mm.pts, games: mm.games, tb: mm.tb, over: mm.over, winner: mm.winner }, want = { pts: r.pts, games: r.games, tb: r.tb, over: r.over, winner: r.winner };
+          if (JSON.stringify(got) !== JSON.stringify(want)) this.err('score mismatch after a remote call', { got, want });
+        }
+      } else if (m.kind === 'fault') { if (ctx.no !== 1 || mm.serveNo !== 2) this.err(`remote fault: serveNo ${ctx.no} -> ${mm.serveNo}`); }
+      else if (m.kind === 'let' && (mm.serveNo !== ctx.no || mm.pts.join() !== ctx.pts.join())) this.err('remote let changed the score');
+    });
     w('onBallEvent', function (e) {
       if (e.type === 'net') this.frameFlags.net = true;
       this.calls.length = 0;
@@ -219,9 +262,9 @@ class Checker {
       if (r && (r.winner !== m.winner || !r.over)) this.err(`winner ${m.winner}, reference ${r.winner}`);
       const over = document.getElementById('over');
       if (G.state !== 'over') this.err('state not over after finish');
-      if (G.mode === 'cpu' && (UI.screen !== 'over' || !over || over.hidden)) this.err(`over screen not shown (screen ${UI.screen})`);
+      if (G.mode !== 'attract' && (UI.screen !== 'over' || !over || over.hidden)) this.err(`over screen not shown (screen ${UI.screen})`);
       const title = document.getElementById('overTitle').textContent;
-      const wantTitle = m.winner === G.localIdx ? 'You win' : `${G.names[m.winner]} wins`;
+      const wantTitle = m.winner === G.localIdx ? 'You win' : `${UI.shortName ? UI.shortName(m.winner) : G.names[m.winner]} wins`;
       if (title !== wantTitle) this.err(`over title "${title}", want "${wantTitle}"`);
       this.count('matchOver');
     });
@@ -229,9 +272,7 @@ class Checker {
     G.updateState = function (now) {
       const b = G.ball, timeout = G.state === 'rally' && G.isReferee() && b.simT - b.hitT > 8;
       if (timeout) { self.count('eightSecondRule'); self.log.push(`8 s rule: rally ${b.rally} ball at ${b.p.x.toFixed(2)},${b.p.y.toFixed(2)},${b.p.z.toFixed(2)} v ${Math.hypot(b.v.x, b.v.y, b.v.z).toFixed(2)} rolling ${b.rolling} bounces ${b.bounces}`); }
-      const s0 = G.state, r = origRB.call(this, now);
-      if (G.state !== s0 && s0 === 'dead') {/* transition recorded by startPoint/finish */}
-      return r;
+      return origRB.call(this, now);
     };
     const origReplay = Replay.consider;
     Replay.consider = function (spec) { const r = origReplay.call(this, spec); if (this.phase === 'wait') self.count('replay:' + this.spec.style); return r; };
@@ -246,7 +287,7 @@ class Checker {
       if (G.state === 'serve' && !humanServing && age > lim.serve && !this.stalled) { this.stalled = true; this.err(`stall: serve for ${age.toFixed(1)} s`); }
       if (G.state === 'toss' && age > lim.toss && !this.stalled) { this.stalled = true; this.err(`stall: toss for ${age.toFixed(1)} s`); }
       if (G.state === 'dead' && age > lim.dead && !this.stalled) { this.stalled = true; this.err(`stall: dead for ${age.toFixed(1)} s (replay ${Replay.phase})`); }
-      if (G.state === 'rally' && b.simT - b.hitT > 8.6 && G.isReferee() && !this.stalled) { this.stalled = true; this.err(`stall: rally ball unplayed for ${(b.simT - b.hitT).toFixed(1)} s`); }
+      if (G.state === 'rally' && b.simT - b.hitT > (G.isReferee() ? 8.6 : 12) && !this.stalled) { this.stalled = true; this.err(`stall: rally ball unplayed for ${(b.simT - b.hitT).toFixed(1)} s (${G.isReferee() ? 'referee' : 'waiting for the call'})`); }
       if (!['serve', 'toss', 'dead', 'rally'].includes(G.state) || age < 0.5) this.stalled = false;
     }
     // one ball, and it is where the rules say
