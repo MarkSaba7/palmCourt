@@ -1,5 +1,5 @@
 // Browser simulations of whole matches and of the flows a player goes through (headless Chromium, no rendering).
-//   PC_HARNESS=/path/to/harness/pc.mjs node tests/sim/run.mjs [matches|flows|all] [--quick] [--port 8819]
+//   PC_HARNESS=/path/to/harness/pc.mjs node tests/sim/run.mjs [matches|flows|online|all] [--quick] [--only=text] [--port 8819]
 // pc.mjs is the shared Palm Court test harness (serves this checkout, mirrors the CDN libraries, launches Chromium).
 // The page-side driver and rule checker live in tests/sim/sim-page.js; each scenario below runs inside the page.
 import path from 'node:path';
@@ -10,7 +10,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const args = process.argv.slice(2);
 const QUICK = args.includes('--quick');
 const port = +(args[args.indexOf('--port') + 1] || 0) || 8819;
-const which = args.find((a) => ['matches', 'flows', 'all'].includes(a)) || 'all';
+const which = args.find((a) => ['matches', 'flows', 'online', 'all'].includes(a)) || 'all';
 const only = args.find((a) => a.startsWith('--only='))?.slice(7);
 const HARNESS = process.env.PC_HARNESS || '/tmp/claude-0/-home-user-palmCourt/fee01e52-c723-5dfc-bbaa-f9ed9d90dad0/scratchpad/harness/pc.mjs';
 if (!fs.existsSync(HARNESS)) { console.log(`Set PC_HARNESS to the test harness's pc.mjs (not found: ${HARNESS})`); process.exit(2); }
@@ -28,7 +28,7 @@ function report(name, r, extra = '') {
   if (r.why && !ok) console.log('     ' + r.why);
 }
 
-const { page, logs, close } = await launch({ root: ROOT, port });
+const { page, ctx, logs, close } = await launch({ root: ROOT, port });
 try {
   await page.evaluate(async () => { const S = await import('/tests/sim/sim-page.js'); S.install(); S.checker(); });
 
@@ -67,6 +67,32 @@ try {
       try { r = await fn(page); } catch (e) { r = { errors: [{ msg: 'threw: ' + (e && e.message) }] }; }
       report('flow ' + name, r, `${Math.round((Date.now() - t0) / 1000)} s${r.note ? ' · ' + r.note : ''}`);
     }
+  }
+  // ---------------------------------------------------------------- online, two pages over a simulated link
+  if (which === 'online' || which === 'all') {
+    const { onlineMatch } = await import(path.join(ROOT, 'tests/sim/online.mjs'));
+    const B = await ctx.newPage();
+    B.on('console', (m) => logs.push(`[guest ${m.type()}] ${m.text()}`));
+    B.on('pageerror', (e) => logs.push(`[pageerror] guest ${e.message}\n${e.stack || ''}`));
+    await B.goto(page.url());
+    await B.waitForFunction(() => window.PalmCourt && window.PalmCourt.Game, null, { timeout: 120000 });
+    const cases = [
+      ['LAN 40 ms', { format: 'short', surface: 'hard', lat: 0.04, jit: 0.01 }],
+      ['internet 120 ms, jitter, clock 25 ms off', { format: 'tiebreak', surface: 'clay', lat: 0.12, jit: 0.08, skew: 0.025 }],
+      ['slow link 400 ms', { format: 'tiebreak', surface: 'grass', lat: 0.4, jit: 0.2, skew: -0.03 }],
+      ['full set', { format: 'full', surface: 'hard', lat: 0.07, jit: 0.03 }],
+      ['rematch asked by the guest', { format: 'tiebreak', lat: 0.08, jit: 0.02, rematch: true }],
+      ['connection drops mid-match', { format: 'short', lat: 0.08, jit: 0.02, disconnectAt: 40 }],
+      ['guest quits mid-match', { format: 'short', lat: 0.08, jit: 0.02, quitAt: 33 }],
+    ];
+    for (const [name, o] of QUICK ? cases.slice(0, 2) : cases) {
+      if (only && !('online ' + name).includes(only)) continue;
+      const t0 = Date.now();
+      let r;
+      try { r = await onlineMatch(page, B, o); } catch (e) { r = { errors: [{ msg: 'threw: ' + e.message }] }; }
+      report('online ' + name, r, `${Math.round((Date.now() - t0) / 1000)} s · ${r.note || ''}`);
+    }
+    await B.close();
   }
   const pageErrors = logs.filter((l) => l.startsWith('[pageerror]') || l.startsWith('[error]'));
   if (pageErrors.length) { failures++; console.log('FAIL page errors:'); for (const l of pageErrors.slice(0, 10)) console.log('  ' + l.slice(0, 400)); }

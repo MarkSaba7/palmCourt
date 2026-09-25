@@ -48,11 +48,13 @@ console.log('Hand picking');
   const pred = { x: 0.52, y: 0.62, age: 0.03 }, off = { x: 0.33, y: 0.8, label: Lb };
   check(pickHand([off], 'R', pred) === -1 && pickHand([off, { x: 0.9, y: 0.1, label: R }], 'R', pred) === -1, 'pickHand: racket hand lost mid-swing, off hand 0.26 away → skip');
   const p12 = { x: 0.43, y: 0.74, age: 0.03 };   // 0.12 from the off hand
-  check(pickHand([{ ...off, score: 0.99 }], 'R', p12) === -1, 'pickHand: off hand 0.12 away with a sure label is skipped');
-  check(pickHand([{ ...off, score: 0.6 }], 'R', p12) === 0, 'pickHand: an unsure off-hand label near where the racket hand should be continues the track');
-  check(pickHand([{ ...off, score: 0.99 }], 'R', { x: 0.4, y: 0.75, age: 0.03 }) === 0, 'pickHand: off hand within 0.1 (hands together) continues the track');
+  check(pickHand([{ ...off, score: 0.99 }], 'R', p12) === -1 && pickHand([{ ...off, score: 0.69 }], 'R', p12) === -1, 'pickHand: off hand 0.12 away is skipped, even with an unsure label (0.69)');
+  check(pickHand([{ ...off, score: 0.6 }], 'R', p12) === 0, 'pickHand: a label that can’t tell (0.6) near where the racket hand should be continues the track');
+  check(pickHand([{ ...off, score: 0.99 }], 'R', { x: 0.37, y: 0.77, age: 0.03 }) === 0, 'pickHand: off hand within 0.07 (hands together) continues the track');
   check(pickHand([off, { x: 0.47, y: 0.55, label: R }], 'R', pred) === 1, 'pickHand: racket hand back (0.09 away) is taken, not the off hand');
   check(pickHand([off, { x: 0.3, y: 0.45, label: R }], 'R', pred) === 1 && pickHand([off, { x: 0.25, y: 0.35, label: R }], 'R', pred) === -1, 'pickHand: a racket-labelled hand continues within 0.3, not beyond');
+  // A fast swing seen again after two blurred frames, 0.45 from where it was heading: still the racket hand.
+  check(pickHand([off, { x: 0.9, y: 0.4, label: R }], 'R', { ...pred, age: 0.1 }) === 1, 'pickHand: racket hand back after a gap, further off');
   // Two-handed backhand: both hands together at the prediction; either continues the track.
   check(pickHand([{ x: 0.5, y: 0.6, label: Lb }, { x: 0.53, y: 0.63, label: R }], 'R', pred) === 1, 'pickHand: hands together → the racket-labelled one');
 }
@@ -80,6 +82,13 @@ console.log('HandPicker');
   // After the switch it stays on the racket hand.
   const r2 = p.pick([{ x: 0.3, y: 0.5, label: Lb, score: 0.95 }, { x: 0.73, y: 0.52, label: R, score: 0.95 }], 'R', pred, false);
   check(r2.i === 1 && !r2.switched, 'HandPicker: stays on the racket hand');
+  // The same with the weaker labels MediaPipe gives a far or odd-looking hand (scores ~0.75).
+  const pw = new HandPicker();
+  pred = { x: 0.3, y: 0.5, age: 0.03 };
+  pw.pick([{ x: 0.3, y: 0.5, label: R, score: 0.9 }], 'R', null);
+  let sww = -1;
+  for (let k = 0; k < 60 && sww < 0; k++) if (pw.pick([{ x: 0.3, y: 0.5, label: Lb, score: 0.74 }, { x: 0.72, y: 0.52, label: R, score: 0.76 }], 'R', pred, false).switched) sww = k;
+  check(sww >= 4 && sww < 20, `HandPicker: switches on consistent but unsure labels too (frame ${sww})`);
   // A racket hand whose label flips for a few frames (blur, a fist seen from the side) keeps being followed.
   const q = new HandPicker();
   pred = null;
@@ -292,21 +301,28 @@ console.log('Tracker worker (fake MediaPipe)');
 
 {
   // Tracking one hand instead of two: the page asks for it with the other hand's box; MediaPipe's options change and
-  // the next two frames have that box painted over (so its fresh search can only find the racket hand), then plain.
-  const w = runWorker({ gpu: 'ok', detect: (img) => ({ landmarks: [], handedness: [], seenImg: img }) });
+  // the next frames have that box painted over (so its fresh search can only find the racket hand) until a hand turns
+  // up elsewhere, then plain.
+  let found = false;
+  const w = runWorker({ gpu: 'ok', detect: (img) => (found ? { landmarks: [hand(0.3, 0.6)], handedness: [[{ categoryName: 'Left', score: 0.9 }]] } : { landmarks: [], handedness: [] }) });
   w.send(INIT);
   await waitFor(() => w.out.some((m) => m.type === 'ready'));
   const lmk = w.made[0];
   w.send({ type: 'options', opts: { numHands: 1 }, avoid: [{ x0: 0.5, y0: 0.25, x1: 0.75, y1: 0.75 }] });
   const bmps = [0, 1, 2].map((k) => ({ width: 640, height: 480, k, close() {} }));
-  for (const [k, b] of bmps.entries()) w.send({ type: 'frame', t: 2000 + 33 * k, bitmap: b });
+  for (const [k, b] of bmps.entries()) { found = k === 1; w.send({ type: 'frame', t: 2000 + 33 * k, bitmap: b }); }
   const res = w.out.filter((m) => m.type === 'result');
   const imgs = lmk.calls.slice(1).map((c) => c.img);
   check(lmk.opts.numHands === 1 && res.every((m) => m.nh === 1), 'worker: numHands option applied, results say so');
-  check(res[0].masked && res[1].masked && !res[2].masked && imgs[0] === imgs[1] && imgs[0].fills.length === 1 && imgs[0].drew === bmps[1] && imgs[2] === bmps[2], 'worker: two masked frames, then the camera picture itself');
+  check(res[0].masked && res[1].masked && !res[2].masked && imgs[0] === imgs[1] && imgs[0].fills.length === 1 && imgs[0].drew === bmps[1] && imgs[2] === bmps[2], 'worker: masked frames until the racket hand is found, then the camera picture itself');
   check(JSON.stringify(imgs[0].fills[0]) === JSON.stringify([320, 120, 160, 240]), `worker: the mask covers the other hand's box (${JSON.stringify(imgs[0].fills[0])})`);
+  // Nothing found: masking stops after 5 frames all the same.
+  found = false;
+  w.send({ type: 'options', opts: { numHands: 1 }, avoid: [{ x0: 0.5, y0: 0.25, x1: 0.75, y1: 0.75 }] });
+  for (let k = 0; k < 7; k++) w.send({ type: 'frame', t: 2100 + k, bitmap: { width: 640, height: 480, close() {} } });
+  check(w.out.filter((m) => m.type === 'result').slice(-7).map((m) => (m.masked ? 1 : 0)).join('') === '1111100', 'worker: masking gives up after 5 frames');
   w.send({ type: 'options', opts: { numHands: 2 } });
-  w.send({ type: 'frame', t: 2200, bitmap: { width: 640, height: 480, close() {} } });
+  w.send({ type: 'frame', t: 2300, bitmap: { width: 640, height: 480, close() {} } });
   const last = w.out.filter((m) => m.type === 'result').pop();
   check(lmk.opts.numHands === 2 && last.nh === 2 && !last.masked, 'worker: back to two hands, unmasked');
 }

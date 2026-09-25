@@ -11,7 +11,7 @@ const { SwingDetector, judgeCameraSwing, strokeDir, segmentColor, lockColorFromP
   await import(DET ? new URL(DET, `file://${process.cwd()}/`).href : '../src/camswing.js');
 
 const QUICK = process.argv.includes('--quick'), BENCH_ONLY = process.argv.includes('--bench');
-const WHY = (process.argv.find((a) => a.startsWith('--why=')) || '').slice(6), WHY_N = { n: 0 };   // print examples of one kind of false swing
+const WHY = (process.argv.find((a) => a.startsWith('--why=')) || '').slice(6), WHY_N = { n: 0 }, MISS = {};   // print examples of one kind of false swing
 const TRACE = (process.argv.find((a) => a.startsWith('--trace=')) || '').slice(8).split(':').map(Number);   // --trace=session:from:to
 const N = QUICK ? 60 : 300;
 let failures = 0;
@@ -226,7 +226,7 @@ function playSession(i, dur) {
     const D = clamp((1.875 * Lp) / V, 0.2, 0.7), a = U(r, 0.85, 1.12), f0 = T - D * Math.pow(0.5, 1 / a);
     let b0;
     if (wind === 'loop') {
-      const up = { x: A.x * 0.8, y: A.y - 0.24 * amp }, d1 = U(r, 0.2, 0.34), d2 = U(r, 0.14, 0.24), ov = U(r, 0.04, 0.1);
+      const up = { x: A.x * 0.8, y: A.y - 0.24 * amp }, d1 = U(r, 0.28, 0.45) / Math.sqrt(c.speedMul), d2 = U(r, 0.2, 0.3) / Math.sqrt(c.speedMul), ov = U(r, 0.04, 0.1);
       b0 = f0 + ov - d2 - d1 + 0.05;
       H.to(b0, d1, up, { x: A.x * 0.5, y: -0.16 * amp }); H.to(b0 + d1 - 0.05, d2, A);
     } else if (wind === 'flow') {
@@ -320,9 +320,10 @@ function playSession(i, dur) {
   };
   const speedAt = (t) => { const a = pos(t - 0.002), b = pos(t + 0.002); return Math.hypot(b.x - a.x, b.y - a.y) / 0.004; };
   // True peak times, speeds (as the detector would measure them: image speed × the scale it's given) and the toss-line crossings.
+  // (The central part of the forward swing: at its ends the wind-up and follow-through overlap it.)
   for (const x of [...strokes, ...serves]) {
     let best = 0, bt = x.T;
-    for (let t = x.f0; t <= x.f1; t += 0.002) { const v = speedAt(t); if (v > best) { best = v; bt = t; } }
+    for (let t = x.f0 + 0.3 * (x.f1 - x.f0); t <= x.f1 - 0.1 * (x.f1 - x.f0); t += 0.002) { const v = speedAt(t); if (v > best) { best = v; bt = t; } }
     x.T = bt; x.peak = best * c.scaleIn;
   }
   for (const sv of serves) {
@@ -354,6 +355,7 @@ function trackSession(S) {
     if (gl) { gl--; out.push({ t, x: gp.x + gaussR(r) * c.sigma, y: (gp.y + gaussR(r) * c.sigma) * ASP, glitch: true }); continue; }
     if (r() < lossP) { out.push({ t, miss: true }); continue; }
     const p = S.pos(real), tail = r() < 0.04 ? 3 : 1;
+    if (p.x < 0.01 || p.x > 0.99 || p.y * ASP < 0.01 || p.y * ASP > 0.99) { out.push({ t, miss: true }); continue; }   // out of the picture
     out.push({ t, x: p.x + wx + gaussR(r) * c.sigma * tail, y: (p.y + wy + gaussR(r) * c.sigma * tail) * ASP });
   }
   return out;
@@ -362,6 +364,7 @@ function trackSession(S) {
 // Feed a session to a detector like input.js does; the game cancels the swing in progress when the ball is tossed.
 function runSession(S, frames) {
   const c = S.c, d = new SwingDetector(), evs = [];
+  if (WHY === 'miss' && d.classify) { const f = d.classify.bind(d); d.cls = []; d.classify = (m, v, t) => { const r = f(m, v, t); d.cls.push({ t, r }); return r; }; S.det = d; }
   const serving = (t) => S.serves.some((sv) => t >= sv.t && t <= sv.f0);
   const tr = TRACE.length === 3 && TRACE[0] === c.i;
   for (const f of frames) {
@@ -407,7 +410,7 @@ function scoreSession(S, evs, G) {
   const sw = evs.filter((e) => e.type === 'swing');
   const ro = rng(5 + S.c.i), all = [...S.strokes.map((x) => ({ ...x, serve: false, off: gaussR(ro) * 0.06 })), ...S.serves.map((x) => ({ ...x, kind: null, serve: true }))];
   for (const x of all) {
-    const m = sw.filter((e) => !e.match && e.te >= x.f0 - 0.03 && e.te <= x.T + 0.3 && Math.abs(e.t0 - x.T) <= 0.2);
+    const m = sw.filter((e) => !e.match && e.te >= x.f0 - 0.03 && e.te <= x.T + 0.45 && Math.abs(e.t0 - x.T) <= 0.2);
     m.forEach((e, j) => { e.match = x; e.dup = j > 0; });
     x.ev = m[0] || null;
   }
@@ -416,10 +419,12 @@ function scoreSession(S, evs, G) {
     for (const x of all) {
       if (x.serve) { g.serves++; if (x.ev) g.serveSw++; continue; }
       g.strokes++;
-      if (g === G[0] && WHY === 'miss' && !x.ev && WHY_N.n++ < 14) {
+      if (g === G[0] && WHY === 'miss' && !x.ev && ++WHY_N.n) {
         const near = sw.filter((e) => e.te > x.T - 1 && e.te < x.T + 0.6).map((e) => `[${e.te.toFixed(2)} ${e.dir} t0 ${e.t0.toFixed(2)} pk ${e.peak0.toFixed(1)}]`).join(' ');
         const sp = [-0.2, -0.1, 0, 0.1, 0.2].map((d) => (S.speedAt(x.T + d) * S.c.scaleIn).toFixed(1)).join(' ');
-        console.log(`  missed ${x.kind} session ${S.c.i} ${S.c.src} ${S.c.fps}fps ${x.wind} T ${x.T.toFixed(3)} f0 ${x.f0.toFixed(2)} b0 ${x.b0.toFixed(2)} peak ${x.peak.toFixed(2)} · speed ${sp} · events ${near}`);
+        const cl = S.det ? S.det.cls.filter((q) => q.t > x.f0 - 0.05 && q.t < x.T + 0.3).map((q) => q.r) : [];
+        MISS[cl.length ? cl[cl.length - 1] : 'never judged'] = (MISS[cl.length ? cl[cl.length - 1] : 'never judged'] || 0) + 1;
+        if (WHY_N.n < 14) console.log(`  missed (${cl.join(' ')}) ${x.kind} session ${S.c.i} ${S.c.src} ${S.c.fps}fps ${x.wind} T ${x.T.toFixed(3)} f0 ${x.f0.toFixed(2)} b0 ${x.b0.toFixed(2)} peak ${x.peak.toFixed(2)} · speed ${sp} · events ${near}`);
       }
       if (x.ev) {
         g.tp++;
@@ -476,7 +481,7 @@ function bench() {
   }
   const P = (a, b) => (b ? `${((100 * a) / b).toFixed(1)}` : '-').padStart(5);
   console.log(`\nPlay-session benchmark${DET ? ` (detector: ${DET})` : ''}: ${NS} sessions of ${dur} s, ${groups.get('all').strokes} strokes, ${groups.get('all').serves} serves (${((performance.now() - t0) / 1000).toFixed(1)} s)`);
-  console.log('  recall: strokes reported (once, within 0.2 s of the true peak) · prec: share of swing events that were real strokes · fh/bh: right direction');
+  console.log('  recall: strokes reported (t0 within 0.2 s of the true peak, by 0.45 s after it: the game can still rewind) · prec: share of swing events that were real strokes · fh/bh: right direction');
   console.log('  delay: when the event came (frame time) − true peak, median/p90 · t0 err: predicted peak − true peak, mean±sd · game: returned with the right stroke');
   console.log('  group                   strokes recall  prec  fh/bh  null   delay ms  t0 err ms  game  early/100  false swings per 100 strokes (by what the player was doing)');
   for (const [name, g] of groups) {
@@ -487,6 +492,7 @@ function bench() {
   const a = groups.get('all'), pw = stats(a.pow);
   console.log(`  game outcomes (all): ${Object.entries(a.game).map(([k, v]) => `${k} ${P(v, a.strokes).trim()}%`).join(', ')}`);
   console.log(`  power: reported peak / true peak ${pw.mean.toFixed(2)} ± ${pw.sd.toFixed(2)}; hand ${stats(groups.get('hand 30 fps').pow.concat(groups.get('hand 60 fps').pow)).sd.toFixed(2)} sd, paddle ${stats(groups.get('paddle 30 fps').pow.concat(groups.get('paddle 60 fps').pow)).sd.toFixed(2)} sd`);
+  if (WHY === 'miss') console.log('  misses by last verdict on the stroke:', JSON.stringify(MISS));
   console.log(`  serves: toss on time ${a.tossOk}/${a.serves}, late ${a.tossLate}, missed ${a.tossMiss}, twice ${a.tossDup}; serve swing reported ${a.serveSw}/${a.serves}; false tosses ${a.tossFalseN} ${JSON.stringify(a.tossFalse)}`);
   return a;
 }
