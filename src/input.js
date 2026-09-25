@@ -105,11 +105,11 @@ const Input = {
 
 // Motion swings: speed sets power, the vertical part of the swing sets spin.
 // Camera power is mostly relative to this player's usual swing on this tracker (a normal swing is a solid drive, a
-// third faster is flat out), so it doesn't depend on how far from the camera they stand or how big their swing is.
+// third faster nearly flat out), so it doesn't depend on how far from the camera they stand or how big their swing is.
 function swingPower(s) {
   if (s.power != null) return s.power;
   const abs = clamp((s.peak * Settings.sens - 1.1) / 2.9, 0.06, 1), typ = Input.typical(s.src + (s.serve ? 'Serve' : ''));
-  return typ ? 0.3 * abs + 0.7 * clamp(0.6 + 1.2 * (s.peak / typ - 1), 0.08, 1) : abs;
+  return typ ? 0.3 * abs + 0.7 * clamp(0.6 + 0.8 * (s.peak / typ - 1), 0.08, 1) : abs;
 }
 // By the swing's angle: a flat swing hits a drive, about 10° low-to-high is topspin, high-to-low is slice.
 function swingSpin(s) {
