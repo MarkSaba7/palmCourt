@@ -208,6 +208,7 @@ function playSession(i, dur) {
     drop: U(r, 0, 0.05), blur: src === 'hand' ? U(r, 0.2, 1) : U(r, 0.3, 1), glitch: src === 'hand' ? U(r, 0, 0.008) : U(r, 0, 0.015),
     proc: src === 'hand' ? [U(r, 0.008, 0.014), U(r, 0.015, 0.028)] : null,
     chest: { x: U(r, 0.44, 0.56), y: U(r, 0.32, 0.4) },
+    dim: i % 5 === 2,   // the room gets darker halfway through: jitter ×2.5, more glitches
   };
   const H = new Mover(), B = new Mover(), labels = [], strokes = [], serves = [];
   const R0 = { x: 0.12 * s, y: 0.16 };                       // the rest position relative to the chest
@@ -352,10 +353,10 @@ function trackSession(S) {
     if (real > S.dur) break;
     if (c.proc) { if (real < busy) continue; busy = real + U(r, c.proc[0], c.proc[1]); }
     const t = c.pres ? real + U(r, 0, 0.016) : real + gaussR(r) * 0.0005;
-    const vi = S.speedAt(real), rho = Math.exp(-1 / c.fps / 0.15);
-    wx = rho * wx + gaussR(r) * c.wob * Math.sqrt(1 - rho * rho); wy = rho * wy + gaussR(r) * c.wob * Math.sqrt(1 - rho * rho);
+    const vi = S.speedAt(real), rho = Math.exp(-1 / c.fps / 0.15), dk = c.dim && real > S.dur / 2 ? 2.5 : 1;
+    wx = rho * wx + gaussR(r) * c.wob * dk * Math.sqrt(1 - rho * rho); wy = rho * wy + gaussR(r) * c.wob * dk * Math.sqrt(1 - rho * rho);
     const lossP = c.drop + c.blur * sstep(1.8, 5.5, vi) * (c.fps === 60 ? 0.45 : 0.8);
-    if (!gl && r() < c.glitch) {
+    if (!gl && r() < c.glitch * dk) {
       gl = 1 + ((r() * (c.src === 'hand' ? 3 : 4)) | 0);
       const p = S.pos(real);
       gp = c.src === 'hand' ? { x: p.x - (0.24 + U(r, 0, 0.1)) * s * k, y: p.y + U(r, 0, 0.12) * k } : { x: spot.x + U(r, -0.02, 0.02), y: spot.y / ASP };
@@ -364,7 +365,7 @@ function trackSession(S) {
     if (r() < lossP) { out.push({ t, miss: true }); continue; }
     const p = S.pos(real), tail = r() < 0.04 ? 3 : 1;
     if (p.x < 0.01 || p.x > 0.99 || p.y * ASP < 0.01 || p.y * ASP > 0.99) { out.push({ t, miss: true }); continue; }   // out of the picture
-    out.push({ t, x: p.x + wx + gaussR(r) * c.sigma * tail, y: (p.y + wy + gaussR(r) * c.sigma * tail) * ASP });
+    out.push({ t, x: p.x + wx + gaussR(r) * c.sigma * dk * tail, y: (p.y + wy + gaussR(r) * c.sigma * dk * tail) * ASP });
   }
   return out;
 }
@@ -433,7 +434,7 @@ function scoreSession(S, evs, G) {
         const sp = [-0.2, -0.1, 0, 0.1, 0.2].map((d) => (S.speedAt(x.T + d) * S.c.scaleIn).toFixed(1)).join(' ');
         const cl = S.det ? S.det.cls.filter((q) => q.t > x.f0 - 0.05 && q.t < x.T + 0.3).map((q) => q.r) : [];
         MISS[cl.length ? cl[cl.length - 1] : 'never judged'] = (MISS[cl.length ? cl[cl.length - 1] : 'never judged'] || 0) + 1;
-        if (WHY_N.n < (+process.env.WHYN || 14)) console.log(`  missed (${cl.join(' ')}) ${x.kind} session ${S.c.i} ${S.c.src} ${S.c.fps}fps ${x.wind} T ${x.T.toFixed(3)} f0 ${x.f0.toFixed(2)} b0 ${x.b0.toFixed(2)} peak ${x.peak.toFixed(2)} · speed ${sp} · events ${near}`);
+        if (WHY_N.n < (+process.env.WHYN || 14)) console.log(`  missed (${cl.join(' ')}) ${x.kind} session ${S.c.i} spd ${S.c.speedMul.toFixed(2)} ${S.c.src} ${S.c.fps}fps ${x.wind} T ${x.T.toFixed(3)} f0 ${x.f0.toFixed(2)} b0 ${x.b0.toFixed(2)} peak ${x.peak.toFixed(2)} · speed ${sp} · events ${near}`);
       }
       if (x.ev) {
         g.tp++;
@@ -479,7 +480,7 @@ const q90 = (a) => { if (!a.length) return NaN; const s = a.slice().sort((p, q) 
 function bench() {
   const NS = QUICK ? 32 : 128, dur = QUICK ? 50 : 70, groups = new Map();
   for (const g of ['all', 'hand 30 fps', 'hand 60 fps', 'paddle 30 fps', 'paddle 60 fps', 'near (scale<1)', 'mid distance', 'far (scale>1.25)', 'slow swingers',
-    'normal speed', 'fast swingers', 'left-handed', 'wind-up: straight', 'wind-up: flow', 'wind-up: loop', 'wind-up: early', 'noisy tracking', 'heavy motion blur', 'no captureTime']) groups.set(g, newStats());
+    'normal speed', 'fast swingers', 'left-handed', 'wind-up: straight', 'wind-up: flow', 'wind-up: loop', 'wind-up: early', 'noisy tracking', 'heavy motion blur', 'lights dim mid-session', 'no captureTime']) groups.set(g, newStats());
   const group = (name) => { if (!groups.has(name)) groups.set(name, newStats()); return groups.get(name); };
   const t0 = performance.now();
   for (let i = 0; i < NS; i++) {
@@ -490,6 +491,7 @@ function bench() {
     if (c.pres) G.push(group('no captureTime'));
     if ((c.src === 'hand' && c.sigma > 0.0038) || (c.src === 'paddle' && c.sigma > 0.0075)) G.push(group('noisy tracking'));
     if (c.blur > 0.7) G.push(group('heavy motion blur'));
+    if (c.dim) G.push(group('lights dim mid-session'));
     scoreSession(S, evs, G);
   }
   const P = (a, b) => (b ? `${((100 * a) / b).toFixed(1)}` : '-').padStart(5);
