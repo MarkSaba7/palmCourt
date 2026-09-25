@@ -260,6 +260,31 @@ export const FLOWS = {
     }
     return res.join('; ');
   `),
+  // A second serve into the net that drops back near the centre line is a double fault, and no Hawk-Eye may call it
+  // "In" (the bounce is on the server's own half, nowhere near the service box lines).
+  'double fault into the net: no Hawk-Eye': (page) => inPage(page, `
+    await S.startPractice({ format: 'full', level: 'club' });
+    const res = [];
+    for (const x of [0.005, -0.03, 0.02, -0.005, 0.03, -0.02]) {
+      if (!S.runUntil(() => G.state === 'serve', 60)) return fail('no serve');
+      G.match.serveNo = 2;
+      if (!S.runUntil(() => G.state === 'rally' && G.ball.serve, 10)) return fail('serve not struck');
+      const b = G.ball, side = G.players[b.lastHitter].side, T = Math.abs(b.p.z) / 22, box = { rSide: -side, court: b.serve.court };
+      // straight into the net body at x, half a metre up
+      b.v = { x: (x - b.p.x) / T, y: (0.45 - b.p.y) / T + 0.5 * 9.81 * T, z: -side * 22 }; b.w = { x: 0, y: 0, z: 0 };
+      G.bounceLog.length = 0; G.hist.length = 0; Replay.lastAt = -99;
+      const df0 = C.counts['reason:df'] || 0;
+      S.runUntil(() => G.state === 'dead', 3);
+      if ((C.counts['reason:df'] || 0) !== df0 + 1) { res.push(x + ': not a double fault (' + G.deadKind + ')'); continue; }
+      const bl = G.bounceLog[0];
+      S.runUntil(() => Replay.phase === 'hold' || G.state === 'serve', 12);
+      if (Replay.phase === 'hold') fail('Hawk-Eye shown for a double fault into the net (bounce x ' + (bl && bl.x.toFixed(3)) + ', says ' + $('hawkCall').textContent + ')');
+      const lm = bl && (await import('/src/replay.js')).lineMargin(bl.x, bl.z, box);
+      res.push(x + ': df, bounce ' + (bl ? bl.x.toFixed(3) + ',' + bl.z.toFixed(2) : '?') + ' margin ' + (lm ? lm.d.toFixed(3) : '?') + ', replay ' + (Replay.spec && Replay.phase !== 'idle' ? Replay.spec.style : 'none'));
+      S.runUntil(() => G.state === 'serve', 15);
+    }
+    return res.join('; ');
+  `),
   // Long rallies: a replay of a 12+ shot rally is labelled with its length, plays and hands back to the match.
   'long rally replay': (page) => inPage(page, `
     await S.startPractice({ format: 'full', level: 'pro' });
