@@ -80,6 +80,13 @@ console.log('HandPicker');
   // After the switch it stays on the racket hand.
   const r2 = p.pick([{ x: 0.3, y: 0.5, label: Lb, score: 0.95 }, { x: 0.73, y: 0.52, label: R, score: 0.95 }], 'R', pred, false);
   check(r2.i === 1 && !r2.switched, 'HandPicker: stays on the racket hand');
+  // The same with the weaker labels MediaPipe gives a far or odd-looking hand (scores ~0.75).
+  const pw = new HandPicker();
+  pred = { x: 0.3, y: 0.5, age: 0.03 };
+  pw.pick([{ x: 0.3, y: 0.5, label: R, score: 0.9 }], 'R', null);
+  let sww = -1;
+  for (let k = 0; k < 60 && sww < 0; k++) if (pw.pick([{ x: 0.3, y: 0.5, label: Lb, score: 0.74 }, { x: 0.72, y: 0.52, label: R, score: 0.76 }], 'R', pred, false).switched) sww = k;
+  check(sww >= 4 && sww < 20, `HandPicker: switches on consistent but unsure labels too (frame ${sww})`);
   // A racket hand whose label flips for a few frames (blur, a fist seen from the side) keeps being followed.
   const q = new HandPicker();
   pred = null;

@@ -358,9 +358,9 @@ class HandPicker {
       else if (++this.wait < this.settle) return { i: -1, switched };
       this.vote = 0; this.n = 0;
     }
-    if (hands.length > 1 && !moving && this.n >= 5 && this.vote < -0.45) {
+    if (hands.length > 1 && !moving && this.n >= 5 && this.vote < -0.3) {
       let j = -1;
-      hands.forEach((h, k) => { if (k !== i && labelVote(h, handed) > 0.5 && (j < 0 || labelVote(h, handed) > labelVote(hands[j], handed))) j = k; });
+      hands.forEach((h, k) => { if (k !== i && labelVote(h, handed) > 0.3 && (j < 0 || labelVote(h, handed) > labelVote(hands[j], handed))) j = k; });
       if (j >= 0) { i = j; switched = true; this.vote = labelVote(hands[j], handed); this.n = 1; return { i, switched }; }
     }
     const k = moving ? 0.04 : 0.15;

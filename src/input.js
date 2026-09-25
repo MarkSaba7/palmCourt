@@ -265,7 +265,7 @@ const Tracker = {
   worker: null, workerState: 'none', workerLoading: null, inFlight: false, sentAt: 0, stalls: 0, next: null, feed: null, noFeed: false, noSteer: false, gpuBad: false, retrying: null,
   landmarker: null, loading: null, lastMain: 0, lastTs: 0, lastVT: -1, delegate: '', where: '', loadError: '', startMs: 0, readyAt: 0,
   procMs: 0, lagMs: 0, rate: 0, rateN: 0, rateT: 0, stamp: '', aspect: 4 / 3, arrOff: Infinity,
-  palm: 0, scale: 1, offHand: 0, trail: [], picker: new HandPicker(), palmScale: new PalmScale(), nh: HAND_OPTS.numHands, good: 0, locks: 0,
+  palm: 0, scale: 1, offHand: 0, trail: [], picker: new HandPicker(), palmScale: new PalmScale(), nh: HAND_OPTS.numHands, good: 0, goodT: 0, locks: 0,
   st: { t: 0, res: 0, found: 0, cam: 0, seen: 0, errors: 0, errRun: 0, lastRes: 0 }, per: { rate: 0, cam: 0, found: 0, dropped: 0 },
   work: null, workCtx: null, ctxO: null, blobN: 0, seg: {}, segW: 160, segH: 120, paddleTg: null, paddleFor: null, maskCanvas: null, maskImg: null,
   handsReady() { return this.workerState === 'ready' || !!this.landmarker; },
@@ -575,17 +575,20 @@ const Tracker = {
   },
   // MediaPipe looks for two hands only while it has to. With two, every frame the other hand is out of view it searches
   // the whole picture for it (about twice the work of following one hand). So once the racket hand has been followed
-  // steadily for a few frames, track just that one; when it's lost or reads as the other hand, look for two again.
+  // steadily for a moment, track just that one; when it's lost or reads as the other hand, look for two again.
   // Tracking one hand restarts MediaPipe's search, so the other hand is painted over for that moment.
   steer(hands, i, moving) {
     if (!this.worker || this.workerState !== 'ready' || this.noSteer) return;
     const p = this.picker;
     if (this.nh === 1) {
-      if (i < 0 || (p.n > 10 && p.vote < -0.45)) this.setHands(2);
+      if (i < 0 || (p.n > 5 && p.vote < -0.3)) this.setHands(2);
       return;
     }
-    if (i < 0 || moving || p.vote < -0.3) { this.good = 0; return; }
-    if (++this.good < 8) return;
+    // Lock on once the hand followed has read as the racket hand, and held fairly still, for a quarter of a second.
+    const now = performance.now();
+    if (i < 0 || moving || p.vote < 0.2) { this.good = 0; return; }
+    if (!this.good++) this.goodT = now;
+    if (this.good < 3 || now - this.goodT < 250) return;
     const mine = handBox(hands[i], 0.2), others = hands.filter((h, k) => k !== i).map((h) => handBox(h, 0.5));
     if (others.some((b) => b.x0 < mine.x1 && b.x1 > mine.x0 && b.y0 < mine.y1 && b.y1 > mine.y0)) return;   // hands too close to paint one over
     this.setHands(1, others);
