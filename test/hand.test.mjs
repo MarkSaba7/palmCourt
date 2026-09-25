@@ -48,11 +48,13 @@ console.log('Hand picking');
   const pred = { x: 0.52, y: 0.62, age: 0.03 }, off = { x: 0.33, y: 0.8, label: Lb };
   check(pickHand([off], 'R', pred) === -1 && pickHand([off, { x: 0.9, y: 0.1, label: R }], 'R', pred) === -1, 'pickHand: racket hand lost mid-swing, off hand 0.26 away → skip');
   const p12 = { x: 0.43, y: 0.74, age: 0.03 };   // 0.12 from the off hand
-  check(pickHand([{ ...off, score: 0.99 }], 'R', p12) === -1, 'pickHand: off hand 0.12 away with a sure label is skipped');
-  check(pickHand([{ ...off, score: 0.6 }], 'R', p12) === 0, 'pickHand: an unsure off-hand label near where the racket hand should be continues the track');
-  check(pickHand([{ ...off, score: 0.99 }], 'R', { x: 0.4, y: 0.75, age: 0.03 }) === 0, 'pickHand: off hand within 0.1 (hands together) continues the track');
+  check(pickHand([{ ...off, score: 0.99 }], 'R', p12) === -1 && pickHand([{ ...off, score: 0.69 }], 'R', p12) === -1, 'pickHand: off hand 0.12 away is skipped, even with an unsure label (0.69)');
+  check(pickHand([{ ...off, score: 0.6 }], 'R', p12) === 0, 'pickHand: a label that can’t tell (0.6) near where the racket hand should be continues the track');
+  check(pickHand([{ ...off, score: 0.99 }], 'R', { x: 0.37, y: 0.77, age: 0.03 }) === 0, 'pickHand: off hand within 0.07 (hands together) continues the track');
   check(pickHand([off, { x: 0.47, y: 0.55, label: R }], 'R', pred) === 1, 'pickHand: racket hand back (0.09 away) is taken, not the off hand');
   check(pickHand([off, { x: 0.3, y: 0.45, label: R }], 'R', pred) === 1 && pickHand([off, { x: 0.25, y: 0.35, label: R }], 'R', pred) === -1, 'pickHand: a racket-labelled hand continues within 0.3, not beyond');
+  // A fast swing seen again after two blurred frames, 0.45 from where it was heading: still the racket hand.
+  check(pickHand([off, { x: 0.9, y: 0.4, label: R }], 'R', { ...pred, age: 0.1 }) === 1, 'pickHand: racket hand back after a gap, further off');
   // Two-handed backhand: both hands together at the prediction; either continues the track.
   check(pickHand([{ x: 0.5, y: 0.6, label: Lb }, { x: 0.53, y: 0.63, label: R }], 'R', pred) === 1, 'pickHand: hands together → the racket-labelled one');
 }
