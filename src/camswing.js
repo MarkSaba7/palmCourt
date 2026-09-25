@@ -77,14 +77,14 @@ class SwingDetector {
   constructor(opts = {}) {
     this.o = { ...SWING, ...opts };
     this.filt = new OneEuro2();
-    this.rises = []; this.ratios = []; this.peaks = []; this.noise = []; this.gaps = [];
+    this.rises = []; this.ratios = []; this.peaks = []; this.winds = []; this.noise = []; this.gaps = [];
     this.frameDt = 1 / 30; this.sigma = 0.003; this.thr = this.o.start; this.sc = 1; this.fresh = -9;
-    this.home = null; this.highSince = 0; this.tossFired = false; this.tossBlock = false; this.tossT = -9; this.glitches = 0;
+    this.home = null; this.highSince = 0; this.tossFired = false; this.tossBlock = false; this.tossT = -9; this.swingT = -9; this.glitches = 0;
     this.ignored = null;   // the last movement fast enough to be a swing that wasn't one: {role, dir, peak, t}
     this.reset();
   }
   reset() {
-    this.pts = []; this.alt = []; this.lastV = null; this.mv = null; this.hold = null; this.ended = null; this.rec = null; this.pend = null;
+    this.pts = []; this.alt = []; this.lastV = null; this.vh = []; this.mv = null; this.hold = null; this.ended = null; this.rec = null; this.pend = null;
     this.held = null; this.stillSince = 0; this.stillFor = 0; this.stillEnd = -9; this.lastMove = null; this.lastFrame = null;
     this.x = 0.5; this.y = 0.5; this.vx = this.vy = this.speed = 0; this.valid = false; this.lastT = -9;
     this.filt.reset();
@@ -163,6 +163,7 @@ class SwingDetector {
     this.vx = v ? v.vx : 0; this.vy = v ? v.vy : 0; this.speed = v ? v.s : 0;
     if (v) this.step(v, t, p, o, out);
     this.lastV = v;
+    if (v) keep(this.vh, v, 6);
     this.pendingCheck(t, out);
     this.tossCheck(t, out);
     return out;
@@ -246,13 +247,13 @@ class SwingDetector {
     }
     // A movement never starts across a tracking gap: the jump could be the tracker re-finding the hand elsewhere. And
     // just after one, where a movement set off from isn't known.
-    if (v.gap) this.fresh = t;
+    if (v.gap && v.s >= on) this.fresh = t;
     const pre = this.lastV;
     if (!m && v.s >= on && !v.gap) m = this.startMove(v, t, p, why);
     // A swing hidden by motion blur: the hand turns up much further on after the gap, and it was either already heading
     // that way or set off from where the racket was held back. (Reported only if the next frame carries on, see judge.)
     else if (!m && v.gap && v.s >= 0.6 * thr && this.gapSwing(v, pre, p)) { m = this.startMove(v, t, p, 'gap'); this.gapMark(m, v, p, pre); }
-    if (m && !m.sw && v.s >= thr && m.cls !== 'gap?') this.judge(m, v, t, p, o, out);
+    if (m && !m.sw && (v.s >= thr || m.cls === 'windup?') && m.cls !== 'gap?') this.judge(m, v, t, p, o, out);
   }
   gapSwing(v, pre, p) {
     if (Math.hypot(p.x - v.x0, p.yw - v.y0) * this.sc < 0.12) return false;
@@ -261,6 +262,7 @@ class SwingDetector {
     if (H && !H.next && ux * H.m.ux + uy * H.m.uy < -0.5) return true;
     return !!h && ((v.x0 - h.x) * ux + (v.y0 - h.y) * uy) * this.sc < -0.07;
   }
+  serving(m, t) { return t - this.tossT < 2 && !this.served && m.uy > 0.3 && m.y0 * (this.pts.length ? this.pts[this.pts.length - 1].asp : 4 / 3) < this.o.tossLine + 0.15; }
   gapMark(m, v, p, pre) { m.cls = 'gap?'; m.gx = v.x0; m.gy = v.y0; m.jump = Math.hypot(p.x - v.x0, p.yw - v.y0); m.preS = pre && !pre.gap ? pre.s : 0; }
   startMove(v, t, p, why) {
     const turned = why === 'reversal' || why === 'turn', lm = this.lastMove;
@@ -269,6 +271,7 @@ class SwingDetector {
     const pv = this.lastV && !turned && t - this.lastV.t < 0.1 ? this.lastV : null;
     const m = {
       t0: v.t, x0: v.x0, y0: v.y0, ux, uy, n: 0, vmax: 0, pk: null, prev: pv, pprev: null, tOn: null, v0: 0, cls: null, sw: null,
+      hist: this.vh.filter((q) => q.t > v.t - 0.2 && !q.gap),   // (the samples just before it: where its speed took off)
       turn: turned, from: turned && lm && lm.t > t - 0.12 ? lm.m : null,
       still: !turned && this.stillEnd > t - 0.2 && this.stillFor >= 0.12,
     };
@@ -294,13 +297,14 @@ class SwingDetector {
       else if (m.pk && !m.pk[2]) m.pk[2] = v;
     }
     m.pprev = m.prev; m.prev = v; m.n++; m.last = { x: p.x, y: p.yw, t: p.t };
+    if (!v.gap && m.hist.length < 40) m.hist.push(v);
     const H = this.held;
-    if (H && H.next === m && m.pk && m.pk[2] && v.s < 0.8 * m.vmax && m.vmax < 0.7 * H.m.vmax) this.resolveHeld(p.t, this.out);
+    if (H && H.next === m && !m.sw && this.heldVerdict(H, m, false)) this.resolveHeld(p.t, this.out);
     // The way it set off (for telling when it turns: a loop's drop turning into the swing).
     if (m.n === 2) { m.rx = m.ux; m.ry = m.uy; }
     if (m.sw) {
       const sw = m.sw, passed = m.pk && m.pk[2] && m.pk[2].s < 0.95 * m.vmax;
-      if (passed) { sw.tPeak = peakTime(m.pk); sw.peak = m.vmax * (m.gapPk ? m.gapK || 1.15 : 1); }
+      if (passed) { sw.tPeak = this.peakAt(m); sw.peak = m.vmax * (m.gapPk ? m.gapK || 1.15 : 1); }
       else sw.peak = Math.max(m.vmax * (m.gapPk ? m.gapK || 1.15 : 1), m.pred || 0);
     }
   }
@@ -317,10 +321,7 @@ class SwingDetector {
   }
   classify(m, v, t) {
     const O = this.o, thr = this.thr, ax = Math.abs(m.ux), h = this.home, H = this.held;
-    if (H && H.next === m) {
-      if (m.vmax < 0.7 * H.m.vmax) return 'pending';
-      this.held = null; this.skip(H.m, 'windup');
-    }
+    if (H && H.next === m) return 'pending';   // (see track)
     // Did it set off from around the ready position (not from behind it, where the racket is taken back to)? Unknown
     // just after the track started again.
     m.home = !!h && m.t0 - this.fresh >= 0.12 && ((m.x0 - h.x) * m.ux + (m.y0 - h.y) * m.uy) * this.sc >= -0.07;
@@ -332,25 +333,37 @@ class SwingDetector {
     if (R) {
       const dot = m.ux * R.ux + m.uy * R.uy;
       // (Not after a stroke that set off from the ready position: that may have been a quick wind-up, and swinging back is the stroke.)
-      if (dot < -0.2 && !R.same && !R.home) return m.vmax > (m.t0 - R.end < 0.6 ? 1.1 : 0.85) * R.peak ? 'stroke' : 'return';
+      // (Nor once it sweeps on past where that stroke set off: the arm coming back stops at the ready position.)
+      const past = ((m.last.x - R.x1) * (R.x0 - R.x1) + (m.last.y - R.y1) * (R.y0 - R.y1)) / R.len2 > 1.1 && v.s >= thr;
+      if (dot < -0.2 && !R.same && !R.home && !past) return m.vmax > (m.t0 - R.end < 0.6 ? 1.1 : 0.85) * R.peak ? 'stroke' : 'return';
       if (dot > 0.3 && t - R.end < O.refractory) return m.vmax > 0.9 * R.peak ? 'stroke' : 'follow';
     }
-    // The serve swing after a toss comes down.
-    if (t - this.tossT < 3 && !this.served && m.uy > 0.3) return 'stroke';
-    // Up or down: raising the hand, a loop's drop... A groundstroke goes across.
-    if (ax < O.across) return m.uy > 0 && m.vmax > 2.5 * thr && m.vmax > 1.3 * median(this.peaks) ? 'stroke' : 'vertical';
+    // The serve swing comes down from up by the toss line, soon after the toss.
+    if (this.serving(m, t)) return 'stroke';
+    // Up or down: raising the hand, a loop's drop... A groundstroke goes across. (From the ready position a stroke without
+    // a wind-up may rise steeply to its finish: that's judged once it's over, see heldVerdict.)
+    if (ax < (m.home ? O.horiz : O.across)) return m.uy > 0 && m.vmax > 2.5 * thr && m.vmax > 1.3 * median(this.peaks) ? 'stroke' : 'vertical';
     // Setting off from behind the ready position toward it: a stroke. Setting off from around it: maybe the wind-up,
     // held back unless it carries on further than a racket is taken back.
     if (!m.home) return 'stroke';
-    return ax >= 0.75 && v.s >= thr && Math.hypot(m.last.x - m.x0, m.last.y - m.y0) * this.sc > 0.45 ? 'stroke' : 'windup?';
+    if (ax >= 0.75 && v.s >= thr && Math.hypot(m.last.x - m.x0, m.last.y - m.y0) * this.sc > 0.6) return 'stroke';
+    // Clearly faster than this player's wind-ups and near their stroke speed: a stroke without a wind-up. (If it was a
+    // quick wind-up after all, the swing back still counts: see recovery.) Or past its peak, having risen like a topspin
+    // finish.
+    const typ = this.peaks.length >= 3 ? median(this.peaks) : 0, tw = this.winds.length >= 3 ? median(this.winds) : 0;
+    if (ax >= 0.75 && (typ ? m.vmax >= Math.max(0.6 * typ, 1.3 * tw, 1.5 * thr) : m.vmax >= 2.2 * thr)) return 'stroke';
+    return typ && m.vmax >= 0.8 * typ && m.pk[2] && v.s < 0.85 * m.vmax && (m.y0 - m.last.y) * this.sc > 0.12 ? 'stroke' : 'windup?';
   }
   begin(m, v, t, p, o, out) {
     const O = this.o, gap = !!m.gapPk, rise = median(this.rises), k = median(this.ratios);
     const passed = m.pk && m.pk[2] && m.pk[2].s < 0.95 * m.vmax;
     let t0;
-    if (passed) t0 = peakTime(m.pk);
+    if (passed) t0 = this.peakAt(m);
     else if (gap) t0 = m.pk[1].t;
-    else t0 = Math.max((m.tOn ?? v.t) + (Number.isFinite(rise) ? rise : O.rise), v.t);
+    else {
+      // When the speed will peak: when it usually does for this player, after passing the start speed.
+      t0 = Math.max((m.tOn ?? v.t) + (Number.isFinite(rise) ? rise : O.rise), v.t);
+    }
     const dir = strokeDir(m.ux, m.uy, o.handed);
     const sw = {
       t0, tOn: m.tOn ?? v.t, peak: 0, vx: m.pk ? m.pk[1].vx : v.vx, vy: m.pk ? m.pk[1].vy : v.vy, x: p.x, y: p.yw * p.asp, src: o.src || 'hand',
@@ -361,7 +374,7 @@ class SwingDetector {
     // A stroke the other way straight after one that was slower: that one was the wind-up.
     const R = this.rec;
     if (R && m.ux * R.ux + m.uy * R.uy < -0.2 && m.vmax > 1.1 * R.peak) { R.sw.role = 'windup'; this.pend = null; }
-    if (t - this.tossT < 3 && m.uy > 0.3) this.served = true;
+    if (this.serving(m, t)) this.served = true;
     m.sw = sw; m.cls = 'stroke'; m.v0 = m.vmax;
     // The peak speed isn't known yet: the speed so far times how much this player's swings usually still speed up
     // after they're reported (learned; a first guess from the frame rate, since slower cameras see more of the swing).
@@ -370,17 +383,19 @@ class SwingDetector {
     this.hold = null;
     out.push({ type: 'swing', swing: sw });
   }
+  swung(m) { return !!m && m.vmax >= this.thr && !!m.last && Math.abs(m.last.x - m.x0) * this.sc >= 0.22; }
   endMove(m, t, out, why) {
     this.mv = null;
+    if (this.swung(m)) this.swingT = t;
     this.lastMove = { t, m };
     const O = this.o;
     if (m.sw) {
       const sw = m.sw;
       sw.peak = m.vmax * (m.gapPk ? m.gapK || 1.15 : 1);
-      if (m.pk) sw.tPeak = m.pk[2] ? peakTime(m.pk) : m.pk[1].t;
+      if (m.pk) sw.tPeak = this.peakAt(m);
       sw.end = t;
       if (!sw.role) sw.role = 'stroke';
-      this.ended = { t, ux: m.ux, uy: m.uy, sw };
+      this.ended = { t, ux: m.ux, uy: m.uy, sw, m };
       this.rec = this.recovery(m, sw, t, !!m.home);
       if (this.pend) this.learn(this.pend);
       this.pend = sw.role === 'stroke' ? { m, t } : null;
@@ -406,35 +421,61 @@ class SwingDetector {
     return { sw, ux: m.ux, uy: m.uy, end: t, peak: sw.peak, same: false, back: false, home, x0: m.x0, y0: m.y0, x1, y1, len2: Math.max(1e-4, (x1 - m.x0) ** 2 + (y1 - m.y0) ** 2) };
   }
   skip(m, role) {
+    if (role === 'windup' && m.cls === 'windup?' && m.vmax >= this.thr) keep(this.winds, m.vmax, 9);   // (this player's wind-up speed)
     if (m.vmax >= this.thr) this.ignored = { role, dir: strokeDir(m.ux, m.uy, this.handed), peak: m.vmax, t: m.pk ? m.pk[1].t : m.t0 };
   }
   // A held-back movement from rest that stopped: the wind-up if the hand swings back soon (see startMove), otherwise a
   // stroke after all.
   pendingCheck(t, out) {
     if (this.pend && t - this.pend.t > 0.5) { this.learn(this.pend); this.pend = null; }
-    const h = this.held;
-    // (Not while the hand is out of sight: the swing back may be hidden by motion blur.)
-    if (h && !h.next && t >= h.until && t - this.lastT < 1.5 * this.frameDt) this.resolveHeld(t, out);
+    const h = this.held, v = this.lastV;
+    if (!h || h.next) return;
+    // Not while the hand is out of sight (the swing back may be hidden by motion blur), nor while it's already easing
+    // back the other way.
+    if (t - this.lastT > 1.5 * this.frameDt || (v && v.s > 0.15 * this.thr && v.vx * h.m.ux + v.vy * h.m.uy < -0.3 * v.s && t - h.t < 0.6)) h.until = Math.max(h.until, t + 0.05);
+    if (t >= h.until) this.resolveHeld(t, out);
   }
   // The movement after a held-back one has passed its peak (or ended) well slower than it: the held one was the stroke.
   // Or nothing followed it: a stroke from rest without a wind-up.
+  // What a held-back movement H was, given the movement N that followed it (null: nothing did): 'windup', 'stroke', or
+  // null (can't tell yet). The swing after a wind-up is at least about as fast; the arm coming back after a stroke is
+  // slower. A movement that rose (a topspin finish, or a loop's up-and-out) followed by a steep drop was a loop.
+  heldVerdict(H, N, final) {
+    const hm = H.m, typ = this.peaks.length >= 3 ? median(this.peaks) : 0, rose = (hm.y0 - hm.last.y) * this.sc > 0.1;
+    if (!N) {
+      const asp = this.pts.length ? this.pts[this.pts.length - 1].asp : 4 / 3;   // (a raised hand held up there is a toss)
+      return (rose || (typ && hm.vmax >= 0.9 * typ)) && (Math.abs(hm.ux) >= this.o.across || hm.last.y * asp > this.o.tossLine + 0.05) ? 'stroke' : 'windup';
+    }
+    if (rose && Math.abs(N.ux) < 0.55 && N.uy > 0) return 'windup';
+    if (N.vmax >= (rose ? 1 : 0.6) * hm.vmax) return 'windup';
+    if (!final && !(N.pk && N.pk[2] && N.prev.s < 0.8 * N.vmax)) return null;
+    return N.vmax < (rose ? 0.75 : 0.6) * hm.vmax || (typ && hm.vmax >= 0.8 * typ) ? 'stroke' : 'windup';
+  }
   resolveHeld(t, out) {
     const h = this.held;
     this.held = null;
-    if (h.next && h.next.vmax >= 0.7 * h.m.vmax) { this.skip(h.m, 'windup'); return; }
+    if (this.heldVerdict(h, h.next, true) === 'windup' || h.m.vmax < this.thr) { this.skip(h.m, 'windup'); return; }
     if (h.next) { h.next.cls = 'return'; h.next.from = null; }
     const hm = h.m;
-    if (Math.abs(hm.ux) < this.o.across || hm.vmax < this.thr) return;
     // Reported late: its peak time is known by now, so the game still times it right.
-    const tp = hm.pk ? (hm.pk[2] ? peakTime(hm.pk) : hm.pk[1].t) : hm.t0;
+    const tp = hm.pk ? this.peakAt(hm) : hm.t0;
     const sw = {
       t0: tp, tOn: hm.tOn ?? tp, peak: hm.vmax * (hm.gapPk ? hm.gapK || 1.15 : 1), vx: hm.pk ? hm.pk[1].vx : hm.ux, vy: hm.pk ? hm.pk[1].vy : hm.uy,
       x: hm.last.x, y: hm.last.y * (this.pts.length ? this.pts[this.pts.length - 1].asp : 4 / 3), src: this.src, dir: strokeDir(hm.ux, hm.uy, this.handed),
       side: Math.abs(hm.ux), gap: !!hm.gapPk, tPeak: tp, lead: tp - t, late: true, end: h.t, role: 'stroke',
     };
-    this.ended = { t: h.t, ux: hm.ux, uy: hm.uy, sw };
+    this.ended = { t: h.t, ux: hm.ux, uy: hm.uy, sw, m: hm };
     this.rec = this.recovery(hm, sw, h.t, true);
     out.push({ type: 'swing', swing: sw }, { type: 'swingEnd', swing: sw });
+  }
+  // When a movement's speed peaked: the middle of its fast part (the samples within 20% of the top, weighted by how far
+  // above that they are), which is steadier than the single fastest sample when the top is broad or noisy.
+  peakAt(m) {
+    if (!m.pk[2] || m.gapPk) return m.pk[1].t;
+    let w = 0, wt = 0;
+    for (const q of m.hist) { const k = q.s - 0.8 * m.vmax; if (k > 0 && !q.gap) { w += k; wt += k * q.t; } }
+    const tp = peakTime(m.pk);
+    return w > 0 ? 0.5 * (wt / w + tp) : tp;
   }
   learn(p) {
     const m = p.m, sw = m.sw;
@@ -449,7 +490,11 @@ class SwingDetector {
   tossCheck(t, out) {
     const L = this.o.tossLine;
     if (this.y < L && this.valid) {
-      if (!this.highSince) { this.highSince = t; this.heldUp = 0; this.tossBlock = !!(this.mv && this.mv.sw) || !!(this.ended && t - this.ended.t < this.o.tossBlock); }
+      if (!this.highSince) {
+        // (Carried up there by a swing: a fast movement that also went well across, not a raise.)
+        this.highSince = t; this.heldUp = 0;
+        this.tossBlock = this.swung(this.mv) || t - this.swingT < this.o.tossBlock;
+      }
       else if (this.speed < 0.6 * this.thr) this.heldUp += Math.min(t - this.highT, 0.1);
       this.highT = t;
       if (this.heldUp >= this.o.tossHold && !this.tossFired && !this.tossBlock) { this.tossFired = true; this.tossT = t; this.served = false; out.push({ type: 'toss' }); }
