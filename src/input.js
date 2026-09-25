@@ -1,5 +1,6 @@
 import { clamp, Clock, Settings } from './core.js';
 import { Sound } from './match.js';
+import { PaddleTrack, clampLock, lockPatch, frameValue, LOCK_MSG } from './camswing.js';
 import { canvas } from './render/world.js';
 import { Perf } from './render/renderer.js';
 import { Game } from './game.js';
@@ -653,29 +654,54 @@ const Tracker = {
     return this.workCtx;
   },
   workSize() { return [160, Math.max(60, Math.min(160, Math.round(160 / this.aspect)))]; },
+  // Paddle mode, every camera frame: find the paddle (PaddleTrack in camswing.js). In the camera check, and before
+  // there's a lock, it also keeps the lock circle's pixels of the last few frames for lockColor.
   trackColor(tCap) {
-    const lock = Settings.paddle;
-    if (!lock) return null;
-    const tol = lock.tol || 16;
-    if (this.paddleFor !== lock) { this.paddleFor = lock; this.paddleTg = { h: lock.h, s: lock.s, v: lock.v, tol }; }
-    const [W, H] = this.workSize(), c = this.ensureWork(W, H);
+    const t0 = performance.now(), lock = Settings.paddle, [W, H] = this.workSize(), c = this.ensureWork(W, H);
+    const pt = this.pt || (this.pt = new PaddleTrack());
+    if (this.paddleFor !== lock) {   // a new lock, or one saved by an older version
+      this.paddleFor = lock; this.paddleLock = clampLock(lock); this.paddleTg = this.paddleLock && { ...this.paddleLock };
+      pt.reset(this.paddleLock);
+    }
     c.drawImage(this.video, 0, 0, W, H);
-    const px = c.getImageData(0, 0, W, H).data;
-    // Where the paddle should be: paler, darker pixels of its color count there too (a motion-blurred paddle).
-    const pr = Input.det.predict(Clock.fromPerf(tCap / 1000));
-    const pred = pr && pr.age < 0.25 ? { x: pr.x, y: pr.y, r: 0.08 + Math.min(0.2, Input.speed * 0.03) } : null;
-    const b = segmentColor(px, W, H, this.paddleTg, { pred, scratch: this.seg });
-    this.segW = W; this.segH = H; this.blobN = b ? b.n : 0;
-    // Follow the room's lighting while the paddle is held fairly still.
-    if (b && b.strict >= 20 && !Input.swing) this.paddleTg = adaptColor(this.paddleTg, { ...lock, tol }, b);
+    const px = c.getImageData(0, 0, W, H).data, L = this.paddleLock;
+    if (!L || this.wrap.classList.contains('big')) {
+      const ring = this.lockRing || (this.lockRing = []);
+      ring.push({ at: t0, px: lockPatch(px, W, H) });
+      if (ring.length > 6) ring.shift();
+    }
+    let b = null;
+    if (L) {
+      b = pt.step(px, W, H, tCap / 1000, this.paddleTg);
+      this.seg = pt.S; this.segW = W; this.segH = H;
+      // Follow the room's lighting while the paddle is clearly seen and not mid-swing.
+      if (b && pt.conf >= 0.8 && !Input.swing) this.paddleTg = adaptColor(this.paddleTg, L, b);
+    }
+    this.blobN = b ? b.n : 0;
+    const ms = performance.now() - t0;
+    this.procMs = this.procMs ? this.procMs * 0.9 + ms * 0.1 : ms;   // main-thread cost, shown by info()
     return b ? { x: b.x, y: b.y } : null;
   },
+  // Lock the paddle's color from the circle (this frame and the last few), then look at the whole view with it: the
+  // paddle's size seeds the tracker, other things of that color are remembered as clutter. lockInfo says how it went,
+  // for the camera check: {ok, reason ('ok', 'others', 'big' or why it failed: 'black', 'dark', 'grey', 'skin', 'dull',
+  // 'mixed'), msg (a sentence for the player), name ('red'…), share (of the circle), d (paddle size), others}.
   lockColor() {
     if (!this.stream) return false;
-    const [W, H] = this.workSize(), c = this.ensureWork(W, H);
+    const [W, H] = this.workSize(), c = this.ensureWork(W, H), now = performance.now();
     c.drawImage(this.video, 0, 0, W, H);
-    const col = lockColorFromPatch(c.getImageData(Math.round(W / 2 - 10), Math.round(H / 2 - 10), 20, 20).data);
+    const px = c.getImageData(0, 0, W, H).data, parts = (this.lockRing || []).filter((r) => now - r.at < 350).map((r) => r.px);
+    parts.push(lockPatch(px, W, H));
+    const all = new Uint8ClampedArray(parts.reduce((n, a) => n + a.length, 0));
+    parts.reduce((o, a) => { all.set(a, o); return o + a.length; }, 0);
+    const info = { frameV: frameValue(px) }, col = lockColorFromPatch(all, info);
+    this.lockInfo = info; info.ok = !!col;
     if (!col) return false;
+    const L = clampLock(col), pt = this.pt || (this.pt = new PaddleTrack()), a = pt.prime(px, W, H, L);
+    col.d = L.d = info.d = a.d; info.others = a.others;
+    if (a.big) { info.reason = 'big'; info.msg = LOCK_MSG.big; } else if (a.others > 0.5) { info.reason = 'others'; info.msg = LOCK_MSG.others; }
+    this.paddleFor = col; this.paddleLock = L; this.paddleTg = { ...L };
+    this.seg = pt.S; this.segW = W; this.segH = H;
     Settings.paddle = col;
     Settings.save();
     Input.lost();
