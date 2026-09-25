@@ -36,7 +36,7 @@ const Net = {
     this.conn = c;
     c.on('open', () => {
       Clock.resume(); Clock.pausedTotal = 0; Clock.offset = 0;
-      this.send({ type: 'hello', name: Settings.name, handed: Settings.handed, v: 1 });
+      this.send({ type: 'hello', name: Settings.name, handed: Settings.handed, pro: Settings.playAs, v: 1 });
       this.startPings();
     });
     c.on('data', (m) => { if (c === this.conn) this.lastRecv = performance.now(); try { this.onData(m); } catch (e) { console.warn(e); } });
@@ -61,7 +61,7 @@ const Net = {
     if (!m || typeof m !== 'object') return;
     switch (m.type) {
       case 'hello':
-        this.remote = { name: String(m.name || '').trim().slice(0, 12) || 'Friend', handed: m.handed === 'L' ? 'L' : 'R' };
+        this.remote = { name: String(m.name || '').trim().slice(0, 12) || 'Friend', handed: m.handed === 'L' ? 'L' : 'R', pro: typeof m.pro === 'string' ? m.pro.slice(0, 16) : '' };
         UI.lobbyConnected(this.remote);
         break;
       case 'ready': this.remoteReady = true; UI.lobbyConnected(this.remote); break;
