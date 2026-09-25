@@ -188,6 +188,7 @@ function runWorker(o = {}) {
     fetch: async (url) => o.fetch ? o.fetch(url) : { ok: true, headers: { get: () => '1000' }, body: { getReader: () => { let n = 0; return { read: async () => { if (o.slow) await sleep(o.slow); return n++ < 4 ? { done: false, value: new Uint8Array(250) } : { done: true }; } }; } } },
     createImageBitmap: async () => ({ close() {} }), ImageData: class { constructor(w, h) { this.width = w; this.height = h; } },
     URL: { createObjectURL: () => 'blob:fake', revokeObjectURL() {} }, Blob: class {}, performance: { now: () => performance.now(), timeOrigin: performance.timeOrigin + 5 },
+    OffscreenCanvas: class { constructor(w, h) { this.width = w; this.height = h; this.fills = []; } getContext() { const c = this; return { drawImage: (img) => { c.drew = img; c.fills = []; }, fillRect: (...a) => c.fills.push(a) }; } },
   };
   new Function(...Object.keys(env), `(${WORKER})();`)(...Object.values(env));
   return { send: (m) => self.onmessage({ data: m }), out, made: fv.made };
@@ -287,6 +288,27 @@ console.log('Tracker worker (fake MediaPipe)');
   w.send({ type: 'stream', readable });
   await waitFor(() => w.out.some((m) => m.type === 'feedError'));
   check(w.out.some((m) => m.type === 'feedError') && w.out.filter((m) => m.type === 'result' && m.error).length === 9, 'worker: feed that keeps failing reports feedError after 9 tries');
+}
+
+{
+  // Tracking one hand instead of two: the page asks for it with the other hand's box; MediaPipe's options change and
+  // the next two frames have that box painted over (so its fresh search can only find the racket hand), then plain.
+  const w = runWorker({ gpu: 'ok', detect: (img) => ({ landmarks: [], handedness: [], seenImg: img }) });
+  w.send(INIT);
+  await waitFor(() => w.out.some((m) => m.type === 'ready'));
+  const lmk = w.made[0];
+  w.send({ type: 'options', opts: { numHands: 1 }, avoid: [{ x0: 0.5, y0: 0.25, x1: 0.75, y1: 0.75 }] });
+  const bmps = [0, 1, 2].map((k) => ({ width: 640, height: 480, k, close() {} }));
+  for (const [k, b] of bmps.entries()) w.send({ type: 'frame', t: 2000 + 33 * k, bitmap: b });
+  const res = w.out.filter((m) => m.type === 'result');
+  const imgs = lmk.calls.slice(1).map((c) => c.img);
+  check(lmk.opts.numHands === 1 && res.every((m) => m.nh === 1), 'worker: numHands option applied, results say so');
+  check(res[0].masked && res[1].masked && !res[2].masked && imgs[0] === imgs[1] && imgs[0].fills.length === 1 && imgs[0].drew === bmps[1] && imgs[2] === bmps[2], 'worker: two masked frames, then the camera picture itself');
+  check(JSON.stringify(imgs[0].fills[0]) === JSON.stringify([320, 120, 160, 240]), `worker: the mask covers the other hand's box (${JSON.stringify(imgs[0].fills[0])})`);
+  w.send({ type: 'options', opts: { numHands: 2 } });
+  w.send({ type: 'frame', t: 2200, bitmap: { width: 640, height: 480, close() {} } });
+  const last = w.out.filter((m) => m.type === 'result').pop();
+  check(lmk.opts.numHands === 2 && last.nh === 2 && !last.masked, 'worker: back to two hands, unmasked');
 }
 
 console.log(failures ? `\n${failures} of ${checks} checks FAILED` : `\nAll ${checks} checks passed`);
