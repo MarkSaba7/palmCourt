@@ -224,6 +224,17 @@ class SwingDetector {
       ((h && Math.hypot(p.x - h.x, p.yw - h.y) * this.sc < 0.1) || ((p.x - R.x1) * (R.x0 - R.x1) + (p.yw - R.y1) * (R.y0 - R.y1)) / R.len2 > 0.4)) this.rec = null;
     if (R && t - R.end > 1.3) this.rec = null;
     let m = this.mv, why = null;
+    // A movement seen only across a tracking gap: this frame tells whether it was real (the hand carries on, or stays
+    // where it turned up: the whole swing was a blur) or a glitch (it jumps back).
+    if (m && m.cls === 'gap?' && !v.gap) {
+      if (Math.hypot(p.x - m.gx, p.yw - m.gy) < 0.5 * m.jump || (v.s > 0.25 * this.thr && v.vx * m.ux + v.vy * m.uy < -0.3 * v.s)) m.cls = 'glitch?';
+      else {
+        // Its peak: the average speed across the gap, more so the more of the swing the gap hid.
+        m.gapK = clamp(1.875 - 0.7 * Math.max(m.preS, v.s) / m.pk[1].s, 1.15, 1.875);
+        m.cls = 'gap';
+        this.judge(m, v, t, p, o, out);
+      }
+    }
     if (m) {
       const along = v.vx * m.ux + v.vy * m.uy;
       if (v.s >= on && along < -0.25 * v.s) why = 'reversal';
@@ -240,15 +251,17 @@ class SwingDetector {
     if (!m && v.s >= on && !v.gap) m = this.startMove(v, t, p, why);
     // A swing hidden by motion blur: the hand turns up much further on after the gap, and it was either already heading
     // that way or set off from where the racket was held back. (Reported only if the next frame carries on, see judge.)
-    else if (!m && v.gap && v.s >= thr && this.gapSwing(v, pre)) m = this.startMove(v, t, p, 'gap');
-    if (m && !m.sw && (v.s >= thr || m.cls === 'gap?')) this.judge(m, v, t, p, o, out);
+    else if (!m && v.gap && v.s >= 0.6 * thr && this.gapSwing(v, pre, p)) { m = this.startMove(v, t, p, 'gap'); this.gapMark(m, v, p, pre); }
+    if (m && !m.sw && v.s >= thr && m.cls !== 'gap?') this.judge(m, v, t, p, o, out);
   }
-  gapSwing(v, pre) {
+  gapSwing(v, pre, p) {
+    if (Math.hypot(p.x - v.x0, p.yw - v.y0) * this.sc < 0.12) return false;
     if (pre && !pre.gap && pre.s >= 0.3 * this.thr && pre.vx * v.vx + pre.vy * v.vy > 0.5 * pre.s * v.s) return true;
     const ux = v.vx / v.s, uy = v.vy / v.s, h = this.home, H = this.held;
     if (H && !H.next && ux * H.m.ux + uy * H.m.uy < -0.5) return true;
     return !!h && ((v.x0 - h.x) * ux + (v.y0 - h.y) * uy) * this.sc < -0.07;
   }
+  gapMark(m, v, p, pre) { m.cls = 'gap?'; m.gx = v.x0; m.gy = v.y0; m.jump = Math.hypot(p.x - v.x0, p.yw - v.y0); m.preS = pre && !pre.gap ? pre.s : 0; }
   startMove(v, t, p, why) {
     const turned = why === 'reversal' || why === 'turn', lm = this.lastMove;
     const dx = p.x - v.x0, dy = p.yw - v.y0, d = Math.hypot(dx, dy);
@@ -287,23 +300,19 @@ class SwingDetector {
     if (m.n === 2) { m.rx = m.ux; m.ry = m.uy; }
     if (m.sw) {
       const sw = m.sw, passed = m.pk && m.pk[2] && m.pk[2].s < 0.95 * m.vmax;
-      if (passed) { sw.tPeak = peakTime(m.pk); sw.peak = m.vmax * (m.gapPk ? 1.15 : 1); }
-      else sw.peak = Math.max(m.vmax * (m.gapPk ? 1.15 : 1), m.pred || 0);
+      if (passed) { sw.tPeak = peakTime(m.pk); sw.peak = m.vmax * (m.gapPk ? m.gapK || 1.15 : 1); }
+      else sw.peak = Math.max(m.vmax * (m.gapPk ? m.gapK || 1.15 : 1), m.pred || 0);
     }
   }
   // Decide what a movement fast enough to be a swing is (again every frame until it's reported, so it can be upgraded).
   judge(m, v, t, p, o, out) {
     const O = this.o, thr = this.thr, b = m.pprev;
     if (m.cls === 'glitch?') return;
-    if (m.cls === 'gap?') {
-      // Seen across a tracking gap: only if this frame carries on the same way (a glitch jumps back or sits still).
-      if (v.gap) return;
-      if (v.s < 0.25 * thr || v.vx * m.ux + v.vy * m.uy < 0.3 * v.s) { m.cls = 'glitch?'; return; }
-    } else if (!m.cls && !(b && b.s >= (v.gap ? 0.3 : O.backK) * thr && b.vx * v.vx + b.vy * v.vy > 0.3 * b.s * v.s) && !(v.gap && m.n === 1)) return;
-    // (First, two samples in a row moving the same way: a one-frame glitch can't do that.)
+    // First, two samples in a row moving the same way: a one-frame glitch can't do that. (A gap needs the next frame.)
+    if (!m.cls && !(b && b.s >= (v.gap ? 0.3 : O.backK) * thr && b.vx * v.vx + b.vy * v.vy > 0.3 * b.s * v.s)) return;
     const cls = this.classify(m, v, t);
-    if (cls !== 'stroke') { m.cls = cls; return; }
-    if (v.gap) { m.cls = 'gap?'; return; }
+    if (cls !== 'stroke') { if (m.cls !== 'gap') m.cls = cls; return; }
+    if (v.gap) { this.gapMark(m, v, p, m.pprev); return; }
     this.begin(m, v, t, p, o, out);
   }
   classify(m, v, t) {
@@ -357,7 +366,7 @@ class SwingDetector {
     // The peak speed isn't known yet: the speed so far times how much this player's swings usually still speed up
     // after they're reported (learned; a first guess from the frame rate, since slower cameras see more of the swing).
     m.pred = passed || gap ? 0 : m.vmax * (Number.isFinite(k) ? k : 1 + 0.35 * Math.pow(0.0333 / this.frameDt, 0.7));
-    sw.peak = Math.max(m.vmax * (gap ? 1.15 : 1), m.pred);
+    sw.peak = Math.max(m.vmax * (gap ? m.gapK || 1.15 : 1), m.pred);
     this.hold = null;
     out.push({ type: 'swing', swing: sw });
   }
@@ -367,7 +376,7 @@ class SwingDetector {
     const O = this.o;
     if (m.sw) {
       const sw = m.sw;
-      sw.peak = m.vmax * (m.gapPk ? 1.15 : 1);
+      sw.peak = m.vmax * (m.gapPk ? m.gapK || 1.15 : 1);
       if (m.pk) sw.tPeak = m.pk[2] ? peakTime(m.pk) : m.pk[1].t;
       sw.end = t;
       if (!sw.role) sw.role = 'stroke';
@@ -419,7 +428,7 @@ class SwingDetector {
     // Reported late: its peak time is known by now, so the game still times it right.
     const tp = hm.pk ? (hm.pk[2] ? peakTime(hm.pk) : hm.pk[1].t) : hm.t0;
     const sw = {
-      t0: tp, tOn: hm.tOn ?? tp, peak: hm.vmax * (hm.gapPk ? 1.15 : 1), vx: hm.pk ? hm.pk[1].vx : hm.ux, vy: hm.pk ? hm.pk[1].vy : hm.uy,
+      t0: tp, tOn: hm.tOn ?? tp, peak: hm.vmax * (hm.gapPk ? hm.gapK || 1.15 : 1), vx: hm.pk ? hm.pk[1].vx : hm.ux, vy: hm.pk ? hm.pk[1].vy : hm.uy,
       x: hm.last.x, y: hm.last.y * (this.pts.length ? this.pts[this.pts.length - 1].asp : 4 / 3), src: this.src, dir: strokeDir(hm.ux, hm.uy, this.handed),
       side: Math.abs(hm.ux), gap: !!hm.gapPk, tPeak: tp, lead: tp - t, late: true, end: h.t, role: 'stroke',
     };
