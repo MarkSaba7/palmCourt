@@ -137,7 +137,8 @@ export const FLOWS = {
     if (!S.runUntil(() => G.state === 'over', 1500)) return fail('match did not finish');
     if (UI.screen !== 'over' || $('over').hidden) fail('over screen not shown');
     const score = $('overScore').textContent, title = $('overTitle').textContent;
-    if (!/\\d+–\\d+/.test(score)) fail('over score ' + score);
+    const fin = G.match.tbOnly ? G.match.pts : G.match.games;
+    if (!score.includes(String(fin[0])) || !score.includes(String(fin[1]))) fail('over score "' + score + '" lacks the final ' + fin.join('-'));
     S.run(10);   // the over screen stays up
     if (G.state !== 'over' || UI.screen !== 'over') fail('left the over screen by itself');
     UI.rematch();
@@ -211,7 +212,7 @@ export const FLOWS = {
     await S.startPractice({ format: 'short', cpu: false });
     const me = G.players[0];
     let swings = 0, hits = 0;
-    const end = S.V.t + 1200;
+    const end = S.V.t + 4000;
     while (S.V.t < end && G.state !== 'over') {
       S.run(1 / 60);
       const now = Clock.now(), m = G.match;
