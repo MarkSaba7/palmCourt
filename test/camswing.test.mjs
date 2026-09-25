@@ -216,16 +216,19 @@ function playSession(i, dur) {
   const jig = (p, a) => ({ x: p.x * a + U(r, -0.03, 0.03), y: p.y * a + U(r, -0.03, 0.03) });
   const sway = [0, 1, 2].map(() => ({ ax: U(r, 0.003, 0.009), ay: U(r, 0.002, 0.007), f: U(r, 0.15, 1.1), px: r() * 6.3, py: r() * 6.3 }));
   const stroke = (T, kind) => {
-    const amp = c.amp * U(r, 0.88, 1.12), slice = r() < 0.12, wind = r() < 0.7 ? c.habit : winds[(r() * winds.length) | 0];
+    const amp = c.amp * U(r, 0.88, 1.12), slice = r() < 0.12, wind = r() < 0.08 ? 'none' : r() < 0.7 ? c.habit : winds[(r() * winds.length) | 0];
     let A, C, F;
     if (kind === 'fh') { A = { x: 0.3 * s, y: -0.02 }; C = { x: 0.02 * s, y: -0.07 }; F = { x: -0.42 * s, y: c.highFin ? -0.42 : -0.3 }; }
     else { A = { x: -0.38 * s, y: 0 }; C = { x: -0.16 * s, y: -0.06 }; F = { x: 0.26 * s, y: c.highFin ? -0.38 : -0.28 }; }
     if (slice) { A.y = -0.2; C.y = -0.07; F.y = 0.02; }
-    A = jig(A, amp); C = jig(C, amp); F = jig(F, amp);
+    if (wind === 'none') A = { ...H.tg };   // no wind-up: swinging straight from where the hand is
+    F = jig(F, amp);
+    if (wind !== 'none') { A = jig(A, amp); C = jig(C, amp); } else C = { x: A.x + (F.x - A.x) * 0.45, y: A.y + (F.y - A.y) * 0.3 };
     const V = 2.8 * c.speedMul * U(r, 0.85, 1.15), Lp = Math.hypot(C.x - A.x, C.y - A.y) + Math.hypot(F.x - C.x, F.y - C.y);
     const D = clamp((1.875 * Lp) / V, 0.2, 0.7), a = U(r, 0.85, 1.12), f0 = T - D * Math.pow(0.5, 1 / a);
-    let b0;
-    if (wind === 'loop') {
+    let b0 = f0;
+    if (wind === 'none') { /* straight into the swing */ }
+    else if (wind === 'loop') {
       const up = { x: A.x * 0.8, y: A.y - 0.24 * amp }, d1 = U(r, 0.28, 0.45) / Math.sqrt(c.speedMul), d2 = U(r, 0.2, 0.3) / Math.sqrt(c.speedMul), ov = U(r, 0.04, 0.1);
       b0 = f0 + ov - d2 - d1 + 0.05;
       H.to(b0, d1, up, { x: A.x * 0.5, y: -0.16 * amp }); H.to(b0 + d1 - 0.05, d2, A);
@@ -372,8 +375,8 @@ function runSession(S, frames) {
     if (tr && f.t >= TRACE[1] && f.t <= TRACE[2]) {
       const m = d.mv, h = d.home, lab = S.labels.filter((l) => f.t >= l.t0 && f.t <= l.t1).map((l) => l.what).join('/');
       console.log(`  ${f.t.toFixed(3)} ${f.miss ? 'miss' : `(${f.x.toFixed(3)},${(f.y / ASP).toFixed(3)})${f.glitch ? ' GLITCH' : ''}`} true ${(S.speedAt(f.t) * c.scaleIn).toFixed(2)} ` +
-        `v ${d.speed.toFixed(2)} thr ${d.thr.toFixed(2)} home ${h ? `(${h.x.toFixed(2)},${h.y.toFixed(2)})` : '-'} mv ${m ? `${m.cls || '-'} u(${m.ux.toFixed(2)},${m.uy.toFixed(2)}) x0 (${m.x0.toFixed(2)},${m.y0.toFixed(2)}) n${m.n} vmax ${m.vmax.toFixed(2)}${m.turn ? ' turn' : ''}${m.still ? ' still' : ''}${m.sw ? ' SW' : ''}` : '-'}` +
-        `${d.held ? ' HELD' : ''}${d.rec ? ` rec(${d.rec.same ? 'same' : ''}${d.rec.back ? 'back' : ''})` : ''} ${lab} ${got.map((e) => e.type + (e.swing ? ' ' + e.swing.dir : '')).join(',')}`);
+        `v ${d.speed.toFixed(2)} thr ${d.thr.toFixed(2)} fresh ${d.fresh.toFixed(2)} home ${h ? `(${h.x.toFixed(2)},${h.y.toFixed(2)})` : '-'} mv ${m ? `${m.cls || '-'} u(${m.ux.toFixed(2)},${m.uy.toFixed(2)}) x0 (${m.x0.toFixed(2)},${m.y0.toFixed(2)}) n${m.n} vmax ${m.vmax.toFixed(2)}${m.turn ? ' turn' : ''}${m.still ? ' still' : ''}${m.sw ? ' SW' : ''}` : '-'}` +
+        `${d.held ? ' HELD' : ''}${m && m.home ? ' mhome' : ''}${d.rec ? ` rec(${d.rec.same ? 'same' : ''}${d.rec.back ? 'back' : ''}${d.rec.home ? 'home' : ''})` : ''} ${lab} ${got.map((e) => e.type + (e.swing ? ' ' + e.swing.dir : '')).join(',')}`);
     }
     for (const e of got) {
       if (e.type === 'swing') evs.push({ type: 'swing', te: f.t, t0: e.swing.t0, dir: e.swing.dir, sw: e.swing, peak0: e.swing.peak });
@@ -419,12 +422,13 @@ function scoreSession(S, evs, G) {
     for (const x of all) {
       if (x.serve) { g.serves++; if (x.ev) g.serveSw++; continue; }
       g.strokes++;
+      if (x.wind === 'none') { g.noneN = (g.noneN || 0) + 1; if (x.ev) g.noneTp = (g.noneTp || 0) + 1; }
       if (g === G[0] && WHY === 'miss' && !x.ev && ++WHY_N.n) {
         const near = sw.filter((e) => e.te > x.T - 1 && e.te < x.T + 0.6).map((e) => `[${e.te.toFixed(2)} ${e.dir} t0 ${e.t0.toFixed(2)} pk ${e.peak0.toFixed(1)}]`).join(' ');
         const sp = [-0.2, -0.1, 0, 0.1, 0.2].map((d) => (S.speedAt(x.T + d) * S.c.scaleIn).toFixed(1)).join(' ');
         const cl = S.det ? S.det.cls.filter((q) => q.t > x.f0 - 0.05 && q.t < x.T + 0.3).map((q) => q.r) : [];
         MISS[cl.length ? cl[cl.length - 1] : 'never judged'] = (MISS[cl.length ? cl[cl.length - 1] : 'never judged'] || 0) + 1;
-        if (WHY_N.n < 14) console.log(`  missed (${cl.join(' ')}) ${x.kind} session ${S.c.i} ${S.c.src} ${S.c.fps}fps ${x.wind} T ${x.T.toFixed(3)} f0 ${x.f0.toFixed(2)} b0 ${x.b0.toFixed(2)} peak ${x.peak.toFixed(2)} · speed ${sp} · events ${near}`);
+        if (WHY_N.n < (+process.env.WHYN || 14)) console.log(`  missed (${cl.join(' ')}) ${x.kind} session ${S.c.i} ${S.c.src} ${S.c.fps}fps ${x.wind} T ${x.T.toFixed(3)} f0 ${x.f0.toFixed(2)} b0 ${x.b0.toFixed(2)} peak ${x.peak.toFixed(2)} · speed ${sp} · events ${near}`);
       }
       if (x.ev) {
         g.tp++;
@@ -490,6 +494,7 @@ function bench() {
     console.log(`  ${name.padEnd(22)} ${String(g.strokes).padStart(6)} ${P(g.tp, g.strokes)} ${P(g.tp, g.tp + g.fpN)} ${P(g.dirOk, g.tp)} ${P(g.dirNull, g.tp)}  ${String(Math.round(med(g.delay) * 1000)).padStart(4)}/${String(Math.round(q90(g.delay) * 1000)).padEnd(4)} ${String(Math.round(m * 1000)).padStart(5)}±${String(Math.round(sd * 1000)).padEnd(4)} ${P(g.game.hit || 0, g.strokes)} ${((100 * g.flash) / g.strokes).toFixed(1).padStart(6)}     ${fp}`);
   }
   const a = groups.get('all'), pw = stats(a.pow);
+  console.log(`  strokes without a wind-up: ${a.noneTp || 0}/${a.noneN || 0} reported`);
   console.log(`  game outcomes (all): ${Object.entries(a.game).map(([k, v]) => `${k} ${P(v, a.strokes).trim()}%`).join(', ')}`);
   console.log(`  power: reported peak / true peak ${pw.mean.toFixed(2)} ± ${pw.sd.toFixed(2)}; hand ${stats(groups.get('hand 30 fps').pow.concat(groups.get('hand 60 fps').pow)).sd.toFixed(2)} sd, paddle ${stats(groups.get('paddle 30 fps').pow.concat(groups.get('paddle 60 fps').pow)).sd.toFixed(2)} sd`);
   if (WHY === 'miss') console.log('  misses by last verdict on the stroke:', JSON.stringify(MISS));
