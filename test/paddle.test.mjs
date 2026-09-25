@@ -440,6 +440,12 @@ function main() {
     console.log(`  ${name} rubber with a finger on it: ${col ? `${col.name} ${col.h.toFixed(1)}°, s ${col.s.toFixed(2)}, tol ${col.tol.toFixed(1)}°, ${Math.round(info.share * 100)}% of the circle` : info.reason}`);
     check(col && col.name === want && col.tol >= 9 && col.tol <= 18 && hueDist(col.h, hsv(...rub).h) < 6, `lock ${name}`);
   }
+  {
+    // A smallish paddle in front of a teal shirt (color too, but far less saturated): still the paddle's color.
+    const { col, info } = lockFrom(makeScene({ extras: [['rect', 0.36, 0.28, 0.64, 0.5, [58, 88, 100]]] }), { ...held, d: 0.09 });
+    console.log(`  red rubber in front of a teal shirt: ${col ? `${col.name} ${col.h.toFixed(1)}°, ${Math.round(info.share * 100)}% of the circle` : info.reason}`);
+    check(col && col.name === 'red', 'lock the paddle, not the shirt behind it');
+  }
   const why = (r, want, name) => { console.log(`  ${name}: ${r.col ? 'locked (should refuse)' : `${r.info.reason}: ${r.info.msg}`}`); check(!r.col && r.info.reason === want, `lock refuses ${name} (${want})`); };
   why(lockFrom(makeScene({ rubber: COL.black }), held), 'black', 'black rubber');
   why(lockFrom(makeScene({}), null), 'grey', 'nothing in the circle (grey shirt)');

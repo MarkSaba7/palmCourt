@@ -102,9 +102,12 @@ class SwingDetector {
     const W = this.win(), dt = Math.max(this.frameDt, 0.008), m = Math.max(2, Math.floor(W / dt + 1e-6) + 1);
     return (this.sigma * this.sc) / (dt * Math.sqrt((m * (m * m - 1)) / 12));
   }
+  // The speed a swing must reach: the start speed (over sensitivity), lower for a player whose strokes are slow (so
+  // they're caught as early and surely as anyone's), higher while tracking is jittery.
   threshold(sens) {
-    const base = this.o.start / (sens || 1);
-    return clamp(this.o.noiseK * this.noiseSpeed(), base, base * 1.6);
+    const base = this.o.start / (sens || 1), typ = this.peaks.length >= 3 ? median(this.peaks) : 0;
+    const low = typ ? base * clamp(typ / (2 * this.o.start), 0.8, 1) : base;
+    return clamp(this.o.noiseK * this.noiseSpeed(), low, base * 1.6);
   }
   // Velocity window (seconds): about one frame interval, longer when tracking is jittery (a paddle in dim light).
   win() { return clamp((0.034 * this.sigma * this.sc) / 0.0035, Math.max(0.03, 1.05 * this.frameDt), 0.075); }
@@ -293,8 +296,8 @@ class SwingDetector {
     }
     // A sample more than 3× the one before (and above the start speed) mid-swing is a glitch, not the racket.
     if (!(m.sw && m.prev && v.s > 3 * m.prev.s && m.prev.s > this.thr)) {
-      if (v.s > m.vmax) { m.vmax = v.s; m.pk = [m.prev, v, null]; m.gapPk = v.gap; if (m.sw) { m.sw.vx = v.vx; m.sw.vy = v.vy; } }
-      else if (m.pk && !m.pk[2]) m.pk[2] = v;
+      if (v.s > m.vmax) { m.v2 = m.vmax; m.vmax = v.s; m.pk = [m.prev, v, null]; m.gapPk = v.gap; if (m.sw) { m.sw.vx = v.vx; m.sw.vy = v.vy; } }
+      else { if (v.s > (m.v2 || 0)) m.v2 = v.s; if (m.pk && !m.pk[2]) m.pk[2] = v; }
     }
     m.pprev = m.prev; m.prev = v; m.n++; m.last = { x: p.x, y: p.yw, t: p.t };
     if (!v.gap && m.hist.length < 40) m.hist.push(v);
@@ -304,7 +307,7 @@ class SwingDetector {
     if (m.n === 2) { m.rx = m.ux; m.ry = m.uy; }
     if (m.sw) {
       const sw = m.sw, passed = m.pk && m.pk[2] && m.pk[2].s < 0.95 * m.vmax;
-      if (passed) { sw.tPeak = this.peakAt(m); sw.peak = m.vmax * (m.gapPk ? m.gapK || 1.15 : 1); }
+      if (passed) { sw.tPeak = this.peakAt(m); sw.peak = this.top(m); }
       else sw.peak = Math.max(m.vmax * (m.gapPk ? m.gapK || 1.15 : 1), m.pred || 0);
     }
   }
@@ -335,7 +338,7 @@ class SwingDetector {
       // (Not after a stroke that set off from the ready position: that may have been a quick wind-up, and swinging back is the stroke.)
       // (Nor once it sweeps on past where that stroke set off: the arm coming back stops at the ready position.)
       const past = ((m.last.x - R.x1) * (R.x0 - R.x1) + (m.last.y - R.y1) * (R.y0 - R.y1)) / R.len2 > 1.1 && v.s >= thr;
-      if (dot < -0.2 && !R.same && !R.home && !past) return m.vmax > (m.t0 - R.end < 0.6 ? 1.1 : 0.85) * R.peak ? 'stroke' : 'return';
+      if (dot < -0.2 && !R.same && !R.home && !past) return m.vmax > 0.7 * R.peak ? 'stroke' : 'return';
       if (dot > 0.3 && t - R.end < O.refractory) return m.vmax > 0.9 * R.peak ? 'stroke' : 'follow';
     }
     // The serve swing comes down from up by the toss line, soon after the toss.
@@ -356,7 +359,7 @@ class SwingDetector {
   }
   begin(m, v, t, p, o, out) {
     const O = this.o, gap = !!m.gapPk, rise = median(this.rises), k = median(this.ratios);
-    const passed = m.pk && m.pk[2] && m.pk[2].s < 0.95 * m.vmax;
+    const passed = m.pk && m.pk[2] && m.prev.s < 0.85 * m.vmax;   // (clearly slowing down)
     let t0;
     if (passed) t0 = this.peakAt(m);
     else if (gap) t0 = m.pk[1].t;
@@ -383,6 +386,12 @@ class SwingDetector {
     this.hold = null;
     out.push({ type: 'swing', swing: sw });
   }
+  // A movement's peak speed, steadied: one noisy sample shouldn't set it (the mean of the two fastest samples, the fastest
+  // counting more when the top was brief). Across a tracking gap, the average speed over it scaled up (see gapK).
+  top(m) {
+    if (m.gapPk) return m.vmax * (m.gapK || 1.15);
+    return m.v2 > 0 ? Math.max(0.5 * (m.vmax + m.v2) * 1.03, 0.9 * m.vmax) : m.vmax;
+  }
   swung(m) { return !!m && m.vmax >= this.thr && !!m.last && Math.abs(m.last.x - m.x0) * this.sc >= 0.22; }
   endMove(m, t, out, why) {
     this.mv = null;
@@ -391,12 +400,12 @@ class SwingDetector {
     const O = this.o;
     if (m.sw) {
       const sw = m.sw;
-      sw.peak = m.vmax * (m.gapPk ? m.gapK || 1.15 : 1);
+      sw.peak = this.top(m);
       if (m.pk) sw.tPeak = this.peakAt(m);
       sw.end = t;
       if (!sw.role) sw.role = 'stroke';
       this.ended = { t, ux: m.ux, uy: m.uy, sw, m };
-      this.rec = this.recovery(m, sw, t, !!m.home);
+      this.rec = this.recovery(m, sw, t);
       if (this.pend) this.learn(this.pend);
       this.pend = sw.role === 'stroke' ? { m, t } : null;
       out.push({ type: 'swingEnd', swing: sw });
@@ -415,10 +424,12 @@ class SwingDetector {
     }
   }
   // What's expected after a stroke: the arm coming back along its path (from where it ended, x1 y1, toward where it
-  // started, x0 y0). home: it set off from the ready position, so it may have been a quick wind-up.
-  recovery(m, sw, t, home) {
-    const x1 = m.last ? m.last.x : m.x0, y1 = m.last ? m.last.y : m.y0;
-    return { sw, ux: m.ux, uy: m.uy, end: t, peak: sw.peak, same: false, back: false, home, x0: m.x0, y0: m.y0, x1, y1, len2: Math.max(1e-4, (x1 - m.x0) ** 2 + (y1 - m.y0) ** 2) };
+  // started, x0 y0). Only after a swing that went across the ready position, from behind it to beyond it: one that set
+  // off from the ready position may have been a quick wind-up (home), and swinging back from it is the stroke.
+  recovery(m, sw, t) {
+    const x1 = m.last ? m.last.x : m.x0, y1 = m.last ? m.last.y : m.y0, h = this.home;
+    const across = !h || (((m.x0 - h.x) * m.ux + (m.y0 - h.y) * m.uy) * this.sc < -0.05 && ((x1 - h.x) * m.ux + (y1 - h.y) * m.uy) * this.sc > 0.05);
+    return { sw, ux: m.ux, uy: m.uy, end: t, peak: sw.peak, same: false, back: false, home: !across, x0: m.x0, y0: m.y0, x1, y1, len2: Math.max(1e-4, (x1 - m.x0) ** 2 + (y1 - m.y0) ** 2) };
   }
   skip(m, role) {
     if (role === 'windup' && m.cls === 'windup?' && m.vmax >= this.thr) keep(this.winds, m.vmax, 9);   // (this player's wind-up speed)
@@ -460,12 +471,12 @@ class SwingDetector {
     // Reported late: its peak time is known by now, so the game still times it right.
     const tp = hm.pk ? this.peakAt(hm) : hm.t0;
     const sw = {
-      t0: tp, tOn: hm.tOn ?? tp, peak: hm.vmax * (hm.gapPk ? hm.gapK || 1.15 : 1), vx: hm.pk ? hm.pk[1].vx : hm.ux, vy: hm.pk ? hm.pk[1].vy : hm.uy,
+      t0: tp, tOn: hm.tOn ?? tp, peak: this.top(hm), vx: hm.pk ? hm.pk[1].vx : hm.ux, vy: hm.pk ? hm.pk[1].vy : hm.uy,
       x: hm.last.x, y: hm.last.y * (this.pts.length ? this.pts[this.pts.length - 1].asp : 4 / 3), src: this.src, dir: strokeDir(hm.ux, hm.uy, this.handed),
       side: Math.abs(hm.ux), gap: !!hm.gapPk, tPeak: tp, lead: tp - t, late: true, end: h.t, role: 'stroke',
     };
     this.ended = { t: h.t, ux: hm.ux, uy: hm.uy, sw, m: hm };
-    this.rec = this.recovery(hm, sw, h.t, true);
+    this.rec = this.recovery(hm, sw, h.t);
     out.push({ type: 'swing', swing: sw }, { type: 'swingEnd', swing: sw });
   }
   // When a movement's speed peaked: the middle of its fast part (the samples within 20% of the top, weighted by how far
@@ -480,10 +491,10 @@ class SwingDetector {
   learn(p) {
     const m = p.m, sw = m.sw;
     if (sw.gap || sw.late || sw.role !== 'stroke' || !(m.vmax > 1.2 * this.thr)) return;
-    keep(this.peaks, m.vmax, 9);
+    keep(this.peaks, this.top(m), 9);
     const r = sw.tPeak - sw.tOn;
-    if (r > 0.01 && r < 0.3) keep(this.rises, r, 9);
-    if (m.v0 > 0) keep(this.ratios, clamp(m.vmax / m.v0, 1, 2.5), 9);
+    if (r > 0.01 && r < 0.45) keep(this.rises, r, 9);
+    if (m.v0 > 0) keep(this.ratios, clamp(this.top(m) / m.v0, 1, 2.5), 9);
   }
   // Toss: the hand raised above the toss line and held there (not swept through it by a loop), and not carried up
   // there by a stroke's follow-through.
@@ -707,8 +718,10 @@ function lockColorFromPatch(px, info = {}) {
   let h = mean(all.filter((c) => hueDist(c.h, pb * 10 + 5) <= 15));
   const sel = all.filter((c) => hueDist(c.h, h) <= 12);
   info.share = N ? sel.length / N : 0;
-  // The paddle may fill only part of the circle, but its color must be most of the color in it.
-  if (!N || sel.length < Math.max(0.12 * N, 0.5 * all.length)) {
+  // The paddle may fill only part of the circle, but its color must be most of the color in it (saturation weighted:
+  // a teal shirt behind it is color too, just much less of it).
+  const s2 = (a) => a.reduce((q, c) => q + c.s * c.s, 0);
+  if (!N || sel.length < 0.12 * N || s2(sel) < 0.5 * s2(all)) {
     if ((info.frameV ?? vs / Math.max(1, N)) < 0.22) return fail('dark');
     if (blk >= 0.2 * N) return fail('black');
     if (skin >= Math.max(grey, all.length)) return fail('skin');
