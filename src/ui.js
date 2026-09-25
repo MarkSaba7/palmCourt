@@ -734,7 +734,7 @@ const UI = {
     }
     if (c) { c.count = null; $('camCount').hidden = true; }
     const prev = Tracker.lockPrev, r = Tracker.lockColor();
-    const ok = r === true || (!!r && typeof r === 'object' && r.ok !== false), why = r && typeof r === 'object' ? r.message || r.reason : '';
+    const ok = r === true || (!!r && typeof r === 'object' && r.ok !== false), why = r && typeof r === 'object' ? r.message || r.reason : Tracker.lockInfo && !Tracker.lockInfo.ok ? Tracker.lockInfo.msg : '';
     let msg;
     if (!ok) msg = [typeof why === 'string' && why ? why : prev && prev.col ? 'That color won’t track well. Use the red side of the paddle, turn it to the light, and lock again.' : 'That color is too dull or dark to track. Use the red side of the paddle, turn it to the light, and lock again.', 'bad'];
     else {

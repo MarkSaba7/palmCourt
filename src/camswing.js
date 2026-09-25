@@ -662,8 +662,10 @@ function lockColorFromPatch(px, info = {}) {
   let h = mean(all.filter((c) => hueDist(c.h, pb * 10 + 5) <= 15));
   const sel = all.filter((c) => hueDist(c.h, h) <= 12);
   info.share = N ? sel.length / N : 0;
-  // The paddle may fill only part of the circle, but its color must be most of the color in it.
-  if (!N || sel.length < Math.max(0.12 * N, 0.5 * all.length)) {
+  // The paddle may fill only part of the circle, but its color must be most of the color in it (saturation weighted:
+  // a teal shirt behind it is color too, just much less of it).
+  const s2 = (a) => a.reduce((q, c) => q + c.s * c.s, 0);
+  if (!N || sel.length < 0.12 * N || s2(sel) < 0.5 * s2(all)) {
     if ((info.frameV ?? vs / Math.max(1, N)) < 0.22) return fail('dark');
     if (blk >= 0.2 * N) return fail('black');
     if (skin >= Math.max(grey, all.length)) return fail('skin');
