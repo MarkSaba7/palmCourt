@@ -2,12 +2,12 @@
 
 Webcam tennis in the browser. Swing your hand (or a brightly colored paddle) at the camera and your player hits the ball. Your player runs to the ball on their own; you only swing. Play a CPU, or send a friend a link and play them online.
 
-Everything is in `index.html`: no build step, no game server, no accounts.
+It's a static web page (`index.html` plus the `src/` modules): no build step, no game server, no accounts.
 
 ## Play
 
 - **Easiest:** double-click `play.cmd`. It starts a tiny local server with Python and opens the game at <http://localhost:8765>.
-- **Or** open `index.html` directly in Chrome or Edge.
+- **Or** play it online once it's on GitHub Pages (see below). Opening `index.html` straight from a folder doesn't work: browsers block the game's modules on `file://` pages.
 
 The browser will ask for the camera the first time you choose **Hand** or **Paddle** controls. The hand tracker (about 8 MB) downloads on first use, then your browser caches it.
 
@@ -53,12 +53,12 @@ The two browsers connect directly (WebRTC via [PeerJS](https://peerjs.com)). Pee
 
 **The link only works if the game is on the web.** A link to a file on your computer won't open on your friend's machine. Options:
 
-- **Quick:** send your friend `index.html` too. You both open it, then they type your code under **Join**.
-- **Proper:** put it on GitHub Pages (free):
-  1. Create a GitHub account, then a new public repository (for example `palm-court`).
-  2. Upload `index.html` (Add file → Upload files → Commit).
-  3. Settings → Pages → Build from branch → `main` / root → Save.
-  4. After a minute it's live at `https://<your-username>.github.io/palm-court/`. Links you create from there work for anyone.
+- **Quick:** send your friend the whole Palm Court folder. You both start it with `play.cmd`, then they type your code under **Join**.
+- **Proper:** put it on GitHub Pages (free). The repository already has a workflow (`.github/workflows/pages.yml`) that publishes the game on every push to `main`:
+  1. Push this folder to a public GitHub repository (all of it: the game is `index.html`, `controller.html` and the `src/` folder, not `index.html` alone).
+  2. Settings → Pages → Build and deployment → Source: **GitHub Actions**.
+  3. Push to `main` (or open the Actions tab → Deploy to GitHub Pages → Run workflow).
+  4. After a minute it's live at `https://<your-username>.github.io/<repository>/`. Links you create from there work for anyone, and the phone racket works there too (open the phone link the game shows).
 
 ## What makes it realistic
 

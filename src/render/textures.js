@@ -37,6 +37,15 @@ float tcell(vec2 p, vec2 per) {
   }
   return d;
 }
+// tileable cellular noise: x = distance to the nearest feature point, y = a random value for that point's cell
+vec2 tcellId(vec2 p, vec2 per) {
+  vec2 i = floor(p), f = fract(p); float d = 8.0, id = 0.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 g = vec2(x, y), c = mod(i + g, per); float e = length(g + hash22(c) - f);
+    if (e < d) { d = e; id = hash12(c + 71.3); }
+  }
+  return vec2(d, id);
+}
 vec3 srgb2lin(vec3 c) { return pow(c, vec3(2.2)); }
 `;
 
@@ -45,9 +54,11 @@ const orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const vertex = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 
 // Render a fragment shader into a texture. The shader writes linear colors (or raw data for normal maps).
-export function gpuTexture({ width, height, fragment, uniforms = {}, repeat = false, mipmaps = true, type = THREE.UnsignedByteType }) {
+// srgb stores colour with sRGB precision (8-bit linear bands in dark tones); the GPU encodes and decodes it.
+// bands > 1 draws a big texture in strips, so one long draw can't trip the GPU watchdog on a slow chip.
+export function gpuTexture({ width, height, fragment, uniforms = {}, repeat = false, mipmaps = true, type = THREE.UnsignedByteType, srgb = false, bands = 1 }) {
   const rt = new THREE.WebGLRenderTarget(width, height, {
-    depthBuffer: false, type, generateMipmaps: mipmaps,
+    depthBuffer: false, type, generateMipmaps: mipmaps, colorSpace: srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace,
     minFilter: mipmaps ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter, magFilter: THREE.LinearFilter,
     wrapS: repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping, wrapT: repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping,
   });
@@ -60,11 +71,18 @@ export function gpuTexture({ width, height, fragment, uniforms = {}, repeat = fa
   });
   const mesh = new THREE.Mesh(quadGeo, mat), sc = new THREE.Scene();
   sc.add(mesh);
-  const prev = renderer.getRenderTarget(), prevTone = renderer.toneMapping;
-  renderer.setRenderTarget(rt);
-  renderer.render(sc, orthoCam);
+  const prev = renderer.getRenderTarget(), n = Math.max(1, bands | 0);
+  rt.scissorTest = n > 1;
+  for (let i = 0; i < n; i++) {
+    const y0 = Math.floor((height * i) / n), y1 = Math.floor((height * (i + 1)) / n);
+    rt.scissor.set(0, y0, width, y1 - y0);
+    rt.texture.generateMipmaps = mipmaps && i === n - 1;   // build the mip chain once, after the last strip
+    renderer.setRenderTarget(rt);
+    renderer.render(sc, orthoCam);
+  }
+  rt.scissorTest = false;
+  rt.texture.generateMipmaps = mipmaps;
   renderer.setRenderTarget(prev);
-  renderer.toneMapping = prevTone;
   mat.dispose();
   return rt.texture;
 }
@@ -81,6 +99,24 @@ export function normalFromHeight({ size = 1024, heightGlsl, strength = 1, unifor
         float hd = height(fract(vUv - vec2(0.0, e.y))), hu = height(fract(vUv + vec2(0.0, e.y)));
         vec3 n = normalize(vec3((hl - hr) * uStrength, (hd - hu) * uStrength, 1.0));
         gl_FragColor = vec4(n * 0.5 + 0.5, height(vUv));
+      }`,
+  });
+}
+
+// Tiling surface detail packed for one fetch: RG = normal x/y (z is rebuilt), B = micro albedo, A = micro roughness
+// (0.5 = neutral). The GLSL defines float height(vec2 uv) (0..1) and vec2 micro(vec2 uv), both periodic over 0..1.
+// Slopes are scaled to the texture size, so every size gives the same bumps.
+export function detailTexture({ size = 1024, glsl, strength = 1 }) {
+  return gpuTexture({
+    width: size, height: size, repeat: true, uniforms: { uStrength: { value: strength } },
+    fragment: glsl + `
+      uniform float uStrength;
+      void main() {
+        vec2 e = 1.0 / uRes; float k = uStrength * uRes.x / 1024.0;
+        float hl = height(fract(vUv - vec2(e.x, 0.0))), hr = height(fract(vUv + vec2(e.x, 0.0)));
+        float hd = height(fract(vUv - vec2(0.0, e.y))), hu = height(fract(vUv + vec2(0.0, e.y)));
+        vec3 n = normalize(vec3((hl - hr) * k, (hd - hu) * k, 1.0));
+        gl_FragColor = vec4(n.xy * 0.5 + 0.5, clamp(micro(vUv), 0.0, 1.0));
       }`,
   });
 }
