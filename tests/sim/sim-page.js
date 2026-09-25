@@ -73,9 +73,10 @@ export function humanBot() {
   if (!pl || pl.ctl !== 'human' || !Game.inPlay()) return;
   if (Game.state === 'serve' && m.currentServer === pl.idx && now >= Game.serveReadyAt && !Game.bouncing(now)) Input.press(0.6, 0.3, 'mouse');
   else if (Game.state === 'toss' && m.currentServer === pl.idx && now - Game.tossT >= Bot.tossAt && pl.hitFor !== -3) Input.press(0.5 + 0.4 * Math.random(), 0.3, 'mouse');
-  else if (Game.state === 'rally' && pl.plan && b.lastHitter === 1 - pl.idx && pl.hitFor !== b.rally && pl.botFor !== b.rally) {
-    if (pl.botAt == null || pl.botRally !== b.rally) { pl.botRally = b.rally; pl.botAt = pl.plan.t + (Math.random() - 0.5) * 2 * Bot.scatter; pl.botMiss = Math.random() < Bot.miss; }
-    if (now >= pl.botAt - 0.02 && !pl.botMiss) { pl.botFor = b.rally; Input.press(0.35 + 0.5 * Math.random(), Math.random() * 1.4 - 0.4, 'mouse'); }
+  else if (Game.state === 'rally' && pl.plan && b.lastHitter === 1 - pl.idx && pl.hitFor !== b.rally && pl.botFor !== b.hitT) {
+    // (keyed by the time of the opponent's stroke: rally numbers repeat every point)
+    if (pl.botShot !== b.hitT) { pl.botShot = b.hitT; pl.botAt = pl.plan.t + (Math.random() - 0.5) * 2 * Bot.scatter; pl.botMiss = Math.random() < Bot.miss; }
+    if (now >= pl.botAt - 0.02 && !pl.botMiss) { pl.botFor = b.hitT; Input.press(0.35 + 0.5 * Math.random(), Math.random() * 1.4 - 0.4, 'mouse'); }
   }
 }
 export function onlineStep(secs, dt = 1 / 60, bot = true) {
@@ -263,7 +264,7 @@ class Checker {
       if (G.state !== 'over') this.err('state not over after finish');
       if (G.mode !== 'attract' && (UI.screen !== 'over' || !over || over.hidden)) this.err(`over screen not shown (screen ${UI.screen})`);
       const title = document.getElementById('overTitle').textContent;
-      const wantTitle = m.winner === G.localIdx ? 'You win' : `${G.names[m.winner]} wins`;
+      const wantTitle = m.winner === G.localIdx ? 'You win' : `${UI.shortName ? UI.shortName(m.winner) : G.names[m.winner]} wins`;
       if (title !== wantTitle) this.err(`over title "${title}", want "${wantTitle}"`);
       this.count('matchOver');
     });

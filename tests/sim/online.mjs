@@ -23,14 +23,15 @@ export async function onlineMatch(A, B, o = {}) {
   await A.evaluate(async () => { const { UI } = await import('/src/ui.js'); await UI.startOnlineAsHost(); });   // the host presses Start match
   const qA = [], qB = [], sA = { last: 0 }, sB = { last: 0 }, errors = [], fail = (msg) => { if (errors.length < 20) errors.push({ msg }); };
   const step = (page, inbox) => page.evaluate(({ SIM, inbox, chunk, dt }) => import(SIM).then((S) => { S.Link.inbox.push(...inbox); return S.onlineStep(chunk, dt); }), { SIM, inbox, chunk, dt });
-  let t = 0, a, b, compared = 0, matches = 0, cut = false, note = '';
+  let t = 0, a, b, compared = 0, matches = 0, cut = false, note = '', started = false;
   while (t < maxT) {
     a = await step(A, qA.splice(0));
     if (!cut) schedule(qB, a.out, lat, jit, sB);
     b = await step(B, qB.splice(0));
     if (!cut) schedule(qA, b.out, lat, jit, sA);
     t += chunk;
-    if (a.mode !== 'online' || b.mode !== 'online') break;
+    if (a.mode === 'online' && b.mode === 'online') started = true;
+    else if (started || t > 5) { if (!started) fail(`match did not start: host ${a.mode}, guest ${b.mode}`); break; }
     // between points both machines must agree on the whole score
     if (a.st === 'serve' && b.st === 'serve' && a.m && b.m) { compared++; if (!same(a.m, b.m)) { fail(`scores differ at ${t.toFixed(1)} s: host ${JSON.stringify(a.m.pts)} ${JSON.stringify(a.m.games)} srv ${a.m.server}/${a.m.serveNo} · guest ${JSON.stringify(b.m.pts)} ${JSON.stringify(b.m.games)} srv ${b.m.server}/${b.m.serveNo}`); break; } }
     if (disconnectAt != null && t >= disconnectAt && !cut) {

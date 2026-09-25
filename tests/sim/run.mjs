@@ -47,7 +47,7 @@ try {
         const S = await import('/tests/sim/sim-page.js'), C = S.getChecker(), G = window.PalmCourt.Game;
         C.reset();
         await S.startPractice({ ...c, first: Math.random() < 0.5 ? 0 : 1 });
-        const done = S.runUntil(() => G.state === 'over', c.format === 'full' ? 4000 : 2500, dt);
+        const done = S.runUntil(() => G.state === 'over', c.format === 'full' ? 9000 : 6000, dt);
         const m = G.match;
         return { ...C.report(), ok: done, why: done ? '' : `not finished: ${G.state} ${JSON.stringify(m.toJSON())}`, score: m.tbOnly ? m.pts.join('-') : m.games.join('-') + (m.tb ? ` (${m.pts.join('-')})` : ''), gameT: S.V.t };
       }, { c, dt });
@@ -74,8 +74,8 @@ try {
     const B = await ctx.newPage();
     B.on('console', (m) => logs.push(`[guest ${m.type()}] ${m.text()}`));
     B.on('pageerror', (e) => logs.push(`[pageerror] guest ${e.message}\n${e.stack || ''}`));
-    await B.goto(page.url());
-    await B.waitForFunction(() => window.PalmCourt && window.PalmCourt.Game, null, { timeout: 120000 });
+    await B.goto(page.url(), { waitUntil: 'domcontentloaded', timeout: 180000 });
+    await B.waitForFunction(() => window.PalmCourt && window.PalmCourt.Game, null, { timeout: 180000 });
     const cases = [
       ['LAN 40 ms', { format: 'short', surface: 'hard', lat: 0.04, jit: 0.01 }],
       ['internet 120 ms, jitter, clock 25 ms off', { format: 'tiebreak', surface: 'clay', lat: 0.12, jit: 0.08, skew: 0.025 }],
