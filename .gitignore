@@ -19,6 +19,7 @@ release/
 .worklog/HEARTBEAT
 .worklog/agents/
 .claude/settings.local.json
+.claude/worktrees/
 .DS_Store
 Thumbs.db
 desktop.ini
