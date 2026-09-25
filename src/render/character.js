@@ -224,7 +224,7 @@ function torsoWeights(y) {
 // look.headwear: 'none' | 'headband' | 'bandana' | 'cap' (absent: the old look.headband boolean)
 // look.beard: 0 clean-shaven .. 0.3 stubble .. 1 short full beard; look.face: { jaw, cheek, nose, brow, chin, eyes }
 // multipliers around 1; look.eyeColor (optional).
-const HC = [0, 1.708, -0.006], HR = [0.083, 0.112, 0.099];   // head centre (note the 6 mm z offset) and radii
+const HC = [0, 1.708, -0.006], HR = [0.08, 0.112, 0.099];   // head centre (note the 6 mm z offset) and radii
 const FACE0 = { jaw: 1, cheek: 1, nose: 1, brow: 1, chin: 1, eyes: 1 };
 const gs = (a, w) => Math.exp(-((a / w) ** 2));
 const sst = (x, a, b) => THREE.MathUtils.smoothstep(x, a, b);   // 0 below a, 1 above b (a < b)
@@ -238,25 +238,26 @@ function headShape(ux, uy, uz, d, F = FACE0) {
   if (uy > 0.1 && uz > 0) z += 0.008 * uy;                                                    // back of the skull
   if (uy < 0) {                                                                                // jaw and lower face
     const t = -uy, j = 2 - F.jaw;
-    x *= 1 - 0.13 * j * t - 0.5 * j * Math.max(0, t - 0.55) ** 1.5 - 0.1 * fa * fa * t * t;  // square angle, in to the chin
-    z -= (0.004 + 0.011 * sst(t, 0.25, 0.6) + 0.013 * F.chin * sst(t, 0.6, 0.9)) * fa * fa; // mouth and chin under the nose
-    y -= 0.005 * (F.chin - 1) * sst(t, 0.7, 0.95) * fa;
+    x *= 1 - 0.1 * j * t - 0.45 * j * Math.max(0, t - 0.55) ** 1.5 - 0.06 * fa * fa * t * t;  // square angle, in to the chin
+    z -= (0.003 + 0.008 * sst(t, 0.25, 0.6) + 0.009 * F.chin * sst(t, 0.6, 0.9)) * fa * fa;  // mouth and chin under the nose
+    x *= 1 + 0.12 * sst(t, 0.6, 0.95) * (1 - fa);                                             // jaw's lower border, not a point
+    y += 0.008 * sst(t, 0.85, 1) - 0.005 * (F.chin - 1) * sst(t, 0.7, 0.95) * fa;           // flatter underneath
   }
   const N = F.nose * f;                                                                        // nose: bridge, tip, wings
-  z -= N * (0.0035 + 0.016 * sst(-uy, -0.1, 0.25)) * (1 - sst(-uy, 0.3, 0.41)) * gs(ux, 0.07 + 0.05 * sst(-uy, 0, 0.3));
+  z -= N * (0.0035 + 0.016 * sst(-uy, -0.1, 0.25)) * (1 - sst(-uy, 0.3, 0.41)) * gs(ux, 0.055 + 0.06 * sst(-uy, 0, 0.3));
   z -= N * 0.005 * gs(ux, 0.1) * gs(uy + 0.27, 0.06);
   z -= N * 0.006 * gs(ax - 0.16, 0.07) * gs(uy + 0.32, 0.055);
   x *= 1 + 0.12 * (F.nose - 1) * gs(ax - 0.16, 0.1) * gs(uy + 0.3, 0.08) * f;
   z -= 0.0075 * F.brow * gs(uy - 0.22, 0.075) * gs(ux, 0.5) * f;                             // brow ridge
   z += 0.009 * gs(ax - 0.38, 0.14) * gs(uy - 0.07, 0.1) * f;                                 // eye sockets
-  x *= 1 + 0.04 * F.cheek * gs(uy + 0.08, 0.16) * f;                                         // cheekbones
+  x *= 1 + 0.02 * F.cheek * gs(uy + 0.08, 0.16) * f;                                         // cheekbones
   z -= 0.004 * F.cheek * gs(ax - 0.5, 0.16) * gs(uy + 0.12, 0.12) * f;
   z += 0.0025 * gs(ax - 0.56, 0.12) * gs(uy + 0.42, 0.12) * f;                               // under the cheekbone
   z -= 0.0035 * gs(ux, 0.24) * gs(uy + 0.5, 0.045) * fa;                                     // upper lip
   z -= 0.004 * gs(ux, 0.22) * gs(uy + 0.6, 0.045) * fa;                                      // lower lip
   z += 0.002 * gs(ax - 0.3, 0.05) * gs(uy + 0.55, 0.05) * fa;                                // mouth corners
   z += 0.002 * gs(ux, 0.25) * gs(uy + 0.7, 0.04) * fa;                                       // fold under the lip
-  z -= 0.008 * F.chin * gs(ux, 0.26) * gs(uy + 0.82, 0.09) * fa;                             // chin
+  z -= 0.006 * F.chin * gs(ux, 0.26) * gs(uy + 0.82, 0.09) * fa;                             // chin
   return [x, y, z];
 }
 
@@ -331,10 +332,10 @@ const HAIR = {
   short: { hl: HL, soft: 0.12, top: 0.013, side: 0.006, back: 0.008, lift: 0.005 },
   buzz: { hl: HL, soft: 0.07, top: 0.003, side: 0.0025, back: 0.0025, lift: 0 },
   ponytail: { hl: [[0, 0.66], [0.6, 0.62], [1.0, 0.36], [1.3, 0.06], [1.45, 0.1], [1.52, 0.2], [1.92, 0.2], [2.2, -0.12], [2.6, -0.42], [Math.PI, -0.5]], soft: 0.14, top: 0.007, side: 0.0045, back: 0.006, lift: 0 },
-  crop: { hl: [[0, 0.72], [0.35, 0.74], [0.7, 0.68], [0.95, 0.5], [1.12, 0.2], [1.27, -0.04], [1.42, -0.06], [1.52, 0.18], [1.92, 0.22], [2.15, -0.1], [2.55, -0.38], [Math.PI, -0.48]], soft: 0.1, top: 0.017, side: 0.0035, back: 0.004, lift: 0.007 },
-  textured: { hl: [[0, 0.64], [0.35, 0.67], [0.7, 0.6], [0.95, 0.42], [1.12, 0.18], [1.27, -0.08], [1.42, -0.1], [1.52, 0.18], [1.92, 0.22], [2.15, -0.1], [2.55, -0.38], [Math.PI, -0.48]], soft: 0.08, top: 0.02, side: 0.0045, back: 0.006, lift: 0.004 },
+  crop: { hl: [[0, 0.72], [0.35, 0.74], [0.7, 0.68], [0.95, 0.5], [1.12, 0.2], [1.27, -0.04], [1.42, -0.06], [1.52, 0.18], [1.92, 0.22], [2.15, -0.1], [2.55, -0.38], [Math.PI, -0.48]], soft: 0.1, top: 0.022, side: 0.004, back: 0.0045, lift: 0.01 },
+  textured: { hl: [[0, 0.64], [0.35, 0.67], [0.7, 0.6], [0.95, 0.42], [1.12, 0.18], [1.27, -0.08], [1.42, -0.1], [1.52, 0.18], [1.92, 0.22], [2.15, -0.1], [2.55, -0.38], [Math.PI, -0.48]], soft: 0.08, top: 0.026, side: 0.005, back: 0.007, lift: 0.012 },
   curly: { hl: [[0, 0.6], [0.35, 0.62], [0.7, 0.55], [0.95, 0.38], [1.12, 0.18], [1.27, -0.06], [1.42, -0.08], [1.52, 0.2], [1.92, 0.24], [2.15, -0.1], [2.55, -0.4], [Math.PI, -0.5]], soft: 0.08, top: 0.033, side: 0.013, back: 0.018, lift: 0.003 },
-  wavy: { hl: [[0, 0.7], [0.35, 0.72], [0.7, 0.6], [0.95, 0.4], [1.12, 0.16], [1.27, -0.12], [1.42, -0.14], [1.52, 0.1], [1.92, 0.14], [2.15, -0.14], [2.55, -0.46], [Math.PI, -0.6]], soft: 0.11, top: 0.021, side: 0.013, back: 0.016, lift: 0.006 },
+  wavy: { hl: [[0, 0.7], [0.35, 0.72], [0.7, 0.6], [0.95, 0.4], [1.12, 0.16], [1.27, -0.12], [1.42, -0.14], [1.52, -0.04], [1.92, -0.02], [2.15, -0.2], [2.55, -0.48], [Math.PI, -0.6]], soft: 0.11, top: 0.026, side: 0.016, back: 0.02, lift: 0.008 },
   long: { hl: [[0, 0.7], [0.35, 0.72], [0.7, 0.6], [0.95, 0.4], [1.08, 0.12], [1.2, -0.3], [Math.PI, -0.3]], soft: 0.11, top: 0.017, side: 0.018, back: 0.018, lift: 0.002 },
 };
 
@@ -366,7 +367,7 @@ function beardZone(u) {
 function hairPress(wear, y, a) {
   if (wear === 'headband' || wear === 'bandana') {
     const [b, t] = bandAt(wear, a);
-    return 0.0024 + (y > t ? 0.8 * (y - t) : 1.2 * Math.max(0, b - y));
+    return 0.0024 + (y > t ? 1.3 * (y - t) : 1.2 * Math.max(0, b - y));
   }
   if (wear === 'cap') { const c = capAt(a) - 0.004; return 0.0045 + 1.2 * Math.max(0, c - y); }
   return Infinity;
@@ -380,8 +381,8 @@ function buildHead(bld, look) {
   bld.loft([
     [1.47, 0.064, 0.063, 0.063, 2, 'skin', [['chest', 0.6], ['neck', 0.4]], 0, 0.01],
     [1.53, 0.062, 0.06, 0.06, 2, 'skin', [['neck', 1]], 0, 0.01],
-    [1.585, 0.06, 0.058, 0.058, 2, 'skin', [['neck', 0.5], ['head', 0.5]], 0, 0.008],
-    [1.64, 0.05, 0.048, 0.048, 2, 'skin', [['head', 1]], 0, 0.004],
+    [1.585, 0.062, 0.06, 0.059, 2, 'skin', [['neck', 0.5], ['head', 0.5]], 0, 0.008],
+    [1.64, 0.054, 0.05, 0.05, 2, 'skin', [['head', 1]], 0, 0.004],
   ], 16);
   // Skull and face: rows and columns bunch up on the face. aEdge carries the stubble shadow (1 = none) for the shader.
   const LAT = 44, LON = 60, stub = beard * hairDark(look.hairColor);
@@ -400,7 +401,7 @@ function buildHead(bld, look) {
       x += s * 0.005 * (uz + 1) / 2;
       const c = Math.cos(0.22), sn = Math.sin(0.22);
       [y, z] = [y * c - z * sn, y * sn + z * c];
-      return [s * 0.079 + x, 1.699 + y, 0.01 + z, H, PAR0, 1];
+      return [s * 0.077 + x, 1.699 + y, 0.01 + z, H, PAR0, 1];
     }, 'skin');
     // eye: set into the socket; its detail coordinates are stretched so the shader's iris comes out a real size
     const ex = s * 0.032, ey = 1.7136, ue = [ex / HR[0], (ey - HC[1]) / HR[1], 0];
@@ -410,17 +411,17 @@ function buildHead(bld, look) {
     grid(bld, 9, 14, (i, j) => { const [ux, uy, uz] = eyeU(i, j, 8, 14); return [ex + ux * er[0], ey + uy * er[1], ez + uz * er[2], H, [ux * 1.3, uy * 1.08, uz, 1], 1]; }, 'eye');
     // upper lid: a skin hood over the top of the eye, its rim resting on the eyeball
     grid(bld, 5, 8, (i, j) => {
-      const ph = 1.25 * i / 4, th = Math.PI + Math.PI * j / 7, ux = Math.sin(ph) * Math.cos(th), uy = Math.cos(ph), uz = Math.sin(ph) * Math.sin(th);
-      const k = 1.1 + 0.18 * (1 - i / 4) + 0.06 / er[2] * 0.001;
+      const ph = 1.42 * i / 4, th = Math.PI + Math.PI * j / 7, ux = Math.sin(ph) * Math.cos(th), uy = Math.cos(ph), uz = Math.sin(ph) * Math.sin(th);
+      const k = 1.08 + 0.18 * (1 - i / 4);
       return [ex + ux * er[0] * (k + 0.05), ey + 0.0006 + uy * er[1] * (k + 0.12), ez + uz * er[2] * k, H, PAR0, 1];
     }, 'skin', { wrap: false });
     // brow: a curved strip on the brow ridge, thick at the inner end and tapering out, soft at both ends
     grid(bld, 5, 9, (i, j) => {
       const k = j / 8, v = i / 2 - 1, ux = s * (0.1 + 0.5 * k);
-      const uy = 0.215 + 0.045 * Math.sin(Math.PI * Math.pow(k, 0.75)) - 0.03 * k + v * (0.042 - 0.024 * k) * (0.8 + 0.2 * F.brow);
+      const uy = 0.205 + 0.04 * Math.sin(Math.PI * Math.pow(k, 0.75)) - 0.03 * k + v * (0.035 - 0.02 * k) * (0.8 + 0.2 * F.brow);
       const u = [ux, uy, -Math.sqrt(Math.max(0, 1 - ux * ux - uy * uy))];
       const edge = sst(k, 0, 0.12) * (1 - sst(k, 0.8, 1)) * (1 - 0.7 * Math.abs(v) ** 2);
-      return [...headAt(u, F, 0.0011 + (1 - v * v) * (0.0012 + 0.0012 * (1 - k)) * F.brow), H, [u[0], u[1], u[2], 1], edge];
+      return [...headAt(u, F, 0.0011 + (1 - v * v) * (0.0009 + 0.001 * (1 - k)) * F.brow), H, [u[0], u[1], u[2], 1], edge];
     }, 'hair', { wrap: false, inside: () => HC });
   }
   // Full beard: a hair shell over the stubble shadow, on the same grid as the face so it sits parallel to it.
@@ -451,17 +452,17 @@ function buildHair(bld, look, F, style, wear, H) {
   const skull = (ph, a) => {
     const u = unitAt(ph, a), [ux, uy, uz] = u, aa = Math.abs(a);
     const m = uy - curve(S.hl, aa), e = sst(m, 0, S.soft);
-    if (m < -0.07) return null;
+    if (m < -0.25) return null;
     const topW = sst(uy, 0.15, 0.8), backW = sst(uz, 0.15, 0.7) * (1 - topW), sideW = 1 - topW - backW;
     let side = S.side;
     if (style === 'crop') side *= 0.35 + 0.65 * sst(uy, -0.3, 0.35);   // tapered short back and sides
     let t = S.top * topW + side * sideW + S.back * backW + S.lift * sst(-uz, 0.2, 0.75) * sst(uy, 0.35, 0.75);
     if (!long && !wavy) t *= 1 - 0.4 * gs(aa - 1.72, 0.25) * (1 - sst(uy, 0.25, 0.5));   // flat over the ears
     let par = [ux, uy, uz, 1];
-    if (style === 'crop') t += 0.004 * topW * Math.max(0, 1 - cells(ux / 0.3, uy / 0.3, uz / 0.3)[0] / 0.7);
+    if (style === 'crop') t += 0.005 * topW * Math.max(0, 1 - cells(ux / 0.3, uy / 0.3, uz / 0.3)[0] / 0.7);
     if (tex) {   // messy tufts on top
       const [cd, id] = cells(ux / 0.26 + 3, uy / 0.26, uz / 0.26);
-      t += topW * 0.013 * (0.5 + id) * Math.max(0, 1 - cd / 0.75) ** 1.5;
+      t += topW * 0.016 * (0.5 + id) * Math.max(0, 1 - cd / 0.75) ** 1.5;
       par = [ux * Math.cos(id * 3) - uz * Math.sin(id * 3), uy, ux * Math.sin(id * 3) + uz * Math.cos(id * 3), 1];
     }
     if (curly) {   // clumps of curls, with a finer set on top of them
@@ -475,8 +476,8 @@ function buildHair(bld, look, F, style, wear, H) {
       const c = Math.cos(0.35), sn = Math.sin(0.35);   // strands run from the front hairline back, tilted off the part
       par = [ux * c + uy * sn, -uz, -ux * sn + uy * c, 1];
     }
-    t = m < 0 ? 0.0016 + m * 0.07 : Math.min(0.0016 + e * t, hairPress(wear, HC[1] + uy * HR[1], a));
-    return { p: headAt(u, F, t), t, e, par };
+    t = m < 0 ? Math.max(-0.0025, 0.0016 + m * 0.07) : Math.min(0.0016 + e * t, hairPress(wear, HC[1] + uy * HR[1], a));
+    return { p: headAt(u, F, t), t, e: THREE.MathUtils.clamp(m / S.soft, -1, 1), par };   // signed, so the shader finds the true edge
   };
   const last = new Map();   // long hair: the skull rim each curtain column hangs from
   const rim = (j) => { if (!last.has(j)) last.set(j, skull(phMax, aOf(j))); return last.get(j); };
@@ -602,9 +603,9 @@ function bSuper(c, s, a, zf, zb, n) {
 // Shirt over the torso: [y, half width, front depth, back depth, squareness]. It hangs straight from the chest and
 // shoulder blades, so the waist is only a little narrower; the hem sits over the shorts' waistband.
 const SHIRT = bKeys([
-  [0.958, 0.183, 0.107, 0.132, 2.3], [0.985, 0.179, 0.106, 0.126, 2.3], [1.02, 0.174, 0.105, 0.116, 2.3],
-  [1.08, 0.167, 0.104, 0.105, 2.35], [1.14, 0.165, 0.105, 0.1, 2.4], [1.2, 0.169, 0.107, 0.1, 2.45],
-  [1.25, 0.175, 0.11, 0.103, 2.5], [1.3, 0.182, 0.113, 0.107, 2.6], [1.34, 0.186, 0.115, 0.111, 2.7],
+  [0.958, 0.182, 0.106, 0.132, 2.3], [0.985, 0.177, 0.105, 0.126, 2.3], [1.02, 0.169, 0.103, 0.116, 2.3],
+  [1.08, 0.16, 0.102, 0.104, 2.35], [1.14, 0.157, 0.103, 0.099, 2.4], [1.2, 0.163, 0.106, 0.1, 2.45],
+  [1.25, 0.172, 0.11, 0.103, 2.5], [1.3, 0.182, 0.113, 0.107, 2.6], [1.34, 0.186, 0.115, 0.111, 2.7],
   [1.37, 0.189, 0.115, 0.113, 2.75], [1.4, 0.191, 0.113, 0.113, 2.8], [1.425, 0.191, 0.109, 0.111, 2.8],
   [1.447, 0.185, 0.103, 0.107, 2.7], [1.466, 0.171, 0.096, 0.103, 2.5], [1.483, 0.151, 0.088, 0.097, 2.35],
   [1.497, 0.127, 0.08, 0.09, 2.2], [1.508, 0.101, 0.073, 0.083, 2.05], [1.515, 0.083, 0.068, 0.079, 2.0],
@@ -616,7 +617,7 @@ const PELVIS = bKeys([
 ]);
 const SHIRT_HEM = 0.958, NECKLINE = 1.515, NECK_Z = 0.006, NECK_TILT = 0.012;   // the neckline dips 12 mm at the front
 // Bare arm (radius, metres, for arm = 1.14) and leg (for leg = 1.1) before muscles and landmarks.
-const ARM_R = bKeys([[0.9, 0.026], [0.915, 0.027], [0.94, 0.028], [0.965, 0.03], [1.0, 0.034], [1.04, 0.04], [1.08, 0.044], [1.11, 0.045], [1.14, 0.043], [1.165, 0.041], [1.19, 0.042], [1.22, 0.046], [1.26, 0.049], [1.3, 0.05], [1.34, 0.054], [1.38, 0.058], [1.42, 0.062], [1.45, 0.062], [1.468, 0.057], [1.482, 0.047], [1.492, 0.032]]);
+const ARM_R = bKeys([[0.9, 0.026], [0.915, 0.027], [0.94, 0.028], [0.965, 0.031], [1.0, 0.035], [1.04, 0.041], [1.08, 0.046], [1.11, 0.047], [1.14, 0.045], [1.165, 0.042], [1.19, 0.044], [1.22, 0.048], [1.26, 0.052], [1.3, 0.054], [1.34, 0.057], [1.38, 0.06], [1.42, 0.062], [1.448, 0.061], [1.466, 0.055], [1.479, 0.045], [1.488, 0.03]]);
 const LEG_R = bKeys([[0.085, 0.033], [0.1, 0.033], [0.13, 0.031], [0.17, 0.03], [0.21, 0.031], [0.26, 0.035], [0.31, 0.04], [0.36, 0.045], [0.4, 0.048], [0.44, 0.05], [0.47, 0.05], [0.5, 0.051], [0.525, 0.052], [0.55, 0.054], [0.58, 0.058], [0.62, 0.064], [0.68, 0.07], [0.74, 0.075], [0.8, 0.079], [0.86, 0.082]]);
 
 function buildTorso(bld, look) {
@@ -624,7 +625,7 @@ function buildTorso(bld, look) {
   // Bare skin cut out of the shirt, as signed distances in metres (positive = cloth): armholes, a V-neck, an open
   // polo placket. They reach the shader through aEdge, so the edge is crisp at any mesh density.
   const holes = [];
-  if (look.sleeve <= 0.001) holes.push((x, y, z) => bSmax((Math.hypot((y - 1.362) / 0.13, (z - 0.004) / 0.098) - 1) * 0.1, 0.138 - Math.abs(x), 0.02));
+  if (look.sleeve <= 0.001) holes.push((x, y) => bSmax(0.138 + 0.054 * bClamp((1.44 - y) / 0.19) ** 2 - Math.abs(x), 1.255 - y, 0.02));   // tank-top armholes
   if (collar === 'v') holes.push((x, y, z) => Math.max((1.415 + 1.25 * Math.abs(x) - y) / 1.6, z + 0.03));
   if (collar === 'polo') holes.push((x, y, z) => Math.max((1.468 + 2.2 * Math.abs(x) - y) / 2.4, z + 0.03));
   const cloth = (x, y, z) => holes.reduce((d, f) => Math.min(d, f(x, y, z)), 1);
@@ -654,7 +655,8 @@ function buildTorso(bld, look) {
   // hem turned in under the shirt's edge (over the shorts), then the shirt up to the neckline
   const [la, lzf, lzb, ln] = PELVIS(SHIRT_HEM + 0.012);
   const rings = [bld.ringP(0, SHIRT_HEM + 0.012, 0, (c, s) => bSuper(c, s, la - 0.004, lzf - 0.004, lzb - 0.004, ln), SEG, (c, s, x, y) => torsoWeights(y), 3, () => 0.5)];
-  for (const y of [SHIRT_HEM, 0.985, 1.02, 1.06, 1.1, 1.14, 1.18, 1.22, 1.26, 1.3, 1.335, 1.37, 1.4, 1.425, 1.447, 1.466, 1.483, 1.497, 1.508, NECKLINE]) rings.push(bld.ringP(0, y, 0, shirtAt(y), SEG, tw, 3, edge));
+  const kind = collar === 'polo' ? 3.25 : 3;   // the fraction tells the shader to draw a placket
+  for (const y of [SHIRT_HEM, 0.985, 1.02, 1.06, 1.1, 1.14, 1.18, 1.22, 1.26, 1.3, 1.335, 1.37, 1.4, 1.425, 1.447, 1.466, 1.483, 1.497, 1.508, NECKLINE]) rings.push(bld.ringP(0, y, 0, shirtAt(y), SEG, tw, kind, edge));
   for (const r of rings) r.region = 'shirt';
   bld.chain(rings, 5);
   buildCollar(bld, collar, SEG);
@@ -733,7 +735,7 @@ function buildArm(bld, look, s) {
   // radius toward (c, sn): bones and muscles; cloth drapes over half of that relief
   const rad = (y, c, sn, cl) => {
     const ph = Math.atan2(-sn, c * s);   // 0 = outward, PI/2 = forward
-    const b = (0.005 + 0.008 * m) * bG(y - 1.41, 0.05) * bGA(ph, 0, 1.3)      // deltoid
+    const b = (0.003 + 0.007 * m) * bG(y - 1.4, 0.06) * bGA(ph, 0, 1.3)       // deltoid
       + (0.002 + 0.004 * m) * bG(y - 1.33, 0.03) * bGA(ph, 0, 0.5)            // its insertion, halfway down the outside
       + (0.005 + 0.009 * m) * bG(y - 1.265, 0.05) * bGA(ph, 1.57, 0.8)        // biceps
       + (0.004 + 0.007 * m) * bG(y - 1.33, 0.06) * bGA(ph, -1.3, 0.85)        // triceps
@@ -752,13 +754,13 @@ function buildArm(bld, look, s) {
   const ring = (y, reg, extra, cl, e) => {
     const r = bld.ringP(px(y), y, pz(y), (c, sn) => {
       const rr = rad(y, c, sn, cl) + extra(c, sn);
-      return [c * rr, sn * rr, -0.012 * Math.max(0, -c * s) * bStep(y, 1.44, 1.49)];   // the top of the shoulder slopes in to the neck
+      return [c * rr, sn * rr, -0.016 * Math.max(0, -c * s) * bStep(y, 1.44, 1.49)];   // the top of the shoulder slopes in to the neck
     }, 20, wts, 0, e);
     r.region = reg;
     return r;
   };
-  const none = () => 0, top = 1.499;
-  const YS = [1.492, 1.484, 1.474, 1.462, 1.448, 1.43, 1.405, 1.38, 1.355, 1.33, 1.305, 1.28, 1.255, 1.23, 1.205, 1.185, 1.165, 1.145, 1.125, 1.1, 1.075, 1.05, 1.02, 0.99, 0.97, 0.95, 0.93, 0.915, 0.9];
+  const top = 1.494;
+  const YS = [1.488, 1.479, 1.47, 1.46, 1.448, 1.43, 1.405, 1.38, 1.355, 1.33, 1.305, 1.28, 1.255, 1.23, 1.205, 1.185, 1.165, 1.145, 1.125, 1.1, 1.075, 1.05, 1.02, 0.99, 0.97, 0.95, 0.93, 0.915, 0.9];
   // bare arm (under a sleeve it starts just above the hem)
   const secs = [];
   for (const y of YS) {
@@ -844,8 +846,8 @@ function buildLeg(bld, look, s) {
 const SHOE = bKeys([
   [-0.205, 0.016, 0.012, 0.027, 0.029], [-0.198, 0.031, 0.027, 0.025, 0.035], [-0.185, 0.042, 0.038, 0.023, 0.042],
   [-0.165, 0.049, 0.045, 0.022, 0.049], [-0.135, 0.053, 0.049, 0.022, 0.057], [-0.1, 0.052, 0.048, 0.023, 0.065],
-  [-0.06, 0.049, 0.045, 0.025, 0.073], [-0.02, 0.046, 0.042, 0.027, 0.079], [0.01, 0.044, 0.04, 0.029, 0.082],
-  [0.035, 0.043, 0.039, 0.03, 0.086], [0.055, 0.039, 0.035, 0.031, 0.089], [0.068, 0.031, 0.027, 0.031, 0.084],
+  [-0.06, 0.049, 0.045, 0.025, 0.077], [-0.02, 0.046, 0.042, 0.027, 0.085], [0.01, 0.044, 0.04, 0.029, 0.088],
+  [0.035, 0.043, 0.039, 0.03, 0.09], [0.055, 0.039, 0.035, 0.031, 0.093], [0.068, 0.031, 0.027, 0.031, 0.088],
   [0.075, 0.017, 0.013, 0.03, 0.072],
 ]);
 const SHOE_COLS = [
@@ -904,10 +906,21 @@ function makeSkeleton(shape) {
 // eyes with iris and pupil, hair strands and a soft hairline, fabric folds and weave, kit stripes on shorts and
 // shoes, and slight skin variation. Fine detail fades out with distance so it never shimmers.
 const DETAIL_VERT = `
-  attribute float aRough, aReg, aEdge; attribute vec4 aPar; attribute vec4 aAccent;
-  varying float vRough, vReg, vEdge; varying vec4 vPar, vAccent; varying vec3 vRest;`;
+  attribute float aRough, aReg, aEdge; attribute vec4 aPar; attribute vec4 aAccent; attribute vec4 aSkin;
+  varying float vRough, vReg, vEdge; varying vec4 vPar, vAccent, vSkin; varying vec3 vRest, vHairT;`;
+// Strands run down and back over the head: their direction (view space) for the hair's anisotropic highlight.
+const HAIR_VERT = `
+  vec3 hairT = vec3(0.0, -0.91, 0.41); hairT -= normal * dot(normal, hairT);
+  #ifdef USE_SKINNING
+    hairT = (skinMatrix * vec4(hairT, 0.0)).xyz;
+  #endif
+  vHairT = mat3(modelViewMatrix) * hairT;`;
 const DETAIL_FRAG = `
-  varying float vRough, vReg, vEdge; varying vec4 vPar, vAccent; varying vec3 vRest;
+  varying float vRough, vReg, vEdge; varying vec4 vPar, vAccent, vSkin; varying vec3 vRest, vHairT;
+  // What the pixel being shaded is, for the lighting below: skin, cloth or hair (0..1), its roughness, and the hair's
+  // strand direction, highlight shift and tint. aSkin = skin colour (linear) + sweat, so shirts can show bare skin.
+  float gSkin = 0.0, gFabric = 0.0, gHair = 0.0, gRough = 0.5, gShift = 0.0;
+  vec3 gHairT = vec3(0.0, 1.0, 0.0), gHairTint = vec3(1.0);
   float cHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
   float cNoise(vec3 x) {
     vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
@@ -923,13 +936,44 @@ const DETAIL_FRAG = `
     vec3 g = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
     return normalize(abs(det) * n - g);
   }
+  // Direct light: skin lets it bleed past the terminator, warmest in the red (a cheap subsurface look); cloth wraps a little.
+  vec3 bodyDiffuse(float nl) {
+    vec3 w = gSkin * vec3(0.42, 0.2, 0.13) + gFabric * 0.2;
+    return clamp((vec3(nl) + w) / (1.0 + w), 0.0, 1.0);
+  }
+  // Hair: two Kajiya-Kay lobes along the strands, a sharp white one and a broader tinted one shifted toward the tips.
+  vec3 hairSpec(vec3 L, vec3 col, vec3 N, vec3 V) {
+    if (gHair < 0.5) return vec3(0.0);
+    vec3 T = gHairT - N * dot(N, gHairT);
+    if (dot(T, T) < 1e-8) return vec3(0.0);
+    T = normalize(T);
+    vec3 H = normalize(L + V);
+    float t1 = dot(normalize(T + N * (gShift - 0.1)), H), t2 = dot(normalize(T + N * (gShift + 0.15)), H);
+    float s1 = pow(max(0.0, 1.0 - t1 * t1), 70.0), s2 = pow(max(0.0, 1.0 - t2 * t2), 14.0);
+    return col * smoothstep(-0.1, 0.35, dot(N, L)) * (0.07 * s1 + 0.05 * s2 * gHairTint);
+  }
   float detailHeight(float near) {
-    float h = 0.0;
-    if (vReg > 0.5 && vReg < 3.5 || isReg(8.0)) {             // fabric: soft folds plus a fine weave
+    float h = 0.0, e = vEdge - 0.5;
+    float fine = near * (1.0 - smoothstep(0.0012, 0.003, length(fwidth(vRest))));   // millimetre detail only up close
+    if (gFabric > 0.5) {                                         // fabric: soft folds, rolled hems, a fine knit
       float fold = cNoise(vec3(vRest.x * 11.0, vRest.y * 38.0, vRest.z * 11.0)) - 0.5;
-      float waist = isReg(1.0) ? 0.6 + 0.8 * exp(-pow((vRest.y - 1.06) / 0.07, 2.0)) : 1.0;
-      h += fold * 0.0022 * waist;
-      h += (cNoise(vRest * 420.0) - 0.5) * 0.00012 * near;
+      float amp = 0.0022;
+      if (isReg(1.0) && vPar.w > 2.5 && vPar.w < 3.5) {
+        amp *= 0.6 + 0.9 * exp(-pow((vPar.z - 1.03) / 0.07, 2.0));   // gathered above the hem
+        vec2 ap = vec2(abs(vRest.x) * vPar.z / vRest.y - 0.2, vPar.z - 1.34);    // drag folds fanning out from the armpits
+        h += sin(atan(ap.y, -ap.x) * 9.0 + fold * 3.0) * 0.001 * exp(-dot(ap, ap) / 0.008) * smoothstep(0.035, 0.07, length(ap)) * smoothstep(0.2, 0.6, abs(vPar.y));
+      } else if (isReg(2.0) && vPar.w < 0.5) {                   // shorts: creases pulled from the crotch
+        float cr = exp(-pow((vPar.z - 0.86) / 0.05, 2.0)) * (1.0 - smoothstep(0.02, 0.08, abs(vRest.x) * vPar.z / vRest.y));
+        h += sin((vPar.z + abs(vRest.x) * 1.2) * 150.0 + fold * 4.0) * 0.001 * cr;
+      }
+      h += fold * amp;
+      if (e < 0.03 && vPar.w < 3.5) h += 0.0008 * (1.0 - smoothstep(0.0, 0.012, e)) - 0.00025 * exp(-pow((e - 0.012) / 0.0012, 2.0)) * fine;   // hem: rolled, then stitched
+      if (isReg(3.0)) h += 0.00035 * sin(atan(vPar.y, vPar.x) * 56.0) * fine * (e < 0.017 ? 1.8 : 1.0);   // sock ribs, deeper in the cuff
+      else if (vPar.w > 4.5 && vPar.w < 5.5) h += 0.0003 * sin(atan(vPar.y, vPar.x) * 90.0) * fine;         // collar ribbing
+      else if (isReg(8.0)) h += (cNoise(vRest * 900.0) - 0.5) * 0.0004 * fine;                              // terry towelling
+      else h += ((cNoise(vRest * 420.0) - 0.5) * 0.00012 + 0.00006 * sin(vRest.y * 2400.0) * sin((vRest.x + vRest.z) * 2400.0)) * fine;   // knit
+    } else if (gSkin > 0.5) {
+      h += (cNoise(vRest * 1400.0) - 0.5) * 0.00003 * fine;      // pores
     } else if (isReg(6.0) && vPar.w > 0.5) {                     // hair strands running down from the crown
       float th = atan(vPar.z, vPar.x);
       h += (cNoise(vec3(th * 42.0, vPar.y * 2.5, 0.0)) * 0.65 + cNoise(vec3(th * 110.0, vPar.y * 5.0, 3.1)) * 0.35 - 0.5) * 0.0012 * vEdge;
@@ -965,21 +1009,94 @@ const DETAIL_ALBEDO = `
     }
   } else if (isReg(2.0) && vPar.w < 0.5) {                       // shorts: accent stripe down the outer side
     if (abs(vPar.x) > 0.975 && vPar.x * vRest.x > 0.0) diffuseColor.rgb = vAccent.rgb;
-  } else if (isReg(4.0) && vPar.w > 1.5) {                       // shoe: a side flash in the accent colour
-    float band = abs((vRest.y - 0.028) - (vPar.z + 0.07) * 0.32);
-    if (vPar.x > 0.35 && band < 0.0065 && vPar.z > -0.16 && vPar.z < 0.03) diffuseColor.rgb = vAccent.rgb;
-  } else if (isReg(1.0) && vPar.w < 0.5) {                       // shirt designs (vPar.z is the unscaled height)
-    float d = vAccent.a, y = vPar.z;
-    bool on = false;
-    if (d > 0.5 && d < 1.5) on = y > 1.405;                                          // shoulder yoke
-    else if (d > 1.5 && d < 2.5) on = y > 1.245 && y < 1.315;                        // chest band
-    else if (d > 2.5 && d < 3.5) on = abs(vPar.x) > 0.9 && y < 1.33;                 // side panels
-    // small chest logo, front left: a slanted flash
-    float lx = vRest.x + 0.075, ly = y - 1.37;   // the player's left is -x
-    if (vPar.y < -0.6 && abs(lx) < 0.028 && abs(ly - lx * 0.35) < 0.0065) on = !on;
+  } else if (isReg(4.0) && vPar.w > 1.5) {                       // shoe upper: toe cap, heel counter, laces, collar, side flash
+    float sx = vPar.x, sy = vPar.y, sz = vPar.z;                 // metres outward, up and along the foot (toe is -z)
+    vec3 c = diffuseColor.rgb;
+    if (sz < -0.152) c *= 0.88;                                  // toe cap overlay, stitched on
+    c *= 1.0 - 0.35 * exp(-pow((sz + 0.152) / 0.0012, 2.0)) * near;
+    if (sz > 0.045 && sy < 0.075) c *= 0.9;                      // heel counter
+    float band = abs((sy - 0.028) - (sz + 0.07) * 0.32);
+    if (sx > 0.02 && band < 0.0065 && sz > -0.16 && sz < 0.03) c = vAccent.rgb;
+    if (abs(sx) < 0.017 && sz > -0.105 && sz < -0.01 && sy > 0.055) {   // tongue with laces across it
+      c *= 0.82;
+      if (fract(sz / 0.0125) > 0.5 && abs(sx) < 0.0135) c = vec3(0.85, 0.85, 0.83);
+    }
+    float ank = length(vec2(sx, sz - 0.012));                    // round the ankle: the dark opening, a padded collar
+    if (sy > 0.06) c *= mix(0.3, 1.0, smoothstep(0.036, 0.042, ank)) * mix(0.85, 1.0, smoothstep(0.042, 0.05, ank));
+    diffuseColor.rgb = c;
+  } else if (isReg(1.0)) {                                       // shirt: designs, collar, bare skin in armholes and V-necks
+    float d = vAccent.a, y = vPar.z, e = vEdge - 0.5;            // vPar.z is the unscaled height
+    bool on = false, body = vPar.w > 2.5 && vPar.w < 3.5;
+    if (body || vPar.w < 0.5) {
+      if (d > 0.5 && d < 1.5) on = y > 1.405;                                          // shoulder yoke
+      else if (d > 1.5 && d < 2.5) on = body && y > 1.245 && y < 1.315;               // chest band
+      else if (d > 2.5 && d < 3.5) on = body && abs(vPar.x) > 0.9 && y < 1.33;        // side panels
+      if (!body && d > 0.5 && d < 2.5 && e > 0.004 && e < 0.008) on = true;           // tipped cuffs
+      // small chest logo, front left: a slanted flash
+      float lx = vRest.x + 0.075, ly = y - 1.37;   // the player's left is -x
+      if (body && vPar.y < -0.6 && abs(lx) < 0.028 && abs(ly - lx * 0.35) < 0.0065) on = !on;
+    } else if (vPar.w > 4.5 && vPar.w < 5.5) {                   // collar: ribbed, tipped in the accent on some designs
+      diffuseColor.rgb *= 0.92;
+      on = (d > 0.5 && d < 1.5 || d > 2.5) && e < 0.004;
+    }
     if (on) diffuseColor.rgb = vAccent.rgb;
+    if (body) {
+      if (vPar.w > 3.2 && vPar.y < -0.75) {                      // polo placket: stitched strip, two buttons
+        float ux = vRest.x * y / vRest.y;
+        if (y > 1.37) diffuseColor.rgb *= 1.0 - 0.3 * exp(-pow((abs(ux) - 0.014) / 0.0011, 2.0)) * near;
+        float b = min(length(vec2(ux, y - 1.445)), length(vec2(ux, y - 1.412)));
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.7 + 0.25, (1.0 - smoothstep(0.0038, 0.0048, b)) * near);
+      }
+      float bare = 1.0 - smoothstep(-fwidth(e), fwidth(e), e);   // past the cloth's edge: skin
+      diffuseColor.rgb = mix(diffuseColor.rgb, vSkin.rgb * (0.95 + 0.1 * cNoise(vRest * 38.0)), bare);
+      gSkin = bare; gFabric = 1.0 - bare; gRough = mix(gRough, 0.5, bare);
+    }
   }
-  if (vReg > 0.5 && vReg < 2.5) diffuseColor.rgb *= 0.97 + 0.06 * cNoise(vec3(vRest.x * 11.0, vRest.y * 38.0, vRest.z * 11.0));`;
+  if (vReg > 0.5 && vReg < 2.5) diffuseColor.rgb *= 0.97 + 0.06 * cNoise(vec3(vRest.x * 11.0, vRest.y * 38.0, vRest.z * 11.0));
+  // --- facial hair (A07) ---
+  // Stubble: head skin carries its beard shadow strength in aEdge (1 = clean-shaven). Darken and cool the skin
+  // there, speckled up close; full beards add a hair-coloured shell on top. Also tints the iris when the look sets
+  // eyeColor (the eye's vertex colour; the default 0x121212 leaves the shader's own iris alone).
+  if (isReg(0.0) && vPar.w > 0.5 && vEdge < 0.999) {
+    float bd = 1.0 - vEdge, fine = clamp(2.0 - length(vViewPosition) / 1.1, 0.0, 1.0);
+    float sp = mix(0.5, cNoise(vRest * 1500.0) * 0.6 + cNoise(vRest * 520.0) * 0.4, fine);
+    diffuseColor.rgb *= mix(vec3(1.0), vec3(0.33, 0.32, 0.33), clamp(bd * (0.7 + 1.0 * sp), 0.0, 1.0));
+  }
+  if (isReg(7.0) && vPar.w > 0.5 && vPar.z < 0.0 && vColor.r + vColor.g + vColor.b > 0.03) {
+    float ir = length(vPar.xy);
+    diffuseColor.rgb *= mix(vec3(1.0), vColor.rgb / vec3(0.1, 0.06, 0.035), smoothstep(0.22, 0.26, ir) * (1.0 - smoothstep(0.55, 0.6, ir)));
+  }
+  // --- end facial hair (A07) ---`;
+// Before DETAIL_ALBEDO: classify the pixel for the lighting.
+const DETAIL_INIT = `
+  gSkin = isReg(0.0) ? 1.0 : 0.0; gHair = isReg(6.0) ? 1.0 : 0.0; gFabric = (vReg > 0.5 && vReg < 3.5) || isReg(8.0) ? 1.0 : 0.0; gRough = vRough;`;
+// After DETAIL_ALBEDO: soles, sock cuffs, hems, sweat and the hair's strand highlight.
+const DETAIL_BODY = `
+  if (isReg(5.0) && vPar.w > 1.5) {                              // sole: dark tread edge below, a groove along the midsole
+    float e = vEdge - 0.5;
+    if (e < 0.0088) diffuseColor.rgb = vec3(0.24, 0.24, 0.25) * (0.85 + 0.3 * step(0.5, fract(vPar.z * 140.0 + abs(vPar.x) * 50.0)));
+    diffuseColor.rgb *= 1.0 - 0.3 * exp(-pow((e - 0.019) / 0.0012, 2.0)) * near;
+    gRough = e < 0.0088 ? 0.85 : 0.6;
+  } else if (isReg(3.0) && vEdge - 0.5 < 0.017) {                // sock cuff
+    diffuseColor.rgb *= 0.94;
+  }
+  if (gFabric > 0.5 && (isReg(1.0) || isReg(2.0)) && vPar.w < 3.5) {   // hems: a double layer, then a stitch line
+    float e = vEdge - 0.5;
+    diffuseColor.rgb *= (1.0 - 0.05 * (1.0 - smoothstep(0.008, 0.012, e))) * (1.0 - 0.28 * exp(-pow((e - 0.012) / 0.0011, 2.0)) * near);
+  }
+  if (gSkin > 0.5) gRough = mix(gRough, 0.3, vSkin.a * (0.35 + 0.65 * smoothstep(0.35, 0.7, cNoise(vRest * 9.0))));   // sweat: glossy patches
+  if (gHair > 0.5) {
+    gHairT = vHairT;
+    gShift = (cNoise(vec3(vRest.x * 900.0, vRest.y * 60.0, vRest.z * 900.0)) - 0.5) * 0.3;
+    gHairTint = diffuseColor.rgb / max(0.02, max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b)));
+  }`;
+// three's physical direct lighting with the body's diffuse (soft terminator) and the hair highlight added.
+const BODY_LIGHT = THREE.ShaderChunk.lights_physical_pars_fragment
+  .replace('vec3 irradiance = dotNL * directLight.color;', `vec3 irradiance = dotNL * directLight.color;
+	vec3 irradianceD = bodyDiffuse( dot( geometryNormal, directLight.direction ) ) * directLight.color;
+	reflectedLight.directSpecular += hairSpec( directLight.direction, directLight.color, geometryNormal, geometryViewDir );`)
+  .replace('irradiance *= sheenEnergyComp;', 'irradiance *= sheenEnergyComp; irradianceD *= sheenEnergyComp;')
+  .replace('reflectedLight.directDiffuse += irradiance * BRDF_Lambert', 'reflectedLight.directDiffuse += irradianceD * BRDF_Lambert');
 
 let bodyMat = null;
 function bodyMaterial() {
@@ -988,19 +1105,21 @@ function bodyMaterial() {
   bodyMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 1, sheen: 1, sheenRoughness: 0.75, sheenColor: 0xffffff });
   bodyMat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + DETAIL_VERT)
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRough = aRough; vReg = aReg; vEdge = aEdge; vPar = aPar; vRest = position; vAccent = aAccent;');
+      .replace('#include <skinnormal_vertex>', '#include <skinnormal_vertex>\n' + HAIR_VERT)
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRough = aRough; vReg = aReg; vEdge = aEdge; vPar = aPar; vRest = position; vAccent = aAccent; vSkin = aSkin;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + DETAIL_FRAG)
-      .replace('#include <color_fragment>', '#include <color_fragment>\n' + DETAIL_ALBEDO)
-      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = vRough;')
+      .replace('#include <lights_physical_pars_fragment>', BODY_LIGHT)
+      .replace('#include <color_fragment>', '#include <color_fragment>\n' + DETAIL_INIT + DETAIL_ALBEDO + DETAIL_BODY)
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = gRough;')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = bumpNormal(normal, detailHeight(near), faceDirection);')
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
-        float sheenAmt = (vReg > 0.5 && vReg < 3.5 || isReg(8.0)) ? 0.55 : isReg(0.0) ? 0.12 : isReg(6.0) ? 0.3 : 0.0;
+        float sheenAmt = gFabric * 0.55 + gSkin * 0.12 + gHair * 0.3;
         material.sheenColor = mix(vec3(1.0), diffuseColor.rgb, 0.45) * sheenAmt;`);
   };
   return bodyMat;
 }
 
-const regionColors = (look) => [look.skin, look.shirt, look.pants, 0xf3f3ee, look.shoe, 0xf0efe8, look.hairColor, 0x121212, look.band];
+const regionColors = (look) => [look.skin, look.shirt, look.pants, 0xf3f3ee, look.shoe, 0xf0efe8, look.hairColor, look.eyeColor ?? 0x121212, look.band];
 
 // Change an existing character's outfit in place (colours, accent, shirt design): no rebuild, just vertex data.
 export function recolorCharacter(ch, kit) {
@@ -1011,9 +1130,18 @@ export function recolorCharacter(ch, kit) {
     acc[i * 4] = a.r; acc[i * 4 + 1] = a.g; acc[i * 4 + 2] = a.b; acc[i * 4 + 3] = look.design || 0;
   }
   g.attributes.color.needsUpdate = true; g.attributes.aAccent.needsUpdate = true;
+  setSkin(g, look);
+}
+// aSkin: the skin colour everywhere (bare shoulders and V-necks are painted on the shirt) plus the sweat level.
+function setSkin(g, look) {
+  const a = g.attributes.aSkin, c = new THREE.Color(look.skin);
+  if (!a) return;
+  for (let i = 0; i < a.count; i++) a.array.set([c.r, c.g, c.b, THREE.MathUtils.clamp(look.sweat ?? 0.3, 0, 1)], i * 4);
+  a.needsUpdate = true;
 }
 
-// look: { height, shoulder, hip, chest, skin, hair, hairColor, shirt, shorts, shoe, band, headband, wristband, sleeve, shorts, sock }
+// look: { height, width, chest, arm, leg, muscle (0..1), skin, sweat (0..1), hair, hairColor, shirt, pants, shoe, band, accent, design,
+//   headband, wristband, sleeve (metres below the shoulder, 0 = sleeveless), collar ('crew' | 'polo' | 'v'), shorts (hem height), sock }
 export function createCharacter(opts = {}) {
   const look = {
     height: 1, width: 1, chest: 1, skin: 0xd9a27e, hair: 'short', hairColor: 0x2b1d14, shirt: 0xf2f5ee, pants: 0x1f3b5c, shoe: 0xf4f4f0,
@@ -1030,6 +1158,9 @@ export function createCharacter(opts = {}) {
     look.accent ?? look.band,
     look.design || 0,
   );
+  const n = geo.attributes.position.count;
+  geo.setAttribute('aSkin', new THREE.Float32BufferAttribute(new Float32Array(n * 4), 4));
+  setSkin(geo, look);
   const { bones, list } = makeSkeleton(shape);
   const mesh = new THREE.SkinnedMesh(geo, bodyMaterial());
   mesh.add(bones.root);
