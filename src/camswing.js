@@ -271,17 +271,19 @@ function labelVote(h, handed) {
 // Which of the detected hands is the racket hand. hands: [{x, y, label, score}] palm centres in mirrored coordinates,
 // with MediaPipe's label and its confidence. Returns -1 to skip the frame.
 // While the racket hand's track is fresh (pred), a hand only continues it if it is near where the racket hand should
-// be: within 0.3 frame widths if it is labelled as the racket hand, 0.2 if the label can't tell, but only 0.1 if it
-// reads as the other hand. So when the racket hand blurs out of a frame, the other hand isn't taken for it (the
+// be: within 0.3 frame widths (more if the track is a few frames old) if it is labelled as the racket hand, 0.15 if the
+// label can't tell, but only 0.07 if it reads as the other hand. So when the racket hand blurs out of a frame, the other hand isn't taken for it (the
 // swing detector bridges the gap), unless the two are together (a two-handed backhand).
 function pickHand(hands, handed, pred) {
   if (!hands.length) return -1;
   const mine = racketLabel(handed);
   if (pred && pred.age < 0.35) {
     let best = -1, bd = Infinity;
+    const reach = Math.min(0.6, 0.3 + 1.5 * Math.max(pred.age, 0));   // a fast swing seen again after a blurred frame or two
     hands.forEach((h, i) => {
       const d = Math.hypot(h.x - pred.x, h.y - pred.y);
-      if (d > clamp(0.2 + 0.125 * labelVote(h, handed), 0.1, 0.3)) return;
+      const v = labelVote(h, handed);
+      if (d > (v > 0.3 ? reach : v >= -0.3 ? 0.15 : 0.07)) return;
       const c = d + (h.label === mine ? 0 : 0.08);
       if (c < bd) { bd = c; best = i; }
     });
@@ -358,12 +360,12 @@ class HandPicker {
       else if (++this.wait < this.settle) return { i: -1, switched };
       this.vote = 0; this.n = 0;
     }
-    if (hands.length > 1 && !moving && this.n >= 5 && this.vote < -0.45) {
+    if (hands.length > 1 && !moving && this.n >= 4 && this.vote < -0.3) {
       let j = -1;
-      hands.forEach((h, k) => { if (k !== i && labelVote(h, handed) > 0.5 && (j < 0 || labelVote(h, handed) > labelVote(hands[j], handed))) j = k; });
+      hands.forEach((h, k) => { if (k !== i && labelVote(h, handed) > 0.3 && (j < 0 || labelVote(h, handed) > labelVote(hands[j], handed))) j = k; });
       if (j >= 0) { i = j; switched = true; this.vote = labelVote(hands[j], handed); this.n = 1; return { i, switched }; }
     }
-    const k = moving ? 0.04 : 0.15;
+    const k = moving ? 0.04 : 0.25;
     this.vote += (labelVote(hands[i], handed) - this.vote) * k;
     this.n++;
     return { i, switched };

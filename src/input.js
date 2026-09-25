@@ -1,6 +1,7 @@
 import { clamp, Clock, Settings } from './core.js';
 import { Sound } from './match.js';
 import { canvas } from './render/world.js';
+import { Perf } from './render/renderer.js';
 import { Game } from './game.js';
 import { UI } from './ui.js';
 import { SwingDetector, pickHand, palmSize, PALM_REF, segmentColor, lockColorFromPatch, adaptColor } from './camswing.js';
@@ -195,6 +196,8 @@ function handWorkerMain() {
       const res = lm.detectForVideo(img, lastTs);
       out.landmarks = res.landmarks || [];
       out.handedness = (res.handedness || res.handednesses || []).map((h) => (h && h[0] ? { label: h[0].categoryName, score: h[0].score } : { label: '', score: 0 }));
+      // Found a hand outside the painted-over boxes: that's the one to follow, so show the whole picture again.
+      if (out.masked && out.landmarks.some((l) => !avoid.boxes.some((b) => l[9].x > b.x0 && l[9].x < b.x1 && l[9].y > b.y0 && l[9].y < b.y1))) avoid = null;
     } catch (err) { out.error = msg(err); }
     out.ms = performance.now() - t0;
     post(out);
@@ -234,11 +237,11 @@ function handWorkerMain() {
       try { m.bitmap.close(); } catch (err) { /* already closed */ }
     } else if (m.type === 'options' && lm) {
       // How many hands to look for. Changing it restarts MediaPipe's tracking, so the next frame searches the whole
-      // picture; `avoid` paints over the other hand for two frames so that search can only find the racket hand.
+      // picture; `avoid` paints over the other hand until that search finds a hand elsewhere (a few frames at most).
       try {
         const p = lm.setOptions(m.opts);
         if (m.opts.numHands) nh = m.opts.numHands;
-        avoid = m.avoid && m.avoid.length && typeof OffscreenCanvas === 'function' ? { boxes: m.avoid, n: 2 } : null;
+        avoid = m.avoid && m.avoid.length && typeof OffscreenCanvas === 'function' ? { boxes: m.avoid, n: 5 } : null;
         Promise.resolve(p).catch((err) => post({ type: 'optionsError', message: msg(err) }));
       } catch (err) { post({ type: 'optionsError', message: msg(err) }); }
     }
@@ -261,10 +264,10 @@ const Tracker = {
   status: document.getElementById('camStatus'),
   wrap: document.getElementById('camWrap'),
   stream: null, kind: null, running: false, gen: 0, camGen: 0, loopGen: 0, opening: null,
-  worker: null, workerState: 'none', workerLoading: null, inFlight: false, sentAt: 0, stalls: 0, next: null, feed: null, noFeed: false, noSteer: false,
+  worker: null, workerState: 'none', workerLoading: null, inFlight: false, sentAt: 0, stalls: 0, next: null, feed: null, noFeed: false, noSteer: false, gpuBad: false, retrying: null,
   landmarker: null, loading: null, lastMain: 0, lastTs: 0, lastVT: -1, delegate: '', where: '', loadError: '', startMs: 0, readyAt: 0,
   procMs: 0, lagMs: 0, rate: 0, rateN: 0, rateT: 0, stamp: '', aspect: 4 / 3, arrOff: Infinity,
-  palm: 0, scale: 1, offHand: 0, trail: [], picker: new HandPicker(), palmScale: new PalmScale(), nh: HAND_OPTS.numHands, good: 0, locks: 0,
+  palm: 0, scale: 1, offHand: 0, trail: [], picker: new HandPicker(), palmScale: new PalmScale(), nh: HAND_OPTS.numHands, good: 0, goodT: 0, locks: 0,
   st: { t: 0, res: 0, found: 0, cam: 0, seen: 0, errors: 0, errRun: 0, lastRes: 0 }, per: { rate: 0, cam: 0, found: 0, dropped: 0 },
   work: null, workCtx: null, ctxO: null, blobN: 0, seg: {}, segW: 160, segH: 120, paddleTg: null, paddleFor: null, maskCanvas: null, maskImg: null,
   handsReady() { return this.workerState === 'ready' || !!this.landmarker; },
@@ -317,8 +320,16 @@ const Tracker = {
     this.setStatus('Loading hand tracker…');
     if (this.workerState !== 'failed') {
       try { await (this.workerLoading || (this.workerLoading = this.startWorker())); return; }
-      catch (e) { console.warn('Background hand tracking unavailable, running it on the main thread instead.', e); this.workerState = 'failed'; this.loadError = e.message; }
-      finally { this.workerLoading = null; }
+      catch (e) {
+        // Stuck setting up the GPU (the worker went silent): a fresh worker on the CPU usually starts in a second or two.
+        let err = e;
+        if (e.gpu) {
+          this.gpuBad = true;
+          try { await (this.retrying || (this.retrying = this.startWorker())); return; } catch (e2) { err = e2; }
+        }
+        console.warn('Background hand tracking unavailable, running it on the main thread instead.', err);
+        this.workerState = 'failed'; this.loadError = err.message;
+      } finally { this.workerLoading = null; }
     }
     if (!this.landmarker) {
       this.setStatus('Loading hand tracker…');
@@ -344,14 +355,15 @@ const Tracker = {
         if (this.workerState === 'loading') this.workerState = 'none';
         reject(err);
       };
-      const arm = (ms, what) => { clearTimeout(timer); timer = setTimeout(() => fail(new Error(`The hand tracker stopped responding while ${what}.`)), ms); };
+      let stage = '';
+      const arm = (ms, what) => { clearTimeout(timer); timer = setTimeout(() => fail(Object.assign(new Error(`The hand tracker stopped responding while ${what}.`), { gpu: stage === 'GPU' })), ms); };
       arm(HAND_WAIT.download, 'loading');
       w.onmessage = (e) => {
         const m = e.data;
         if (done) return;
         if (m.type === 'progress') {
           if (m.stage === 'download') { this.setStatus(`Loading hand tracker… ${Math.round(m.frac * 100)}%`); arm(HAND_WAIT.download, 'downloading'); }
-          else { this.setStatus(m.delegate === 'GPU' ? 'Starting hand tracker…' : 'Starting hand tracker (without the graphics chip)…'); arm((HAND_WAIT[m.delegate] || 20000) + 8000, 'starting'); }
+          else { stage = m.delegate; this.setStatus(m.delegate === 'GPU' ? 'Starting hand tracker…' : 'Starting hand tracker (without the graphics chip)…'); arm((HAND_WAIT[m.delegate] || 20000) + 8000, 'starting'); }
         } else if (m.type === 'ready') {
           done = true; clearTimeout(timer); URL.revokeObjectURL(url);
           this.worker = w; this.workerState = 'ready'; this.delegate = m.delegate; this.where = 'background thread'; this.nh = HAND_OPTS.numHands;
@@ -363,9 +375,13 @@ const Tracker = {
         } else if (m.type === 'error') fail(new Error(m.message));
       };
       w.onerror = (e) => { if (e.preventDefault) e.preventDefault(); fail(new Error(e.message || 'The hand tracker worker failed.')); };
-      w.postMessage({ type: 'init', base: MP_BASE, model: MP_MODEL, origin: performance.timeOrigin, opts: HAND_OPTS, delegates: ['GPU', 'CPU'], wait: HAND_WAIT });
+      w.postMessage({ type: 'init', base: MP_BASE, model: MP_MODEL, origin: performance.timeOrigin, opts: HAND_OPTS, delegates: this.delegates(), wait: HAND_WAIT });
     });
   },
+  // Where to run MediaPipe, in order of preference. Not on a software-emulated GPU (no graphics driver, or it's
+  // blocked): that is many times slower than the CPU path and takes time from drawing the court. Nor on a GPU that has
+  // already hung once.
+  delegates() { return Perf.software || this.gpuBad ? ['CPU'] : ['GPU', 'CPU']; },
   // The worker crashed, hung or keeps failing: start a fresh one (the model is cached by then), once per minute at most.
   recover(why) {
     if (this.workerState !== 'ready') return;
@@ -451,8 +467,12 @@ const Tracker = {
     const vision = await timeLimit(import(`${MP_BASE}/vision_bundle.mjs`), HAND_WAIT.download * 2, 'Loading the hand tracker');
     const fileset = await vision.FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
     const make = (delegate) => timeLimit(vision.HandLandmarker.createFromOptions(fileset, { ...HAND_OPTS, baseOptions: { modelAssetPath: MP_MODEL, delegate } }), HAND_WAIT[delegate] + HAND_WAIT.download, `Starting the hand tracker on the ${delegate}`);
-    try { const lm = await make('GPU'); this.delegate = 'GPU'; return lm; }
-    catch (e) { console.warn('GPU hand tracking failed, using CPU', e); this.delegate = 'CPU'; return await make('CPU'); }
+    if (this.delegates()[0] === 'GPU') {
+      try { const lm = await make('GPU'); this.delegate = 'GPU'; return lm; }
+      catch (e) { console.warn('GPU hand tracking failed, using CPU', e); }
+    }
+    this.delegate = 'CPU';
+    return await make('CPU');
   },
   stop() {
     this.gen++; this.camGen++;
@@ -557,17 +577,20 @@ const Tracker = {
   },
   // MediaPipe looks for two hands only while it has to. With two, every frame the other hand is out of view it searches
   // the whole picture for it (about twice the work of following one hand). So once the racket hand has been followed
-  // steadily for a few frames, track just that one; when it's lost or reads as the other hand, look for two again.
+  // steadily for a moment, track just that one; when it's lost or reads as the other hand, look for two again.
   // Tracking one hand restarts MediaPipe's search, so the other hand is painted over for that moment.
   steer(hands, i, moving) {
     if (!this.worker || this.workerState !== 'ready' || this.noSteer) return;
     const p = this.picker;
     if (this.nh === 1) {
-      if (i < 0 || (p.n > 10 && p.vote < -0.45)) this.setHands(2);
+      if (i < 0 || (p.n > 5 && p.vote < -0.3)) this.setHands(2);
       return;
     }
-    if (i < 0 || moving || p.vote < -0.3) { this.good = 0; return; }
-    if (++this.good < 8) return;
+    // Lock on once the hand followed has read as the racket hand, and held fairly still, for a quarter of a second.
+    const now = performance.now();
+    if (i < 0 || moving || p.vote < 0.2) { this.good = 0; return; }
+    if (!this.good++) this.goodT = now;
+    if (this.good < 3 || now - this.goodT < 250) return;
     const mine = handBox(hands[i], 0.2), others = hands.filter((h, k) => k !== i).map((h) => handBox(h, 0.5));
     if (others.some((b) => b.x0 < mine.x1 && b.x1 > mine.x0 && b.y0 < mine.y1 && b.y1 > mine.y0)) return;   // hands too close to paint one over
     this.setHands(1, others);
