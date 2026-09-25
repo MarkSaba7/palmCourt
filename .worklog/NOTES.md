@@ -57,3 +57,30 @@ reliability matter. Run with `play.cmd` (serve.py: http://localhost:8765 for the
 - Kits: shirt designs (yoke/band/side panels + chest logo) via aAccent.a; Avatar.setKit recolours in place;
   OUTFITS list; CPU opponent gets a random non-clashing outfit per non-online match (game.js startMatch).
 - Branded loading screen with progress bar; roof flags (shared program, per-flag phase uniform).
+
+## 2026-09-24/25 — multi-agent session (lead + up to 20 agents, each in its own git worktree)
+- Brief with file ownership + cross-agent contracts: see the session scratchpad TEAM.md (not in repo). Key contracts now
+  in code: character look fields (hair crop/wavy/long/curly/textured, headwear none/headband/bandana/cap, beard 0..1,
+  face{jaw,cheek,nose,brow,chin,eyes}, sleeve 0 = sleeveless, collar crew/polo/v, muscle 0..1), Avatar.setLook(look),
+  Avatar.setStyle(style) (A10, not merged yet), player.persona {aggression,topspin,slice,drop,net,serve,consistency,
+  defense,speed} for the CPU, src/pros.js roster (Djokovic, Nadal L, Federer, Sinner, Alcaraz + custom; display names
+  only there — real names/likenesses need licensing before any commercial release).
+- GitHub Pages: .github/workflows/pages.yml deploys index.html + controller.html + src/ on every push to main
+  (Settings → Pages → Source: GitHub Actions). Live at https://marksaba7.github.io/palmCourt/. Opening index.html
+  from a folder doesn't work (ES modules blocked on file://).
+- Merged so far: hand tracking (worker start-up with per-delegate timeouts, numHands 1↔2, off-hand masking, Tracker.stats),
+  paddle tracking (skin guard, lock reasons, 99.9% found vs 73%), swing detection (blur bridging), swing→shot feel
+  (smooth rewinds, racket follows hand, per-player power), guided camera check, pro roster + picker, heads WIP,
+  bodies WIP, CPU AI WIP, court lines-in-shader + wear + net, custom post chain (SMAA/FXAA, fallback ladder, context
+  loss), custom sky + shadows, spring cameras, broadcast HUD + match stats, tests/sim (4,500 random matches vs an
+  independent scorer), tests/e2e webcam rig (lockstep mode).
+- Tests: node test/{camswing,hand,paddle,pros}.test.mjs; node tests/sim/{match,physics}.test.mjs; tests/e2e/README.md.
+- Headless testing needs the CDN mirrored locally (cdn.jsdelivr.net is blocked in the cloud sandbox); SwiftShader is too
+  slow to judge frame rate. In fast-forward sims, 'dead' waits on Replay.busy() (Replay runs on real time) → turn
+  Settings.replays off or drive Replay.update.
+- Open: CPU-vs-CPU rallies far too long (A11 tuning), faces crude up close + long neck when heads/bodies combine
+  (A07/A08), animation/signature moves (A10), racket+ball rewrite (A12; found throat arms built toward the tip),
+  stadium rebuild draft (A14), scenery (A15), crowd (A16), effects/ball kids/replay cam (A18), perf pass (A21),
+  green run-off shows rubber-scuff squiggles (A13 WIP).
+- Usage limits: 20 concurrent agents exhausted the account's session limit in ~1 h; run ≤7 at once and have agents
+  commit WIP at every milestone.
