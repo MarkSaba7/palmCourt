@@ -1,6 +1,6 @@
 // Instant replay. Every point is recorded frame by frame (the ball plus both players' skeletons), and the big ones
 // (aces, winners, long rallies, the match point) are replayed in slow motion from a broadcast angle. Close line
-// calls get a Hawk-Eye view: the ball's last flight seen low along the line, then its footprint from above.
+// calls get a line-review view: the ball's last flight seen low along the line, then its footprint from above.
 import * as THREE from 'three';
 import { clamp, lerp, damp, sstep, pick, Clock, COURT, LINE_TOL, Settings } from './core.js';
 import { scene, camera, Look } from './render/world.js';
@@ -28,7 +28,7 @@ export function lineMargin(x, z, box) {
   return c.reduce((a, b) => (b.d > a.d ? b : a));
 }
 
-// Footprint of the ball on the court for the Hawk-Eye view: a skid-shaped oval with a bright rim.
+// Footprint of the ball on the court for the line-review view: a skid-shaped oval with a bright rim.
 function makeFootprint() {
   const g = new THREE.Group();
   const fill = new THREE.Mesh(new THREE.CircleGeometry(0.5, 40), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false }));
@@ -147,7 +147,7 @@ export const Replay = {
       if (now < this.phaseAt) return false;
       this.phase = 'play'; this.active = true; this.t = S.t0; this.snap = true; this.lastAt = Clock.now();
       this.overlay(true);
-      if (this.onBoard) this.onBoard(S.style === 'hawk' ? 'HAWK-EYE' : 'REPLAY', 9000);
+      if (this.onBoard) this.onBoard(S.style === 'hawk' ? 'LINE REVIEW' : 'REPLAY', 9000);
     }
     if (this.phase === 'out') {
       if (now < this.phaseAt) return true;
@@ -205,7 +205,7 @@ export const Replay = {
     this.fov = damp(this.fov, fov, 4, dt);
     camera.position.copy(this.cp); camera.lookAt(this.cl);
     if (Math.abs(camera.fov - this.fov) > 0.01) { camera.fov = this.fov; camera.updateProjectionMatrix(); }
-    // Depth of field on the subject: the footprint in the Hawk-Eye freeze, the hitter from behind, otherwise the ball.
+    // Depth of field on the subject: the footprint in the line-review freeze, the hitter from behind, otherwise the ball.
     if (S.style === 'hawk' && this.phase === 'hold') Look.dof(camera.position.distanceTo(this.cl), 11);
     else if (S.style === 'behind') { const h = S.hitter.avatar.root.position; Look.dof(Math.max(2, camera.position.distanceTo(_T.set(h.x, 1.2, h.z))), 7); }
     else Look.dof(Math.max(1.5, camera.position.distanceTo(_T.set(ball.x, ball.y, ball.z))), S.style === 'hawk' ? 5 : 6);
@@ -249,7 +249,7 @@ export const Replay = {
     $('replay').hidden = !on;
     $('hud').classList.toggle('replaying', on);
     if (!on) $('hawkeye').hidden = true;
-    else $('replayKind').textContent = this.spec.style === 'hawk' ? 'Hawk-Eye' : this.spec.style === 'receiver' ? 'Ace' : this.spec.matchPoint ? 'Match point' : this.spec.rally >= LONG_RALLY ? `${this.spec.rally}-shot rally` : 'Winner';
+    else $('replayKind').textContent = this.spec.style === 'hawk' ? 'Line review' : this.spec.style === 'receiver' ? 'Ace' : this.spec.matchPoint ? 'Match point' : this.spec.rally >= LONG_RALLY ? `${this.spec.rally}-shot rally` : 'Winner';
   },
   wipe() {
     const w = $('replayWipe');
