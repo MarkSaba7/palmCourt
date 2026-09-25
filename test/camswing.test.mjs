@@ -11,7 +11,7 @@ const { SwingDetector, judgeCameraSwing, strokeDir, segmentColor, lockColorFromP
   await import(DET ? new URL(DET, `file://${process.cwd()}/`).href : '../src/camswing.js');
 
 const QUICK = process.argv.includes('--quick'), BENCH_ONLY = process.argv.includes('--bench');
-const WHY = (process.argv.find((a) => a.startsWith('--why=')) || '').slice(6), WHY_N = { n: 0 }, MISS = {};   // print examples of one kind of false swing
+const WHY = (process.argv.find((a) => a.startsWith('--why=')) || '').slice(6), WHY_N = { n: 0 }, MISS = {}, T0B = {};   // print examples of one kind of false swing
 const TRACE = (process.argv.find((a) => a.startsWith('--trace=')) || '').slice(8).split(':').map(Number);   // --trace=session:from:to
 const N = QUICK ? 60 : 300;
 let failures = 0;
@@ -323,11 +323,16 @@ function playSession(i, dur) {
   };
   const speedAt = (t) => { const a = pos(t - 0.002), b = pos(t + 0.002); return Math.hypot(b.x - a.x, b.y - a.y) / 0.004; };
   // True peak times, speeds (as the detector would measure them: image speed × the scale it's given) and the toss-line crossings.
-  // (The central part of the forward swing: at its ends the wind-up and follow-through overlap it.)
+  // (The central part of the forward swing: at its ends the wind-up and follow-through overlap it.) The moment of
+  // contact is the middle of the fast part: where the speed is within 20% of its peak, weighted by speed.
   for (const x of [...strokes, ...serves]) {
     let best = 0, bt = x.T;
-    for (let t = x.f0 + 0.3 * (x.f1 - x.f0); t <= x.f1 - 0.1 * (x.f1 - x.f0); t += 0.002) { const v = speedAt(t); if (v > best) { best = v; bt = t; } }
-    x.T = bt; x.peak = best * c.scaleIn;
+    const t0 = x.f0 + 0.3 * (x.f1 - x.f0), t1 = x.f1 - 0.1 * (x.f1 - x.f0);
+    for (let t = t0; t <= t1; t += 0.002) { const v = speedAt(t); if (v > best) { best = v; bt = t; } }
+    let sw = 0, st = 0;
+    for (let t = bt; t >= t0 && speedAt(t) >= 0.8 * best; t -= 0.002) { const w = speedAt(t) - 0.8 * best; sw += w; st += w * t; }
+    for (let t = bt + 0.002; t <= t1 && speedAt(t) >= 0.8 * best; t += 0.002) { const w = speedAt(t) - 0.8 * best; sw += w; st += w * t; }
+    x.T = sw > 0 ? st / sw : bt; x.peak = best * c.scaleIn;
   }
   for (const sv of serves) {
     sv.tc = null;
@@ -434,6 +439,7 @@ function scoreSession(S, evs, G) {
         g.tp++;
         if (x.ev.dir === x.kind) g.dirOk++; else if (!x.ev.dir) g.dirNull++;
         g.delay.push(x.ev.te - x.T); g.t0err.push(x.ev.t0 - x.T);
+        if (g === G[0] && WHY === 't0') { (T0B[Math.max(-3, Math.min(2, Math.floor((x.ev.te - x.T) / 0.04)))] ||= []).push(x.ev.t0 - x.T); if (Number.isFinite(x.ev.sw.tPeak)) (T0B.final ||= []).push(x.ev.sw.tPeak - x.T); }
         g.pow.push(x.ev.sw.peak / x.peak);
       }
       const v = gameVerdict(sw, x, x.off);
@@ -460,7 +466,10 @@ function scoreSession(S, evs, G) {
       }
       if (!m.length) g.tossMiss++; else { if (m[0].te - sv.tc <= 0.35) g.tossOk++; else g.tossLate++; if (m.length > 1) g.tossDup += m.length - 1; }
     }
-    for (const e of tosses) if (!e.used) { const w = labelAt(e.te); g.tossFalse[w] = (g.tossFalse[w] || 0) + 1; g.tossFalseN++; }
+    for (const e of tosses) if (!e.used) {
+      const w = labelAt(e.te); g.tossFalse[w] = (g.tossFalse[w] || 0) + 1; g.tossFalseN++;
+      if (g === G[0] && WHY === 'falsetoss' && w !== 'face' && WHY_N.n++ < 10) console.log(`  false toss: session ${S.c.i} ${S.c.src} at ${e.te.toFixed(2)} (${w}) · ${S.labels.filter((l) => l.t1 > e.te - 1.2 && l.t0 < e.te + 0.3).map((l) => `${l.what} ${l.t0.toFixed(2)}-${l.t1.toFixed(2)}`).join(', ')} · swings ${evs.filter((q) => q.type === 'swing' && q.te > e.te - 1.5 && q.te < e.te).map((q) => `${q.te.toFixed(2)} ${q.dir}`).join(', ')}`);
+    }
     for (const e of tosses) delete e.used;
   }
 }
@@ -498,6 +507,8 @@ function bench() {
   console.log(`  game outcomes (all): ${Object.entries(a.game).map(([k, v]) => `${k} ${P(v, a.strokes).trim()}%`).join(', ')}`);
   console.log(`  power: reported peak / true peak ${pw.mean.toFixed(2)} ± ${pw.sd.toFixed(2)}; hand ${stats(groups.get('hand 30 fps').pow.concat(groups.get('hand 60 fps').pow)).sd.toFixed(2)} sd, paddle ${stats(groups.get('paddle 30 fps').pow.concat(groups.get('paddle 60 fps').pow)).sd.toFixed(2)} sd`);
   if (WHY === 'miss') console.log('  misses by last verdict on the stroke:', JSON.stringify(MISS));
+  if (WHY === 't0') for (const k of Object.keys(T0B).sort((p, q) => p - q)) {
+    if (k === 'final') { const st = stats(T0B[k]); console.log(`  peak time measured after the swing: t0 error ${Math.round(st.mean * 1000)} ± ${Math.round(st.sd * 1000)} ms`); continue; } const st = stats(T0B[k]); console.log(`  reported ${k * 40}..${k * 40 + 40} ms from the peak: ${st.n} strokes, t0 error ${Math.round(st.mean * 1000)} ± ${Math.round(st.sd * 1000)} ms`); }
   console.log(`  serves: toss on time ${a.tossOk}/${a.serves}, late ${a.tossLate}, missed ${a.tossMiss}, twice ${a.tossDup}; serve swing reported ${a.serveSw}/${a.serves}; false tosses ${a.tossFalseN} ${JSON.stringify(a.tossFalse)}`);
   return a;
 }

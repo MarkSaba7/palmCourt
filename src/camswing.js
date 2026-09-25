@@ -79,12 +79,12 @@ class SwingDetector {
     this.filt = new OneEuro2();
     this.rises = []; this.ratios = []; this.peaks = []; this.winds = []; this.noise = []; this.gaps = [];
     this.frameDt = 1 / 30; this.sigma = 0.003; this.thr = this.o.start; this.sc = 1; this.fresh = -9;
-    this.home = null; this.highSince = 0; this.tossFired = false; this.tossBlock = false; this.tossT = -9; this.glitches = 0;
+    this.home = null; this.highSince = 0; this.tossFired = false; this.tossBlock = false; this.tossT = -9; this.swingT = -9; this.glitches = 0;
     this.ignored = null;   // the last movement fast enough to be a swing that wasn't one: {role, dir, peak, t}
     this.reset();
   }
   reset() {
-    this.pts = []; this.alt = []; this.lastV = null; this.mv = null; this.hold = null; this.ended = null; this.rec = null; this.pend = null;
+    this.pts = []; this.alt = []; this.lastV = null; this.vh = []; this.mv = null; this.hold = null; this.ended = null; this.rec = null; this.pend = null;
     this.held = null; this.stillSince = 0; this.stillFor = 0; this.stillEnd = -9; this.lastMove = null; this.lastFrame = null;
     this.x = 0.5; this.y = 0.5; this.vx = this.vy = this.speed = 0; this.valid = false; this.lastT = -9;
     this.filt.reset();
@@ -163,6 +163,7 @@ class SwingDetector {
     this.vx = v ? v.vx : 0; this.vy = v ? v.vy : 0; this.speed = v ? v.s : 0;
     if (v) this.step(v, t, p, o, out);
     this.lastV = v;
+    if (v) keep(this.vh, v, 6);
     this.pendingCheck(t, out);
     this.tossCheck(t, out);
     return out;
@@ -270,6 +271,7 @@ class SwingDetector {
     const pv = this.lastV && !turned && t - this.lastV.t < 0.1 ? this.lastV : null;
     const m = {
       t0: v.t, x0: v.x0, y0: v.y0, ux, uy, n: 0, vmax: 0, pk: null, prev: pv, pprev: null, tOn: null, v0: 0, cls: null, sw: null,
+      hist: this.vh.filter((q) => q.t > v.t - 0.2 && !q.gap),   // (the samples just before it: where its speed took off)
       turn: turned, from: turned && lm && lm.t > t - 0.12 ? lm.m : null,
       still: !turned && this.stillEnd > t - 0.2 && this.stillFor >= 0.12,
     };
@@ -295,13 +297,14 @@ class SwingDetector {
       else if (m.pk && !m.pk[2]) m.pk[2] = v;
     }
     m.pprev = m.prev; m.prev = v; m.n++; m.last = { x: p.x, y: p.yw, t: p.t };
+    if (!v.gap && m.hist.length < 40) m.hist.push(v);
     const H = this.held;
     if (H && H.next === m && !m.sw && this.heldVerdict(H, m, false)) this.resolveHeld(p.t, this.out);
     // The way it set off (for telling when it turns: a loop's drop turning into the swing).
     if (m.n === 2) { m.rx = m.ux; m.ry = m.uy; }
     if (m.sw) {
       const sw = m.sw, passed = m.pk && m.pk[2] && m.pk[2].s < 0.95 * m.vmax;
-      if (passed) { sw.tPeak = peakTime(m.pk); sw.peak = m.vmax * (m.gapPk ? m.gapK || 1.15 : 1); }
+      if (passed) { sw.tPeak = this.peakAt(m); sw.peak = m.vmax * (m.gapPk ? m.gapK || 1.15 : 1); }
       else sw.peak = Math.max(m.vmax * (m.gapPk ? m.gapK || 1.15 : 1), m.pred || 0);
     }
   }
@@ -355,9 +358,12 @@ class SwingDetector {
     const O = this.o, gap = !!m.gapPk, rise = median(this.rises), k = median(this.ratios);
     const passed = m.pk && m.pk[2] && m.pk[2].s < 0.95 * m.vmax;
     let t0;
-    if (passed) t0 = peakTime(m.pk);
+    if (passed) t0 = this.peakAt(m);
     else if (gap) t0 = m.pk[1].t;
-    else t0 = Math.max((m.tOn ?? v.t) + (Number.isFinite(rise) ? rise : O.rise), v.t);
+    else {
+      // When the speed will peak: when it usually does for this player, after passing the start speed.
+      t0 = Math.max((m.tOn ?? v.t) + (Number.isFinite(rise) ? rise : O.rise), v.t);
+    }
     const dir = strokeDir(m.ux, m.uy, o.handed);
     const sw = {
       t0, tOn: m.tOn ?? v.t, peak: 0, vx: m.pk ? m.pk[1].vx : v.vx, vy: m.pk ? m.pk[1].vy : v.vy, x: p.x, y: p.yw * p.asp, src: o.src || 'hand',
@@ -377,14 +383,16 @@ class SwingDetector {
     this.hold = null;
     out.push({ type: 'swing', swing: sw });
   }
+  swung(m) { return !!m && m.vmax >= this.thr && !!m.last && Math.abs(m.last.x - m.x0) * this.sc >= 0.22; }
   endMove(m, t, out, why) {
     this.mv = null;
+    if (this.swung(m)) this.swingT = t;
     this.lastMove = { t, m };
     const O = this.o;
     if (m.sw) {
       const sw = m.sw;
       sw.peak = m.vmax * (m.gapPk ? m.gapK || 1.15 : 1);
-      if (m.pk) sw.tPeak = m.pk[2] ? peakTime(m.pk) : m.pk[1].t;
+      if (m.pk) sw.tPeak = this.peakAt(m);
       sw.end = t;
       if (!sw.role) sw.role = 'stroke';
       this.ended = { t, ux: m.ux, uy: m.uy, sw, m };
@@ -450,7 +458,7 @@ class SwingDetector {
     if (h.next) { h.next.cls = 'return'; h.next.from = null; }
     const hm = h.m;
     // Reported late: its peak time is known by now, so the game still times it right.
-    const tp = hm.pk ? (hm.pk[2] ? peakTime(hm.pk) : hm.pk[1].t) : hm.t0;
+    const tp = hm.pk ? this.peakAt(hm) : hm.t0;
     const sw = {
       t0: tp, tOn: hm.tOn ?? tp, peak: hm.vmax * (hm.gapPk ? hm.gapK || 1.15 : 1), vx: hm.pk ? hm.pk[1].vx : hm.ux, vy: hm.pk ? hm.pk[1].vy : hm.uy,
       x: hm.last.x, y: hm.last.y * (this.pts.length ? this.pts[this.pts.length - 1].asp : 4 / 3), src: this.src, dir: strokeDir(hm.ux, hm.uy, this.handed),
@@ -459,6 +467,15 @@ class SwingDetector {
     this.ended = { t: h.t, ux: hm.ux, uy: hm.uy, sw, m: hm };
     this.rec = this.recovery(hm, sw, h.t, true);
     out.push({ type: 'swing', swing: sw }, { type: 'swingEnd', swing: sw });
+  }
+  // When a movement's speed peaked: the middle of its fast part (the samples within 20% of the top, weighted by how far
+  // above that they are), which is steadier than the single fastest sample when the top is broad or noisy.
+  peakAt(m) {
+    if (!m.pk[2] || m.gapPk) return m.pk[1].t;
+    let w = 0, wt = 0;
+    for (const q of m.hist) { const k = q.s - 0.8 * m.vmax; if (k > 0 && !q.gap) { w += k; wt += k * q.t; } }
+    const tp = peakTime(m.pk);
+    return w > 0 ? 0.5 * (wt / w + tp) : tp;
   }
   learn(p) {
     const m = p.m, sw = m.sw;
@@ -474,9 +491,9 @@ class SwingDetector {
     const L = this.o.tossLine;
     if (this.y < L && this.valid) {
       if (!this.highSince) {
-        const e = this.ended, m = this.mv && this.mv.sw ? this.mv : e && t - e.t < this.o.tossBlock ? e.m : null;
+        // (Carried up there by a swing: a fast movement that also went well across, not a raise.)
         this.highSince = t; this.heldUp = 0;
-        this.tossBlock = !!m && !!m.last && Math.abs(m.last.x - m.x0) >= 0.6 * Math.hypot(m.last.x - m.x0, m.last.y - m.y0);   // (a sideways stroke, not a raise)
+        this.tossBlock = this.swung(this.mv) || t - this.swingT < this.o.tossBlock;
       }
       else if (this.speed < 0.6 * this.thr) this.heldUp += Math.min(t - this.highT, 0.1);
       this.highT = t;
