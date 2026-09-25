@@ -1,12 +1,18 @@
 // Synthetic-webcam tests for the camera swing detector (src/camswing.js). No webcam, no browser:
-//   node test/camswing.test.mjs            run everything, print a report, exit 1 on failure
-//   node test/camswing.test.mjs --quick    fewer trials
+//   node test/camswing.test.mjs              run everything, print a report, exit 1 on failure
+//   node test/camswing.test.mjs --quick      fewer trials
+//   node test/camswing.test.mjs --bench      only the play-session benchmark (precision, recall, fh/bh, delay)
+//   node test/camswing.test.mjs --bench --det=path/to/camswing.js   the benchmark against another copy of the detector
 // Swings are minimum-jerk arm movements (a wind-up, the stroke, then the arm coming back), seen by a simulated camera
 // with frame jitter, dropped frames, motion-blur gaps and processing delay. The same frames also go through a copy of
 // the previous detector so the report shows before/after numbers.
-import { SwingDetector, judgeCameraSwing, strokeDir, segmentColor, lockColorFromPatch, adaptColor, pickHand, palmSize, hsv, peakTime } from '../src/camswing.js';
+const DET = (process.argv.find((a) => a.startsWith('--det=')) || '').slice(6);
+const { SwingDetector, judgeCameraSwing, strokeDir, segmentColor, lockColorFromPatch, adaptColor, pickHand, palmSize, hsv, peakTime } =
+  await import(DET ? new URL(DET, `file://${process.cwd()}/`).href : '../src/camswing.js');
 
-const QUICK = process.argv.includes('--quick');
+const QUICK = process.argv.includes('--quick'), BENCH_ONLY = process.argv.includes('--bench');
+const WHY = (process.argv.find((a) => a.startsWith('--why=')) || '').slice(6), WHY_N = { n: 0 };   // print examples of one kind of false swing
+const TRACE = (process.argv.find((a) => a.startsWith('--trace=')) || '').slice(8).split(':').map(Number);   // --trace=session:from:to
 const N = QUICK ? 60 : 300;
 let failures = 0;
 const check = (ok, msg) => { if (!ok) { failures++; console.log('  FAIL ' + msg); } return ok; };
@@ -133,6 +139,359 @@ function gameOld(evs, T, stroke, latency = 0.09) {
   }
   return { hit: false, why: 'none' };
 }
+
+// =====================================================================
+// Play-session benchmark: whole sessions of play (rallies of forehands and backhands, pauses between points, serves)
+// by simulated players, seen by a simulated hand or paddle tracker and fed to the detector the way input.js does.
+// Players differ in handedness, distance from the camera (scale 0.8-1.5), swing speed and style (straight, looped,
+// flowing or early wind-ups, high or wrapped follow-throughs, slices, quick or slow returns to the ready position).
+// Between strokes they sway, fidget, adjust, step back to the ready position and touch their face. Trackers add
+// jitter, wobble, heavy-tailed outliers, dropped frames, motion-blur losses at speed, one-to-four-frame jumps to the
+// other hand or a same-coloured object, 30 or 60 fps and frames skipped while the hand tracker is busy.
+// Each swing event is matched to what the player really did: a stroke (true positive, or a double) or something else
+// (wind-up, follow-through, return to ready, idle...). Also reported: fh/bh accuracy, when the swing was reported
+// relative to the true peak racket speed, the error of its predicted peak time, and what the game makes of it.
+// =====================================================================
+const ASP = 4 / 3, TOSS_Y = 0.24;
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const U = (r, a, b) => a + (b - a) * r();
+const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+// A displacement from 0 to e curving through c (a quadratic Bézier), walked at an even pace along its length.
+function curve(e, c) {
+  if (!c) return (s) => ({ x: e.x * s, y: e.y * s });
+  const q = { x: 2 * c.x - e.x / 2, y: 2 * c.y - e.y / 2 };
+  const bz = (u) => ({ x: 2 * u * (1 - u) * q.x + u * u * e.x, y: 2 * u * (1 - u) * q.y + u * u * e.y });
+  const M = 40, len = new Float64Array(M + 1);
+  for (let i = 1, p = bz(0); i <= M; i++) { const b = bz(i / M); len[i] = len[i - 1] + Math.hypot(b.x - p.x, b.y - p.y); p = b; }
+  return (s) => {
+    const d = s * len[M];
+    let lo = 0, hi = M;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (len[m] < d) lo = m; else hi = m; }
+    return bz((lo + (d - len[lo]) / Math.max(1e-12, len[hi] - len[lo])) / M);
+  };
+}
+// Overlapping minimum-jerk movements add up (like a real arm blending one movement into the next).
+class Mover {
+  constructor() { this.p = []; this.tg = { x: 0, y: 0 }; }
+  to(t0, dur, to, via, a = 1) {
+    const e = { x: to.x - this.tg.x, y: to.y - this.tg.y }, v = via && { x: via.x - this.tg.x, y: via.y - this.tg.y };
+    this.p.push({ t0, t1: t0 + dur, f: curve(e, v), e, a });
+    this.tg = { ...to };
+    return t0 + dur;
+  }
+  at(t) {
+    let x = 0, y = 0;
+    for (const m of this.p) {
+      if (t <= m.t0) continue;
+      if (t >= m.t1) { x += m.e.x; y += m.e.y; continue; }
+      const d = m.f(mj(Math.pow((t - m.t0) / (m.t1 - m.t0), m.a)));
+      x += d.x; y += d.y;
+    }
+    return { x, y };
+  }
+}
+
+// One player's session. Body units: frame widths at the reference distance (so speeds in them are what the detector
+// sees after the palm-size scale); x points to the racket side, y down; all hand positions are relative to rest.
+function playSession(i, dur) {
+  const r = rng(1000 + i * 7919);
+  const src = i % 2 ? 'paddle' : 'hand', fps = (i >> 1) % 2 ? 60 : 30, handed = (i >> 2) % 4 === 3 ? 'L' : 'R', s = handed === 'L' ? -1 : 1;
+  const st = r(), speedMul = st < 0.25 ? U(r, 0.55, 0.8) : st < 0.75 ? U(r, 0.8, 1.2) : U(r, 1.2, 1.7);
+  const scale = U(r, 0.8, 1.5), k = 1 / scale, lev = src === 'paddle' ? U(r, 1.25, 1.4) : 1;
+  const winds = ['straight', 'straight', 'flow', 'loop', 'early'], habit = winds[(r() * winds.length) | 0];
+  const c = {
+    i, src, fps, handed, speedMul, scale, lev, habit, amp: U(r, 0.75, 1.15), wrap: r() < 0.4 ? 0.6 : 0.1, highFin: r() < 0.5,
+    retDur: U(r, 0.45, 0.9) / Math.sqrt(speedMul), pres: r() < 0.15,
+    scaleIn: src === 'hand' ? clamp(scale * U(r, 0.92, 1.08), 0.8, 1.5) : 1,
+    sigma: src === 'hand' ? U(r, 0.0015, 0.005) : U(r, 0.003, 0.01), wob: src === 'hand' ? U(r, 0.002, 0.005) : U(r, 0.003, 0.008),
+    drop: U(r, 0, 0.05), blur: src === 'hand' ? U(r, 0.2, 1) : U(r, 0.3, 1), glitch: src === 'hand' ? U(r, 0, 0.008) : U(r, 0, 0.015),
+    proc: src === 'hand' ? [U(r, 0.008, 0.014), U(r, 0.015, 0.028)] : null,
+    chest: { x: U(r, 0.44, 0.56), y: U(r, 0.32, 0.4) },
+  };
+  const H = new Mover(), B = new Mover(), labels = [], strokes = [], serves = [];
+  const R0 = { x: 0.12 * s, y: 0.16 };                       // the rest position relative to the chest
+  const lab = (t0, t1, what) => labels.push({ t0, t1, what });
+  const rest = () => ({ x: U(r, -0.03, 0.03), y: U(r, -0.03, 0.03) });
+  const jig = (p, a) => ({ x: p.x * a + U(r, -0.03, 0.03), y: p.y * a + U(r, -0.03, 0.03) });
+  const sway = [0, 1, 2].map(() => ({ ax: U(r, 0.003, 0.009), ay: U(r, 0.002, 0.007), f: U(r, 0.15, 1.1), px: r() * 6.3, py: r() * 6.3 }));
+  const stroke = (T, kind) => {
+    const amp = c.amp * U(r, 0.88, 1.12), slice = r() < 0.12, wind = r() < 0.7 ? c.habit : winds[(r() * winds.length) | 0];
+    let A, C, F;
+    if (kind === 'fh') { A = { x: 0.3 * s, y: -0.02 }; C = { x: 0.02 * s, y: -0.07 }; F = { x: -0.42 * s, y: c.highFin ? -0.42 : -0.3 }; }
+    else { A = { x: -0.38 * s, y: 0 }; C = { x: -0.16 * s, y: -0.06 }; F = { x: 0.26 * s, y: c.highFin ? -0.38 : -0.28 }; }
+    if (slice) { A.y = -0.2; C.y = -0.07; F.y = 0.02; }
+    A = jig(A, amp); C = jig(C, amp); F = jig(F, amp);
+    const V = 2.8 * c.speedMul * U(r, 0.85, 1.15), Lp = Math.hypot(C.x - A.x, C.y - A.y) + Math.hypot(F.x - C.x, F.y - C.y);
+    const D = clamp((1.875 * Lp) / V, 0.2, 0.7), a = U(r, 0.85, 1.12), f0 = T - D * Math.pow(0.5, 1 / a);
+    let b0;
+    if (wind === 'loop') {
+      const up = { x: A.x * 0.8, y: A.y - 0.24 * amp }, d1 = U(r, 0.2, 0.34), d2 = U(r, 0.14, 0.24), ov = U(r, 0.04, 0.1);
+      b0 = f0 + ov - d2 - d1 + 0.05;
+      H.to(b0, d1, up, { x: A.x * 0.5, y: -0.16 * amp }); H.to(b0 + d1 - 0.05, d2, A);
+    } else if (wind === 'flow') {
+      const db = U(r, 0.22, 0.42) / Math.sqrt(c.speedMul), ov = U(r, 0.04, 0.12);
+      b0 = f0 + ov - db; H.to(b0, db, A, { x: A.x * 0.5, y: A.y * 0.5 + 0.02 });
+    } else if (wind === 'early') {
+      const db = U(r, 0.6, 1.0);
+      b0 = f0 - U(r, 0.2, 0.5) - db; H.to(b0, db, A);
+    } else {
+      const db = U(r, 0.28, 0.55) / Math.sqrt(c.speedMul);
+      b0 = f0 - U(r, 0, 0.15) - db; H.to(b0, db, A, { x: A.x * 0.5, y: A.y * 0.5 + 0.02 });
+    }
+    const f1 = H.to(f0, D, F, C, a);
+    let r0 = f1 + U(r, 0.05, 0.35);
+    if (r() < c.wrap) r0 = H.to(f1 - 0.06, U(r, 0.18, 0.3), { x: F.x - Math.sign(F.x) * 0.09 * amp, y: F.y - 0.08 * amp }) + U(r, 0, 0.15);
+    const rd = c.retDur * U(r, 0.8, 1.25);
+    let r1;
+    if (r() < 0.3) { const m = H.to(r0, rd * 0.5, { x: F.x * 0.6, y: 0.08 }); r1 = H.to(m - 0.05, rd * 0.6, rest()); }
+    else r1 = H.to(r0, rd, rest());
+    lab(b0, f0, 'windup'); lab(f0, f1, 'stroke'); lab(f1, r0, 'follow'); lab(r0, r1, 'return');
+    strokes.push({ kind, f0, f1, T, b0, r1, wind });
+    return r1;
+  };
+  const between = (t0, len) => {
+    const t1 = t0 + len;
+    lab(t0, t1, 'idle');
+    let end = t1;
+    let t = t0 + U(r, 0.2, 0.6);
+    if (r() < 0.4) {   // a step or two back to the ready position: the whole body moves
+      const d = U(r, 0.8, 1.3), dx = (r() < 0.5 ? -1 : 1) * U(r, 0.06, 0.2);
+      const x = clamp(B.tg.x + dx, -0.12, 0.12);
+      B.to(t, d, { x, y: 0 }, { x: (B.tg.x + x) / 2, y: 0.01 });
+      lab(t, t + d, 'walk'); t += d + U(r, 0.1, 0.4); end = Math.max(end, t);
+    }
+    if (r() < 0.5 && t < t1 - 0.6) {   // fidget: a small quick flick out and back
+      const d = U(r, 0.12, 0.25), p = { x: U(r, -0.06, 0.06), y: U(r, -0.05, 0.05) }, back = H.tg;
+      H.to(t, d, { x: back.x + p.x, y: back.y + p.y }); H.to(t + d, d * 1.2, back);
+      lab(t, t + 2.2 * d, 'fidget'); t += 2.2 * d + U(r, 0.1, 0.4);
+    }
+    if (r() < 0.4 && t < t1 - 1.2) {   // adjust: the hand settles somewhere else, then back
+      const d = U(r, 0.35, 0.8), p = { x: U(r, -0.15, 0.15), y: U(r, -0.1, 0.1) };
+      H.to(t, d, p); const t2 = t + d + U(r, 0.3, 0.8); H.to(t2, U(r, 0.4, 0.8), rest());
+      lab(t, t2 + 0.8, 'adjust'); t = t2 + 0.9;
+    }
+    if (r() < 0.15 && t < t1 - 1.8) {   // touch the face
+      const d = U(r, 0.45, 0.8), p = { x: -0.14 * s, y: -0.34 };
+      H.to(t, d, p, { x: -0.02 * s, y: -0.2 }); const t2 = t + d + U(r, 0.2, 0.6); H.to(t2, d, rest());
+      lab(t, t2 + d, 'face'); end = Math.max(end, t2 + d);
+    }
+    return end;
+  };
+  const serve = (t) => {
+    // The toss gesture: the racket hand up above the toss line, held while the ball goes up, then the serve swing
+    // down and across the body, then back to rest.
+    const yImg = U(r, 0.07, 0.19), top = { x: 0.05 * s, y: ((yImg / ASP - c.chest.y) / k - R0.y) / lev };
+    const du = U(r, 0.35, 0.7), up = H.to(t, du, top, { x: 0.1 * s, y: top.y * 0.5 });
+    const tc = t + du * 0.55;          // roughly when it crosses the line (measured exactly below)
+    const Ts = up + U(r, 0.55, 0.95);
+    const Fs = { x: -0.25 * s, y: 0.1 }, Cs = { x: 0, y: top.y * 0.35 }, V = 2.8 * c.speedMul * U(r, 0.9, 1.2);
+    const D = clamp((1.875 * (Math.hypot(Cs.x - top.x, Cs.y - top.y) + Math.hypot(Fs.x - Cs.x, Fs.y - Cs.y))) / V, 0.22, 0.7);
+    const sf0 = Ts - D / 2;
+    if (r() < 0.5) { H.to(sf0 - 0.25, 0.2, { x: top.x + 0.04 * s, y: top.y - 0.06 }); }   // into the trophy position
+    const sf1 = H.to(sf0, D, Fs, Cs);
+    const r1 = H.to(sf1 + U(r, 0.1, 0.3), c.retDur * 1.2, rest());
+    lab(t, sf0, 'raise'); lab(sf0, sf1, 'serve'); lab(sf1, r1, 'return');
+    serves.push({ t, tcNom: tc, f0: sf0, f1: sf1, T: Ts, top: up });
+    return r1;
+  };
+  let t = 1;
+  while (t < dur - 8) {
+    t = between(t, U(r, 2, 5));
+    if (r() < 0.5) t = serve(t + U(r, 0.2, 0.6)) + U(r, 0.3, 0.8);
+    const n = 2 + ((r() * 6) | 0);
+    let T = t + 1.2;
+    for (let j = 0; j < n && T < dur - 3; j++) {
+      const kind = r() < 0.55 ? 'fh' : 'bh';
+      const end = stroke(T, kind);
+      t = end; T += U(r, 1.6, 2.6);
+      T = Math.max(T, end + 0.5);
+    }
+    t += 0.5;
+  }
+  const total = t + 1.5;
+  H.p.sort((p, q) => p.t0 - q.t0); B.p.sort((p, q) => p.t0 - q.t0);
+  // The tracked point in frame widths (y in width units too; the detector gets y × aspect, like the real tracker).
+  const pos = (t) => {
+    const h = H.at(t), b = B.at(t);
+    let sx = 0, sy = 0;
+    for (const w of sway) { sx += w.ax * Math.sin(6.283 * w.f * t + w.px); sy += w.ay * Math.sin(6.283 * w.f * 1.3 * t + w.py); }
+    return { x: c.chest.x + b.x * k + k * (R0.x + lev * (h.x + sx)), y: c.chest.y + b.y * k + k * (R0.y + lev * (h.y + sy)) };
+  };
+  const speedAt = (t) => { const a = pos(t - 0.002), b = pos(t + 0.002); return Math.hypot(b.x - a.x, b.y - a.y) / 0.004; };
+  // True peak times, speeds (as the detector would measure them: image speed × the scale it's given) and the toss-line crossings.
+  for (const x of [...strokes, ...serves]) {
+    let best = 0, bt = x.T;
+    for (let t = x.f0; t <= x.f1; t += 0.002) { const v = speedAt(t); if (v > best) { best = v; bt = t; } }
+    x.T = bt; x.peak = best * c.scaleIn;
+  }
+  for (const sv of serves) {
+    sv.tc = null;
+    for (let t = sv.t; t < sv.f0; t += 0.002) if (pos(t).y * ASP < TOSS_Y) { sv.tc = t; break; }
+  }
+  return { c, pos, speedAt, labels, strokes, serves: serves.filter((sv) => sv.tc !== null), dur: total };
+}
+
+// The tracker's view of a session: frames with timing jitter, busy-worker skips, jitter, wobble, outliers, blur losses
+// and jumps to the other hand / a same-coloured object.
+function trackSession(S) {
+  const c = S.c, r = rng(77 + c.i * 131), out = [], s = c.handed === 'L' ? -1 : 1, k = 1 / c.scale;
+  let busy = -1, wx = 0, wy = 0, gl = 0, gp = null;
+  const spot = { x: U(r, 0.1, 0.9), y: U(r, 0.15, 0.7) };
+  for (let n = 0; ; n++) {
+    const real = 0.3 + n / c.fps + gaussR(r) * (c.fps === 60 ? 0.0008 : 0.0015);
+    if (real > S.dur) break;
+    if (c.proc) { if (real < busy) continue; busy = real + U(r, c.proc[0], c.proc[1]); }
+    const t = c.pres ? real + U(r, 0, 0.016) : real + gaussR(r) * 0.0005;
+    const vi = S.speedAt(real), rho = Math.exp(-1 / c.fps / 0.15);
+    wx = rho * wx + gaussR(r) * c.wob * Math.sqrt(1 - rho * rho); wy = rho * wy + gaussR(r) * c.wob * Math.sqrt(1 - rho * rho);
+    const lossP = c.drop + c.blur * sstep(1.8, 5.5, vi) * (c.fps === 60 ? 0.45 : 0.8);
+    if (!gl && r() < c.glitch) {
+      gl = 1 + ((r() * (c.src === 'hand' ? 3 : 4)) | 0);
+      const p = S.pos(real);
+      gp = c.src === 'hand' ? { x: p.x - (0.24 + U(r, 0, 0.1)) * s * k, y: p.y + U(r, 0, 0.12) * k } : { x: spot.x + U(r, -0.02, 0.02), y: spot.y / ASP };
+    }
+    if (gl) { gl--; out.push({ t, x: gp.x + gaussR(r) * c.sigma, y: (gp.y + gaussR(r) * c.sigma) * ASP, glitch: true }); continue; }
+    if (r() < lossP) { out.push({ t, miss: true }); continue; }
+    const p = S.pos(real), tail = r() < 0.04 ? 3 : 1;
+    out.push({ t, x: p.x + wx + gaussR(r) * c.sigma * tail, y: (p.y + wy + gaussR(r) * c.sigma * tail) * ASP });
+  }
+  return out;
+}
+
+// Feed a session to a detector like input.js does; the game cancels the swing in progress when the ball is tossed.
+function runSession(S, frames) {
+  const c = S.c, d = new SwingDetector(), evs = [];
+  const serving = (t) => S.serves.some((sv) => t >= sv.t && t <= sv.f0);
+  const tr = TRACE.length === 3 && TRACE[0] === c.i;
+  for (const f of frames) {
+    const got = f.miss ? d.miss(f.t) : d.push(f.t, f.x, f.y, { handed: c.handed, aspect: ASP, sens: 1, src: c.src, scale: c.scaleIn });
+    if (tr && f.t >= TRACE[1] && f.t <= TRACE[2]) {
+      const m = d.mv, h = d.home, lab = S.labels.filter((l) => f.t >= l.t0 && f.t <= l.t1).map((l) => l.what).join('/');
+      console.log(`  ${f.t.toFixed(3)} ${f.miss ? 'miss' : `(${f.x.toFixed(3)},${(f.y / ASP).toFixed(3)})${f.glitch ? ' GLITCH' : ''}`} true ${(S.speedAt(f.t) * c.scaleIn).toFixed(2)} ` +
+        `v ${d.speed.toFixed(2)} thr ${d.thr.toFixed(2)} home ${h ? `(${h.x.toFixed(2)},${h.y.toFixed(2)})` : '-'} mv ${m ? `${m.cls || '-'} u(${m.ux.toFixed(2)},${m.uy.toFixed(2)}) x0 (${m.x0.toFixed(2)},${m.y0.toFixed(2)}) n${m.n} vmax ${m.vmax.toFixed(2)}${m.turn ? ' turn' : ''}${m.still ? ' still' : ''}${m.sw ? ' SW' : ''}` : '-'}` +
+        `${d.held ? ' HELD' : ''}${d.rec ? ` rec(${d.rec.same ? 'same' : ''}${d.rec.back ? 'back' : ''})` : ''} ${lab} ${got.map((e) => e.type + (e.swing ? ' ' + e.swing.dir : '')).join(',')}`);
+    }
+    for (const e of got) {
+      if (e.type === 'swing') evs.push({ type: 'swing', te: f.t, t0: e.swing.t0, dir: e.swing.dir, sw: e.swing, peak0: e.swing.peak });
+      else if (e.type === 'toss') { evs.push({ type: 'toss', te: f.t }); if (serving(f.t)) { d.cancel(); d.ended = null; } }
+      else if (e.type === 'swingStart') evs.push({ type: 'start', te: f.t, t0: e.t0, dir: e.dir });
+    }
+  }
+  return evs;
+}
+
+// The game's verdict on the swings around one incoming ball, whose contact is planned at the stroke's true peak plus
+// the player's own timing error (off: seconds).
+function gameVerdict(evs, st, off) {
+  let early = 0;
+  const T = st.T + off;
+  for (const e of evs) {
+    if (e.type !== 'swing' || e.te < T - 0.9 || e.te > T + 0.6) continue;
+    const j = judgeCameraSwing(e.t0 - T, e.dir, st.kind);
+    if (j === 'ignore' || j === 'windup') continue;
+    if (j === 'early') { early++; continue; }
+    if (j === 'late') return { v: 'late', early };
+    if (e.match !== st) return { v: 'byOther', early };
+    return { v: e.dir && e.dir !== st.kind ? 'wrongDir' : 'hit', early };
+  }
+  return { v: 'none', early };
+}
+
+function newStats() {
+  return { sessions: 0, secs: 0, strokes: 0, tp: 0, dup: 0, fp: {}, fpN: 0, dirOk: 0, dirNull: 0, delay: [], t0err: [], game: {}, flash: 0,
+    pow: [], serves: 0, serveSw: 0, tossOk: 0, tossLate: 0, tossMiss: 0, tossDup: 0, tossFalse: {}, tossFalseN: 0 };
+}
+function scoreSession(S, evs, G) {
+  const labelAt = (t) => { let best = null; for (const l of S.labels) if (t >= l.t0 - 0.02 && t <= l.t1 + 0.05 && (!best || l.t0 > best.t0)) best = l; return best ? best.what : 'idle'; };
+  const sw = evs.filter((e) => e.type === 'swing');
+  const ro = rng(5 + S.c.i), all = [...S.strokes.map((x) => ({ ...x, serve: false, off: gaussR(ro) * 0.06 })), ...S.serves.map((x) => ({ ...x, kind: null, serve: true }))];
+  for (const x of all) {
+    const m = sw.filter((e) => !e.match && e.te >= x.f0 - 0.03 && e.te <= x.T + 0.3 && Math.abs(e.t0 - x.T) <= 0.2);
+    m.forEach((e, j) => { e.match = x; e.dup = j > 0; });
+    x.ev = m[0] || null;
+  }
+  for (const g of G) {
+    g.sessions++; g.secs += S.dur;
+    for (const x of all) {
+      if (x.serve) { g.serves++; if (x.ev) g.serveSw++; continue; }
+      g.strokes++;
+      if (g === G[0] && WHY === 'miss' && !x.ev && WHY_N.n++ < 14) {
+        const near = sw.filter((e) => e.te > x.T - 1 && e.te < x.T + 0.6).map((e) => `[${e.te.toFixed(2)} ${e.dir} t0 ${e.t0.toFixed(2)} pk ${e.peak0.toFixed(1)}]`).join(' ');
+        const sp = [-0.2, -0.1, 0, 0.1, 0.2].map((d) => (S.speedAt(x.T + d) * S.c.scaleIn).toFixed(1)).join(' ');
+        console.log(`  missed ${x.kind} session ${S.c.i} ${S.c.src} ${S.c.fps}fps ${x.wind} T ${x.T.toFixed(3)} f0 ${x.f0.toFixed(2)} b0 ${x.b0.toFixed(2)} peak ${x.peak.toFixed(2)} · speed ${sp} · events ${near}`);
+      }
+      if (x.ev) {
+        g.tp++;
+        if (x.ev.dir === x.kind) g.dirOk++; else if (!x.ev.dir) g.dirNull++;
+        g.delay.push(x.ev.te - x.T); g.t0err.push(x.ev.t0 - x.T);
+        g.pow.push(x.ev.sw.peak / x.peak);
+      }
+      const v = gameVerdict(sw, x, x.off);
+      g.game[v.v] = (g.game[v.v] || 0) + 1; g.flash += v.early;
+    }
+    for (const e of sw) {
+      if (e.match && !e.dup) continue;
+      const what = e.dup ? 'double' : labelAt(e.te);
+      g.fp[what] = (g.fp[what] || 0) + 1; g.fpN++;
+      if (g === G[0] && WHY && WHY === what && WHY_N.n++ < 12) {
+        const near = S.labels.filter((l) => l.t1 > e.te - 1.2 && l.t0 < e.te + 0.5).map((l) => `${l.what} ${l.t0.toFixed(2)}-${l.t1.toFixed(2)}`).join(', ');
+        const sp = [-0.2, -0.1, 0, 0.1, 0.2].map((d) => (S.speedAt(e.te + d) * S.c.scaleIn).toFixed(1)).join(' ');
+        console.log(`  why ${what}: session ${S.c.i} ${S.c.src} ${S.c.fps}fps ${S.c.habit} at ${e.te.toFixed(3)} dir ${e.dir} t0 ${e.t0.toFixed(3)} peak ${e.peak0.toFixed(2)}/${e.sw.peak.toFixed(2)} role ${e.sw.role} · true speed ${sp} · ${near}`);
+      }
+    }
+    // Tosses: once per serve, soon after the hand passes the line; never anywhere else (a high follow-through).
+    const tosses = evs.filter((e) => e.type === 'toss');
+    for (const sv of S.serves) {
+      const m = tosses.filter((e) => !e.used && e.te >= sv.tc - 0.05 && e.te <= sv.f0 + 0.05);
+      m.forEach((e) => (e.used = true));
+      if (g === G[0] && WHY === 'toss' && !m.length && WHY_N.n++ < 10) {
+        const ys = [0, 0.1, 0.2, 0.3, 0.4].map((d) => (S.pos(sv.tc + d).y * ASP).toFixed(2)).join(' ');
+        console.log(`  toss missed: session ${S.c.i} ${S.c.src} crossing ${sv.tc.toFixed(2)} swing ${sv.f0.toFixed(2)} · y ${ys} · events ${evs.filter((e) => e.te > sv.t - 1 && e.te < sv.f1 + 0.3).map((e) => `${e.type} ${e.te.toFixed(2)}${e.dir !== undefined ? ' ' + e.dir : ''}`).join(', ')}`);
+      }
+      if (!m.length) g.tossMiss++; else { if (m[0].te - sv.tc <= 0.35) g.tossOk++; else g.tossLate++; if (m.length > 1) g.tossDup += m.length - 1; }
+    }
+    for (const e of tosses) if (!e.used) { const w = labelAt(e.te); g.tossFalse[w] = (g.tossFalse[w] || 0) + 1; g.tossFalseN++; }
+    for (const e of tosses) delete e.used;
+  }
+}
+const med = (a) => { if (!a.length) return NaN; const s = a.slice().sort((p, q) => p - q); return s[s.length >> 1]; };
+const q90 = (a) => { if (!a.length) return NaN; const s = a.slice().sort((p, q) => p - q); return s[Math.floor(s.length * 0.9)]; };
+
+function bench() {
+  const NS = QUICK ? 32 : 128, dur = QUICK ? 50 : 70, groups = new Map();
+  for (const g of ['all', 'hand 30 fps', 'hand 60 fps', 'paddle 30 fps', 'paddle 60 fps', 'near (scale<1)', 'mid distance', 'far (scale>1.25)', 'slow swingers',
+    'normal speed', 'fast swingers', 'left-handed', 'wind-up: straight', 'wind-up: flow', 'wind-up: loop', 'wind-up: early', 'noisy tracking', 'heavy motion blur', 'no captureTime']) groups.set(g, newStats());
+  const group = (name) => { if (!groups.has(name)) groups.set(name, newStats()); return groups.get(name); };
+  const t0 = performance.now();
+  for (let i = 0; i < NS; i++) {
+    const S = playSession(i, dur), c = S.c, frames = trackSession(S), evs = runSession(S, frames);
+    const G = [group('all'), group(`${c.src} ${c.fps} fps`), group(c.scale < 1 ? 'near (scale<1)' : c.scale > 1.25 ? 'far (scale>1.25)' : 'mid distance'),
+      group(c.speedMul < 0.8 ? 'slow swingers' : c.speedMul > 1.2 ? 'fast swingers' : 'normal speed'), group(`wind-up: ${c.habit}`)];
+    if (c.handed === 'L') G.push(group('left-handed'));
+    if (c.pres) G.push(group('no captureTime'));
+    if ((c.src === 'hand' && c.sigma > 0.0038) || (c.src === 'paddle' && c.sigma > 0.0075)) G.push(group('noisy tracking'));
+    if (c.blur > 0.7) G.push(group('heavy motion blur'));
+    scoreSession(S, evs, G);
+  }
+  const P = (a, b) => (b ? `${((100 * a) / b).toFixed(1)}` : '-').padStart(5);
+  console.log(`\nPlay-session benchmark${DET ? ` (detector: ${DET})` : ''}: ${NS} sessions of ${dur} s, ${groups.get('all').strokes} strokes, ${groups.get('all').serves} serves (${((performance.now() - t0) / 1000).toFixed(1)} s)`);
+  console.log('  recall: strokes reported (once, within 0.2 s of the true peak) · prec: share of swing events that were real strokes · fh/bh: right direction');
+  console.log('  delay: when the event came (frame time) − true peak, median/p90 · t0 err: predicted peak − true peak, mean±sd · game: returned with the right stroke');
+  console.log('  group                   strokes recall  prec  fh/bh  null   delay ms  t0 err ms  game  early/100  false swings per 100 strokes (by what the player was doing)');
+  for (const [name, g] of groups) {
+    const e = g.t0err, m = e.reduce((p, q) => p + q, 0) / Math.max(1, e.length), sd = Math.sqrt(e.reduce((p, q) => p + (q - m) ** 2, 0) / Math.max(1, e.length));
+    const fp = Object.entries(g.fp).sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} ${((100 * n) / g.strokes).toFixed(1)}`).join(', ');
+    console.log(`  ${name.padEnd(22)} ${String(g.strokes).padStart(6)} ${P(g.tp, g.strokes)} ${P(g.tp, g.tp + g.fpN)} ${P(g.dirOk, g.tp)} ${P(g.dirNull, g.tp)}  ${String(Math.round(med(g.delay) * 1000)).padStart(4)}/${String(Math.round(q90(g.delay) * 1000)).padEnd(4)} ${String(Math.round(m * 1000)).padStart(5)}±${String(Math.round(sd * 1000)).padEnd(4)} ${P(g.game.hit || 0, g.strokes)} ${((100 * g.flash) / g.strokes).toFixed(1).padStart(6)}     ${fp}`);
+  }
+  const a = groups.get('all'), pw = stats(a.pow);
+  console.log(`  game outcomes (all): ${Object.entries(a.game).map(([k, v]) => `${k} ${P(v, a.strokes).trim()}%`).join(', ')}`);
+  console.log(`  power: reported peak / true peak ${pw.mean.toFixed(2)} ± ${pw.sd.toFixed(2)}; hand ${stats(groups.get('hand 30 fps').pow.concat(groups.get('hand 60 fps').pow)).sd.toFixed(2)} sd, paddle ${stats(groups.get('paddle 30 fps').pow.concat(groups.get('paddle 60 fps').pow)).sd.toFixed(2)} sd`);
+  console.log(`  serves: toss on time ${a.tossOk}/${a.serves}, late ${a.tossLate}, missed ${a.tossMiss}, twice ${a.tossDup}; serve swing reported ${a.serveSw}/${a.serves}; false tosses ${a.tossFalseN} ${JSON.stringify(a.tossFalse)}`);
+  return a;
+}
+const B = bench();
+if (BENCH_ONLY) process.exit(0);
 
 // ---- stroke scenarios ----
 const LAT_NEW_CAP = 0.04;    // default timing offset with capture timestamps (see report)
