@@ -605,28 +605,27 @@ const SHIRT = bKeys([
   [0.958, 0.182, 0.106, 0.132, 2.3], [0.985, 0.177, 0.105, 0.126, 2.3], [1.02, 0.169, 0.103, 0.116, 2.3],
   [1.08, 0.16, 0.102, 0.104, 2.35], [1.14, 0.157, 0.103, 0.099, 2.4], [1.2, 0.163, 0.106, 0.1, 2.45],
   [1.25, 0.172, 0.11, 0.103, 2.5], [1.3, 0.182, 0.113, 0.107, 2.6], [1.34, 0.186, 0.115, 0.111, 2.7],
-  [1.37, 0.189, 0.115, 0.113, 2.75], [1.4, 0.191, 0.113, 0.113, 2.8], [1.425, 0.191, 0.109, 0.111, 2.8],
-  [1.447, 0.185, 0.103, 0.107, 2.7], [1.466, 0.171, 0.096, 0.103, 2.5], [1.483, 0.151, 0.088, 0.097, 2.35],
-  [1.497, 0.127, 0.08, 0.09, 2.2], [1.508, 0.101, 0.073, 0.083, 2.05], [1.515, 0.083, 0.068, 0.079, 2.0],
+  [1.37, 0.189, 0.115, 0.113, 2.75], [1.4, 0.191, 0.113, 0.113, 2.8], [1.43, 0.193, 0.108, 0.111, 2.8],
+  [1.455, 0.194, 0.101, 0.106, 2.7], [1.475, 0.183, 0.094, 0.102, 2.5], [1.492, 0.16, 0.087, 0.097, 2.35],
+  [1.507, 0.13, 0.08, 0.091, 2.2], [1.52, 0.103, 0.074, 0.085, 2.05], [1.53, 0.083, 0.068, 0.079, 2.0],
 ]);
 // Shorts round the hips, from under the shirt down to where the legs split.
 const PELVIS = bKeys([
   [0.92, 0.176, 0.093, 0.121, 2.4], [0.945, 0.176, 0.095, 0.125, 2.4], [0.975, 0.173, 0.096, 0.121, 2.4],
   [1.005, 0.167, 0.096, 0.112, 2.4], [1.035, 0.161, 0.096, 0.104, 2.4],
 ]);
-const SHIRT_HEM = 0.958, NECKLINE = 1.515, NECK_Z = 0.006, NECK_TILT = 0.012;   // the neckline dips 12 mm at the front
+const SHIRT_HEM = 0.958, NECKLINE = 1.53, NECK_Z = 0.006, NECK_TILT = 0.015;   // the neckline dips 15 mm at the front
 // Bare arm (radius, metres, for arm = 1.14) and leg (for leg = 1.1) before muscles and landmarks.
-const ARM_R = bKeys([[0.9, 0.026], [0.915, 0.027], [0.94, 0.028], [0.965, 0.031], [1.0, 0.035], [1.04, 0.041], [1.08, 0.046], [1.11, 0.047], [1.14, 0.045], [1.165, 0.042], [1.19, 0.044], [1.22, 0.048], [1.26, 0.052], [1.3, 0.054], [1.34, 0.057], [1.38, 0.06], [1.42, 0.062], [1.448, 0.061], [1.466, 0.055], [1.479, 0.045], [1.488, 0.03]]);
+const ARM_R = bKeys([[0.9, 0.026], [0.915, 0.027], [0.94, 0.028], [0.965, 0.031], [1.0, 0.035], [1.04, 0.041], [1.08, 0.046], [1.11, 0.047], [1.14, 0.045], [1.165, 0.042], [1.19, 0.044], [1.22, 0.048], [1.26, 0.052], [1.3, 0.054], [1.34, 0.057], [1.38, 0.06], [1.42, 0.062], [1.44, 0.061], [1.458, 0.055], [1.47, 0.045], [1.478, 0.03]]);
 const LEG_R = bKeys([[0.085, 0.033], [0.1, 0.033], [0.13, 0.031], [0.17, 0.03], [0.21, 0.031], [0.26, 0.035], [0.31, 0.04], [0.36, 0.045], [0.4, 0.048], [0.44, 0.05], [0.47, 0.05], [0.5, 0.051], [0.525, 0.052], [0.55, 0.054], [0.58, 0.058], [0.62, 0.064], [0.68, 0.07], [0.74, 0.075], [0.8, 0.079], [0.86, 0.082]]);
 
 function buildTorso(bld, look) {
   const m = look.muscle, ch = look.chest, SEG = 36, collar = look.collar;
-  // Bare skin cut out of the shirt, as signed distances in metres (positive = cloth): armholes, a V-neck, an open
-  // polo placket. They reach the shader through aEdge, so the edge is crisp at any mesh density.
+  // Bare skin cut out of the shirt, as signed distances in metres (positive = cloth): the armholes reach the shader
+  // through aEdge, so the edge is crisp at any mesh density. V-necks and the polo's open placket have corners too
+  // sharp for that and are cut in the shader (flagged by the fraction of the torso's kind).
   const holes = [];
   if (look.sleeve <= 0.001) holes.push((x, y) => bSmax(0.138 + 0.054 * bClamp((1.44 - y) / 0.19) ** 2 - Math.abs(x), 1.255 - y, 0.02));   // tank-top armholes
-  if (collar === 'v') holes.push((x, y, z) => Math.max((1.415 + 1.25 * Math.abs(x) - y) / 1.6, z + 0.03));
-  if (collar === 'polo') holes.push((x, y, z) => Math.max((1.468 + 2.2 * Math.abs(x) - y) / 2.4, z + 0.03));
   const cloth = (x, y, z) => holes.reduce((d, f) => Math.min(d, f(x, y, z)), 1);
   const edge = (x, y, z) => 0.5 + Math.max(-0.45, Math.min(0.45, cloth(x, y, z), y - SHIRT_HEM, NECKLINE + NECK_TILT * Math.max(-1, Math.min(1, z / 0.07)) - y));
   const shirtAt = (y) => (c, s) => {
@@ -639,9 +638,9 @@ function buildTorso(bld, look) {
     z += (0.004 + 0.004 * m) * bG(y - 1.37, 0.06) * bG(ax - 0.085, 0.05) * bw;              // shoulder blades
     z -= 0.0025 * bG(ax, 0.02) * bw * bG(y - 1.25, 0.14);                                   // spine
     x += Math.sign(c) * Math.abs(c) * ((0.003 + 0.008 * m) * bG(y - 1.3, 0.07) * bStep(s, -0.5, 0.6)   // lats: the V to the waist
-      + 0.01 * m * bG(y - 1.48, 0.02));                                                     // traps fill the neck-to-shoulder slope
-    z += NECK_Z * bStep(y, 1.46, 1.515);
-    const dy = NECK_TILT * s * bStep(y, 1.49, 1.515);
+      + 0.01 * m * bG(y - 1.5, 0.022));                                                     // traps fill the neck-to-shoulder slope
+    z += NECK_Z * bStep(y, 1.47, 1.53);
+    const dy = NECK_TILT * s * bStep(y, 1.5, 1.53);
     // skin under an armhole or V sits a few mm below the cloth, so the shirt has an edge
     const d = cloth(x, y + dy, z);
     if (d < 0) { const k = 1 - 0.004 * bStep(-d, 0, 0.015) / Math.max(0.05, Math.hypot(x, z)); x *= k; z *= k; }
@@ -653,9 +652,9 @@ function buildTorso(bld, look) {
   };
   // hem turned in under the shirt's edge (over the shorts), then the shirt up to the neckline
   const [la, lzf, lzb, ln] = PELVIS(SHIRT_HEM + 0.012);
-  const rings = [bld.ringP(0, SHIRT_HEM + 0.012, 0, (c, s) => bSuper(c, s, la - 0.004, lzf - 0.004, lzb - 0.004, ln), SEG, (c, s, x, y) => torsoWeights(y), 3, () => 0.5)];
-  const kind = collar === 'polo' ? 3.25 : 3;   // the fraction tells the shader to draw a placket
-  for (const y of [SHIRT_HEM, 0.985, 1.02, 1.06, 1.1, 1.14, 1.18, 1.22, 1.26, 1.3, 1.335, 1.37, 1.4, 1.425, 1.447, 1.466, 1.483, 1.497, 1.508, NECKLINE]) rings.push(bld.ringP(0, y, 0, shirtAt(y), SEG, tw, kind, edge));
+  const kind = collar === 'polo' ? 3.25 : collar === 'v' ? 3.125 : 3;   // the fraction flags a polo placket or a V-neck
+  const rings = [bld.ringP(0, SHIRT_HEM + 0.012, 0, (c, s) => bSuper(c, s, la - 0.004, lzf - 0.004, lzb - 0.004, ln), SEG, (c, s, x, y) => torsoWeights(y), kind, () => 0.5)];
+  for (const y of [SHIRT_HEM, 0.985, 1.02, 1.06, 1.1, 1.14, 1.18, 1.22, 1.26, 1.3, 1.335, 1.37, 1.4, 1.43, 1.455, 1.475, 1.492, 1.507, 1.52, NECKLINE]) rings.push(bld.ringP(0, y, 0, shirtAt(y), SEG, tw, kind, edge));
   for (const r of rings) r.region = 'shirt';
   bld.chain(rings, 5);
   buildCollar(bld, collar, SEG);
@@ -671,10 +670,10 @@ function buildCollar(bld, collar, SEG) {
   if (collar === 'polo') {
     const flapLift = (c, s) => { const f = front(c, s); return -0.002 - 0.012 * bG(f - 0.42, 0.3) + 0.008 * bStep(f, 1.2, 2.6); };
     const notch = (c, s) => bStep(front(c, s), 0.05, 0.24);   // the two collar points part at the front
-    rs = [base, [0.026, 0.074, 0.062, 0.074], [0.03, 0.078, 0.066, 0.078],
-      [(c, s) => 0.03 + (flapLift(c, s) - 0.03) * notch(c, s), (c, s) => 0.078 + 0.024 * notch(c, s), (c, s) => 0.066 + 0.026 * notch(c, s), (c, s) => 0.078 + 0.019 * notch(c, s)]];
+    rs = [base, [0.026, 0.076, 0.064, 0.077], [0.03, 0.08, 0.068, 0.081],
+      [(c, s) => 0.03 + (flapLift(c, s) - 0.03) * notch(c, s), (c, s) => 0.08 + 0.024 * notch(c, s), (c, s) => 0.068 + 0.026 * notch(c, s), (c, s) => 0.081 + 0.019 * notch(c, s)]];
   } else {
-    rs = [base, [0.011, 0.076, 0.063, 0.076], [0.017, 0.073, 0.061, 0.074], [0.012, 0.06, 0.052, 0.062]];
+    rs = [base, [0.011, 0.077, 0.064, 0.078], [0.018, 0.074, 0.062, 0.076], [0.012, 0.064, 0.055, 0.066]];
     if (collar === 'v') h = (c, s) => bStep(s, -0.8, 0.05);
   }
   const val = (v, c, s) => (typeof v === 'function' ? v(c, s) : v);
@@ -686,7 +685,14 @@ function buildCollar(bld, collar, SEG) {
     out.region = 'shirt';
     return out;
   });
-  bld.chain(rings, 0);
+  if (collar === 'polo') { bld.chain(rings.slice(0, 3), 0); bld.chain(rings.slice(2), 0); }   // the fold-down flap faces out
+  else bld.chain(rings, 0);
+}
+// Cap a loft's end and give the tip vertex proper detail parameters (cap() leaves them zero).
+function bCap(bld, ring, tip, w, region, par, edge = 1) {
+  bld.cap(ring, tip, w, region);
+  const i = bld.pos.length / 3 - 1;
+  bld.par.splice(i * 4, 4, ...par); bld.edge[i] = edge;
 }
 
 // Shorts: hips down to a crotch seam shared by both legs ("trousers" topology, so there's no seam bulge), then two
@@ -758,8 +764,8 @@ function buildArm(bld, look, s) {
     r.region = reg;
     return r;
   };
-  const top = 1.494;
-  const YS = [1.488, 1.479, 1.47, 1.46, 1.448, 1.43, 1.405, 1.38, 1.355, 1.33, 1.305, 1.28, 1.255, 1.23, 1.205, 1.185, 1.165, 1.145, 1.125, 1.1, 1.075, 1.05, 1.02, 0.99, 0.97, 0.95, 0.93, 0.915, 0.9];
+  const top = 1.484;
+  const YS = [1.478, 1.47, 1.46, 1.45, 1.44, 1.43, 1.405, 1.38, 1.355, 1.33, 1.305, 1.28, 1.255, 1.23, 1.205, 1.185, 1.165, 1.145, 1.125, 1.1, 1.075, 1.05, 1.02, 0.99, 0.97, 0.95, 0.93, 0.915, 0.9];
   // bare arm (under a sleeve it starts just above the hem)
   const secs = [];
   for (const y of YS) {
@@ -770,14 +776,14 @@ function buildArm(bld, look, s) {
   }
   const rings = secs.map(([y, reg, ex]) => ring(y, reg, () => ex, false, null));
   bld.chain(rings, 2);
-  if (!sleeved) bld.cap(rings[0], [px(top), top, pz(top)], [[arm, 0.5], [clav, 0.5]], 'skin');
+  if (!sleeved) bCap(bld, rings[0], [px(top), top, pz(top)], [[arm, 0.5], [clav, 0.5]], 'skin', [0, 0, top, 0]);
   else {
     // sleeve: a little looser than the arm, bunched at the armpit, hem turned in
     const ease = (y) => (c, sn) => 0.006 + 0.007 * bClamp((1.45 - y) / 0.15) + 0.005 * Math.max(0, -c * s) * bG(y - 1.39, 0.045);
     const sl = YS.filter((y) => y > hem + 0.012).map((y) => ring(y, 'shirt', ease(y), true, () => 0.5 + (y - hem)));
     sl.push(ring(hem, 'shirt', ease(hem), true, () => 0.5), ring(hem + 0.012, 'shirt', () => 0.0015, false, () => 0.5));
     bld.chain(sl, 2);
-    bld.cap(sl[0], [px(top), top + 0.006, pz(top)], [[arm, 0.5], [clav, 0.5]], 'shirt');
+    bCap(bld, sl[0], [px(top), top + 0.006, pz(top)], [[arm, 0.5], [clav, 0.5]], 'shirt', [0, 0, top, 0], 0.5 + top - hem);
   }
 }
 
@@ -882,8 +888,8 @@ function buildShoe(bld, s, S) {
       if (flip) { bld.tri(a, c, b, reg); bld.tri(c, d, b, reg); } else { bld.tri(a, b, c, reg); bld.tri(c, b, d, reg); }
     }
   }
-  bld.cap(rings[0], [x0 - s * 0.006, 0.027, -0.208], [[toe, 1]], 'sole');   // rubber toe bumper
-  bld.cap(rings[rings.length - 1], [x0, 0.04, 0.077], [[ft, 1]], 'shoe');
+  bCap(bld, rings[0], [x0 - s * 0.006, 0.027, -0.208], [[toe, 1]], 'sole', [-0.006, 0.027, -0.208, 2], 0.514);   // rubber toe bumper
+  bCap(bld, rings[rings.length - 1], [x0, 0.04, 0.077], [[ft, 1]], 'shoe', [0, 0.04, 0.077, 2], 0.535);
 }
 
 function makeSkeleton(shape) {
@@ -1040,11 +1046,15 @@ const DETAIL_ALBEDO = `
     }
     if (on) diffuseColor.rgb = vAccent.rgb;
     if (body) {
-      if (vPar.w > 3.2 && vPar.y < -0.75) {                      // polo placket: stitched strip, two buttons
-        float ux = vRest.x * y / vRest.y;
-        if (y > 1.37) diffuseColor.rgb *= 1.0 - 0.3 * exp(-pow((abs(ux) - 0.014) / 0.0011, 2.0)) * near;
-        float b = min(length(vec2(ux, y - 1.445)), length(vec2(ux, y - 1.412)));
+      float ux = vRest.x * y / vRest.y, polo = step(3.2, vPar.w), vee = step(3.1, vPar.w) - polo;   // unscaled x
+      if (polo > 0.5 && vPar.y < -0.75) {                        // polo placket: stitched strip, two buttons
+        if (y > 1.39) diffuseColor.rgb *= 1.0 - 0.3 * exp(-pow((abs(ux) - 0.014) / 0.0011, 2.0)) * near;
+        float b = min(length(vec2(ux, y - 1.458)), length(vec2(ux, y - 1.425)));
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.7 + 0.25, (1.0 - smoothstep(0.0038, 0.0048, b)) * near);
+      }
+      if (polo + vee > 0.5) {                                    // V-neck, or the polo's open top button
+        float vb = polo > 0.5 ? 1.482 : 1.425, sl = polo > 0.5 ? 2.2 : 1.25;
+        e = min(e, max((vb + sl * abs(ux) - y) / sqrt(1.0 + sl * sl), (vPar.y + 0.45) * 0.1));
       }
       float bare = 1.0 - smoothstep(-fwidth(e), fwidth(e), e);   // past the cloth's edge: skin
       diffuseColor.rgb = mix(diffuseColor.rgb, vSkin.rgb * (0.95 + 0.1 * cNoise(vRest * 38.0)), bare);
