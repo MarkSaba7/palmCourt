@@ -224,7 +224,7 @@ function torsoWeights(y) {
 // look.headwear: 'none' | 'headband' | 'bandana' | 'cap' (absent: the old look.headband boolean)
 // look.beard: 0 clean-shaven .. 0.3 stubble .. 1 short full beard; look.face: { jaw, cheek, nose, brow, chin, eyes }
 // multipliers around 1; look.eyeColor (optional).
-const HC = [0, 1.708, -0.006], HR = [0.08, 0.112, 0.099];   // head centre (note the 6 mm z offset) and radii
+const HC = [0, 1.702, -0.006], HR = [0.082, 0.1155, 0.1005];   // head centre (note the 6 mm z offset) and radii
 const FACE0 = { jaw: 1, cheek: 1, nose: 1, brow: 1, chin: 1, eyes: 1 };
 const gs = (a, w) => Math.exp(-((a / w) ** 2));
 const sst = (x, a, b) => THREE.MathUtils.smoothstep(x, a, b);   // 0 below a, 1 above b (a < b)
@@ -244,15 +244,16 @@ function headShape(ux, uy, uz, d, F = FACE0) {
     y += 0.008 * sst(t, 0.85, 1) - 0.005 * (F.chin - 1) * sst(t, 0.7, 0.95) * fa;           // flatter underneath
   }
   const N = F.nose * f;                                                                        // nose: bridge, tip, wings
-  z -= N * (0.0035 + 0.016 * sst(-uy, -0.1, 0.25)) * (1 - sst(-uy, 0.3, 0.41)) * gs(ux, 0.055 + 0.06 * sst(-uy, 0, 0.3));
+  z -= N * (0.0035 + 0.014 * sst(-uy, -0.1, 0.25)) * (1 - sst(-uy, 0.28, 0.43)) * gs(ux, 0.055 + 0.06 * sst(-uy, 0, 0.3));
   z -= N * 0.005 * gs(ux, 0.1) * gs(uy + 0.27, 0.06);
-  z -= N * 0.006 * gs(ax - 0.16, 0.07) * gs(uy + 0.32, 0.055);
+  z -= N * 0.005 * gs(ax - 0.16, 0.07) * gs(uy + 0.31, 0.06);
   x *= 1 + 0.12 * (F.nose - 1) * gs(ax - 0.16, 0.1) * gs(uy + 0.3, 0.08) * f;
-  z -= 0.0075 * F.brow * gs(uy - 0.22, 0.075) * gs(ux, 0.5) * f;                             // brow ridge
-  z += 0.009 * gs(ax - 0.38, 0.14) * gs(uy - 0.07, 0.1) * f;                                 // eye sockets
+  z -= 0.009 * F.brow * gs(uy - 0.22, 0.075) * gs(ux, 0.5) * f;                              // brow ridge
+  z += 0.011 * gs(ax - 0.38, 0.14) * gs(uy - 0.07, 0.1) * f;                                 // eye sockets
   x *= 1 + 0.02 * F.cheek * gs(uy + 0.08, 0.16) * f;                                         // cheekbones
-  z -= 0.004 * F.cheek * gs(ax - 0.5, 0.16) * gs(uy + 0.12, 0.12) * f;
+  z -= 0.006 * F.cheek * gs(ax - 0.5, 0.16) * gs(uy + 0.12, 0.12) * f;
   z += 0.0025 * gs(ax - 0.56, 0.12) * gs(uy + 0.42, 0.12) * f;                               // under the cheekbone
+  z += 0.002 * gs(ax - 0.3, 0.06) * gs(uy + 0.4 + 0.25 * (ax - 0.3), 0.06) * f;            // fold from nose to mouth
   z -= 0.0035 * gs(ux, 0.24) * gs(uy + 0.5, 0.045) * fa;                                     // upper lip
   z -= 0.004 * gs(ux, 0.22) * gs(uy + 0.6, 0.045) * fa;                                      // lower lip
   z += 0.002 * gs(ax - 0.3, 0.05) * gs(uy + 0.55, 0.05) * fa;                                // mouth corners
@@ -334,38 +335,39 @@ const HAIR = {
   ponytail: { hl: [[0, 0.66], [0.6, 0.62], [1.0, 0.36], [1.3, 0.06], [1.45, 0.1], [1.52, 0.2], [1.92, 0.2], [2.2, -0.12], [2.6, -0.42], [Math.PI, -0.5]], soft: 0.14, top: 0.007, side: 0.0045, back: 0.006, lift: 0 },
   crop: { hl: [[0, 0.72], [0.35, 0.74], [0.7, 0.68], [0.95, 0.5], [1.12, 0.2], [1.27, -0.04], [1.42, -0.06], [1.52, 0.18], [1.92, 0.22], [2.15, -0.1], [2.55, -0.38], [Math.PI, -0.48]], soft: 0.1, top: 0.022, side: 0.004, back: 0.0045, lift: 0.01 },
   textured: { hl: [[0, 0.64], [0.35, 0.67], [0.7, 0.6], [0.95, 0.42], [1.12, 0.18], [1.27, -0.08], [1.42, -0.1], [1.52, 0.18], [1.92, 0.22], [2.15, -0.1], [2.55, -0.38], [Math.PI, -0.48]], soft: 0.08, top: 0.026, side: 0.005, back: 0.007, lift: 0.012 },
-  curly: { hl: [[0, 0.6], [0.35, 0.62], [0.7, 0.55], [0.95, 0.38], [1.12, 0.18], [1.27, -0.06], [1.42, -0.08], [1.52, 0.2], [1.92, 0.24], [2.15, -0.1], [2.55, -0.4], [Math.PI, -0.5]], soft: 0.08, top: 0.033, side: 0.013, back: 0.018, lift: 0.003 },
+  curly: { hl: [[0, 0.56], [0.35, 0.58], [0.7, 0.52], [0.95, 0.36], [1.12, 0.18], [1.27, -0.06], [1.42, -0.08], [1.52, 0.2], [1.92, 0.24], [2.15, -0.1], [2.55, -0.4], [Math.PI, -0.5]], soft: 0.06, top: 0.042, side: 0.018, back: 0.025, lift: 0.004 },
   wavy: { hl: [[0, 0.7], [0.35, 0.72], [0.7, 0.6], [0.95, 0.4], [1.12, 0.16], [1.27, -0.12], [1.42, -0.14], [1.52, -0.04], [1.92, -0.02], [2.15, -0.2], [2.55, -0.48], [Math.PI, -0.6]], soft: 0.11, top: 0.026, side: 0.016, back: 0.02, lift: 0.008 },
   long: { hl: [[0, 0.7], [0.35, 0.72], [0.7, 0.6], [0.95, 0.4], [1.08, 0.12], [1.2, -0.3], [Math.PI, -0.3]], soft: 0.11, top: 0.017, side: 0.018, back: 0.018, lift: 0.002 },
 };
 
-// Headband / bandana: bottom and top edge heights at the front and at the back (they sit tilted, low on the
-// occiput); the cap's lower edge likewise.
-const BAND = { headband: [[1.761, 1.793], [1.737, 1.769]], bandana: [[1.748, 1.801], [1.722, 1.768]] };
-const CAP = [1.767, 1.735];
-const bandAt = (kind, a) => { const B = BAND[kind], k = (1 - Math.cos(a)) / 2; return [B[0][0] + (B[1][0] - B[0][0]) * k, B[0][1] + (B[1][1] - B[0][1]) * k]; };
-const capAt = (a) => CAP[0] + (CAP[1] - CAP[0]) * (1 - Math.cos(a)) / 2;
+// Headband / bandana: bottom and top edge heights (head-unit y) at the front and at the back (they sit tilted, low
+// on the occiput); the cap's lower edge likewise. bandAt / capAt give rest-pose heights at angle a from the front.
+const BAND = { headband: [[0.47, 0.76], [0.26, 0.545]], bandana: [[0.36, 0.66], [0.13, 0.43]] };
+const CAP = [0.53, 0.24];
+const bandAt = (kind, a) => { const B = BAND[kind], k = (1 - Math.cos(a)) / 2; return [0, 1].map((e) => HC[1] + HR[1] * (B[0][e] + (B[1][e] - B[0][e]) * k)); };
+const capAt = (a) => HC[1] + HR[1] * (CAP[0] + (CAP[1] - CAP[0]) * (1 - Math.cos(a)) / 2);
 
 // How dark a hair colour is (0 fair .. 1 black): stubble on fair hair barely shows.
 function hairDark(hex) {
   const c = new THREE.Color(hex ?? 0x2b1d14), l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
   return 1 - Math.min(0.85, Math.sqrt(l) * 1.6);
 }
-// Where a beard grows (0..1) by head-unit coordinates: jaw and cheeks below a line from the sideburn to the mouth
-// corner, the upper lip, the chin and under the jaw; never the lips.
+// Where a beard grows, as a signed distance in head units (> 0 inside): jaw and cheeks below a line from the sideburn
+// to the mouth corner, the upper lip, the chin and under the jaw; never the lips. beardDensity eases it to 0..1.
 function beardZone(u) {
-  const [ux, uy, uz] = u, ax = Math.abs(ux), a = Math.atan2(ax, -uz);
-  if (uy > 0.05) return 0;
-  const band = (x, lo, hi, w) => sst(x, lo - w, lo) * (1 - sst(x, hi, hi + w)), front = sst(-uz, 0.6, 0.8);
-  const back = 1.48 + 0.25 * sst(-uy, 0.35, 0.6);
-  let d = sst(curve([[0.35, -0.46], [1.3, -0.1]], a) - uy, -0.01, 0.08) * (1 - sst(a, back, back + 0.14));
-  d = Math.max(d, band(uy, -0.49, -0.39, 0.03) * (1 - sst(ax, 0.26, 0.36)) * front);   // moustache
-  return d * (1 - band(uy, -0.61, -0.5, 0.015) * (1 - sst(ax, 0.25, 0.33)) * front);   // lips stay clear
+  const [ux, uy, uz] = u, ax = Math.abs(ux), a = Math.atan2(ax, -uz), fr = -uz - 0.62;
+  const back = 1.5 + 0.25 * sst(-uy, 0.35, 0.6);
+  const jaw = Math.min(curve([[0.35, -0.44], [1.3, -0.08]], a) - uy, (back - a) * 0.5, 0.05 - uy);
+  const must = Math.min(uy + 0.5, -0.38 - uy, 0.34 - ax, fr);
+  const lips = Math.min(uy + 0.61, -0.5 - uy, 0.3 - ax, fr);
+  return Math.min(Math.max(jaw, must), -lips);
 }
+const beardDensity = (u) => sst(beardZone(u), 0, 0.1);
 // How much hair thickness the headwear leaves at a point on the head (rest-pose height y, angle a): pressed flat
 // under a band or cap, bulging back out above and below it.
 function hairPress(wear, y, a) {
-  if (wear === 'headband' || wear === 'bandana') {
+  if (wear === 'bandana') { const b = bandAt(wear, a)[0] - 0.003; return 0.0024 + 1.2 * Math.max(0, b - y); }
+  if (wear === 'headband') {
     const [b, t] = bandAt(wear, a);
     return 0.0024 + (y > t ? 1.3 * (y - t) : 1.2 * Math.max(0, b - y));
   }
@@ -379,18 +381,20 @@ function buildHead(bld, look) {
   const wear = ['none', 'headband', 'bandana', 'cap'].includes(look.headwear) ? look.headwear : look.headband ? 'headband' : 'none';
   const beard = THREE.MathUtils.clamp(+look.beard || 0, 0, 1);
   bld.loft([
-    [1.47, 0.064, 0.063, 0.063, 2, 'skin', [['chest', 0.6], ['neck', 0.4]], 0, 0.01],
-    [1.53, 0.062, 0.06, 0.06, 2, 'skin', [['neck', 1]], 0, 0.01],
-    [1.585, 0.062, 0.06, 0.059, 2, 'skin', [['neck', 0.5], ['head', 0.5]], 0, 0.008],
-    [1.64, 0.054, 0.05, 0.05, 2, 'skin', [['head', 1]], 0, 0.004],
-  ], 16);
+    [1.47, 0.075, 0.064, 0.074, 2.3, 'skin', [['chest', 0.6], ['neck', 0.4]], 0, 0.01],
+    [1.5, 0.07, 0.061, 0.07, 2.3, 'skin', [['chest', 0.3], ['neck', 0.7]], 0, 0.01],
+    [1.53, 0.067, 0.058, 0.066, 2.2, 'skin', [['neck', 1]], 0, 0.01],
+    [1.565, 0.062, 0.055, 0.061, 2.1, 'skin', [['neck', 0.75], ['head', 0.25]], 0, 0.008],
+    [1.6, 0.058, 0.052, 0.057, 2, 'skin', [['neck', 0.5], ['head', 0.5]], 0, 0.006],
+    [1.64, 0.053, 0.048, 0.052, 2, 'skin', [['head', 1]], 0, 0.003],
+  ], 20);
   // Skull and face: rows and columns bunch up on the face. aEdge carries the stubble shadow (1 = none) for the shader.
   const LAT = 44, LON = 60, stub = beard * hairDark(look.hairColor);
   const phW = (v) => Math.PI * v + 0.2 * (Math.sin(2 * Math.PI * (v - 0.05)) + Math.sin(2 * Math.PI * 0.05));
   const aW = (j) => { const s = 2 * j / LON - 1; return Math.PI * s - 0.4 * Math.sin(Math.PI * s); };
   grid(bld, LAT + 1, LON, (i, j) => {
     const u = unitAt(phW(i / LAT), aW(j));
-    return [...headAt(u, F), H, [u[0], u[1], u[2], 1], 1 - stub * beardZone(u)];
+    return [...headAt(u, F), H, [u[0], u[1], u[2], 1], 1 - stub * beardDensity(u)];
   }, 'skin');
   for (const s of [-1, 1]) {
     // ear: a thin shell tilted back, hollowed on the outside, its back edge standing off the head
@@ -401,17 +405,17 @@ function buildHead(bld, look) {
       x += s * 0.005 * (uz + 1) / 2;
       const c = Math.cos(0.22), sn = Math.sin(0.22);
       [y, z] = [y * c - z * sn, y * sn + z * c];
-      return [s * 0.077 + x, 1.699 + y, 0.01 + z, H, PAR0, 1];
+      return [s * 0.079 + x, HC[1] - 0.009 + y, 0.01 + z, H, PAR0, 1];
     }, 'skin');
     // eye: set into the socket; its detail coordinates are stretched so the shader's iris comes out a real size
-    const ex = s * 0.032, ey = 1.7136, ue = [ex / HR[0], (ey - HC[1]) / HR[1], 0];
+    const ex = s * 0.033, ey = HC[1] + 0.05 * HR[1], ue = [ex / HR[0], 0.05, 0];
     ue[2] = -Math.sqrt(1 - ue[0] ** 2 - ue[1] ** 2);
-    const ez = headAt(ue, F)[2] + 0.002, er = [0.0122 * F.eyes, 0.0068 * F.eyes, 0.0066];
+    const ez = headAt(ue, F)[2] + 0.002, er = [0.0125 * F.eyes, 0.007 * F.eyes, 0.0068];
     const eyeU = (i, j, n, m) => { const ph = Math.PI * i / n, th = 2 * Math.PI * j / m; return [Math.sin(ph) * Math.cos(th), Math.cos(ph), Math.sin(ph) * Math.sin(th)]; };
     grid(bld, 9, 14, (i, j) => { const [ux, uy, uz] = eyeU(i, j, 8, 14); return [ex + ux * er[0], ey + uy * er[1], ez + uz * er[2], H, [ux * 1.3, uy * 1.08, uz, 1], 1]; }, 'eye');
     // upper lid: a skin hood over the top of the eye, its rim resting on the eyeball
     grid(bld, 5, 8, (i, j) => {
-      const ph = 1.42 * i / 4, th = Math.PI + Math.PI * j / 7, ux = Math.sin(ph) * Math.cos(th), uy = Math.cos(ph), uz = Math.sin(ph) * Math.sin(th);
+      const ph = 1.34 * i / 4, th = Math.PI + Math.PI * j / 7, ux = Math.sin(ph) * Math.cos(th), uy = Math.cos(ph), uz = Math.sin(ph) * Math.sin(th);
       const k = 1.08 + 0.18 * (1 - i / 4);
       return [ex + ux * er[0] * (k + 0.05), ey + 0.0006 + uy * er[1] * (k + 0.12), ez + uz * er[2] * k, H, PAR0, 1];
     }, 'skin', { wrap: false });
@@ -429,10 +433,10 @@ function buildHead(bld, look) {
     const bk = (beard - 0.4) / 0.6;
     grid(bld, LAT + 1, LON, (i, j) => {
       if (i < LAT * 0.4) return null;
-      const u = unitAt(phW(i / LAT), aW(j)), d = beardZone(u);
-      if (d < 0.02) return null;
-      const chin = gs(u[0], 0.35) * sst(-u[1], 0.6, 0.85);
-      return [...headAt(u, F, 0.0016 + bk * (0.0045 + 0.003 * chin) * Math.pow(d, 0.7)), H, [u[0], u[1], u[2], 1], d];
+      const u = unitAt(phW(i / LAT), aW(j)), z = beardZone(u), d = sst(z, 0, 0.1);
+      if (z < -0.08) return null;
+      const chin = gs(u[0], 0.35) * sst(-u[1], 0.6, 0.85);   // signed edge: the shader dithers it out along the true line
+      return [...headAt(u, F, 0.0016 + bk * (0.0045 + 0.003 * chin) * Math.pow(d, 0.7)), H, [u[0], u[1], u[2], 1], THREE.MathUtils.clamp(z / 0.12, -1, 1)];
     }, 'hair');
   }
   if (style !== 'bald') buildHair(bld, look, F, style, wear, H);
@@ -466,8 +470,8 @@ function buildHair(bld, look, F, style, wear, H) {
       par = [ux * Math.cos(id * 3) - uz * Math.sin(id * 3), uy, ux * Math.sin(id * 3) + uz * Math.cos(id * 3), 1];
     }
     if (curly) {   // clumps of curls, with a finer set on top of them
-      const [c1, id] = cells(ux / 0.2, uy / 0.2, uz / 0.2), [c2] = cells(ux / 0.11 + 7, uy / 0.11, uz / 0.11);
-      t += (0.008 * topW + 0.0055 * (1 - topW)) * Math.sqrt(Math.max(0, 1 - (c1 / 0.8) ** 2)) + 0.0025 * Math.max(0, 1 - (c2 / 0.8) ** 2);
+      const [c1, id] = cells(ux / 0.22, uy / 0.22, uz / 0.22), [c2] = cells(ux / 0.12 + 7, uy / 0.12, uz / 0.12);
+      t += (0.012 * topW + 0.008 * (1 - topW)) * Math.sqrt(Math.max(0, 1 - (c1 / 0.8) ** 2)) + 0.0035 * Math.max(0, 1 - (c2 / 0.8) ** 2);
       par = [ux * Math.cos(id * 6) - uz * Math.sin(id * 6), uy + 0.3 * (id - 0.5), ux * Math.sin(id * 6) + uz * Math.cos(id * 6), 1];
     }
     if (wavy) {   // side part, swept over to the other side and back, in loose waves
@@ -512,9 +516,18 @@ function buildHair(bld, look, F, style, wear, H) {
 // Headwear in the band colour: a headband, a folded bandana knotted at the back with two tails, or a cap.
 function buildHeadwear(bld, F, wear, H) {
   if (wear === 'headband' || wear === 'bandana') {
-    const n = 64, bandana = wear === 'bandana', off = 0.0027, th = bandana ? 0.0045 : 0.0035;
+    const n = 64, bandana = wear === 'bandana', off = bandana ? 0.0045 : 0.0027, th = bandana ? 0.005 : 0.0035;
     // cross-section loop: inner top, top, outer top, outer bottom, bottom, inner bottom (and back to the start)
     const prof = [[1, 0, -0.0006], [1, 0.5, 0.0007], [1, 1, -0.0008], [0, 1, 0.0008], [0, 0.5, -0.0007], [0, 0, 0.0006]];
+    if (bandana) {   // the cloth over the crown, loose and creased, gathered toward the knot
+      const R = 14;
+      grid(bld, R + 1, n, (i, j) => {
+        const a = -Math.PI + 2 * Math.PI * j / n, phb = Math.acos((bandAt(wear, a)[0] + 0.004 - HC[1]) / HR[1]), s = i / R;
+        const back = Math.max(0, -Math.cos(a)) ** 3;
+        const o = 0.0042 + 0.0012 * Math.sin(7 * a + 11 * s) * s + 0.004 * back * s * s + 0.003 * (1 - s) ** 2;
+        return [...headAt(unitAt(phb * s, a), F, o), H, [Math.cos(a), Math.sin(a), 0, 0], 1];
+      }, 'band');
+    }
     grid(bld, prof.length + 1, n, (i, j) => {
       const [top, o, dy] = prof[i % prof.length], a = -Math.PI + 2 * Math.PI * j / n, [b, t] = bandAt(wear, a), y = (top ? t : b) + dy;
       const lump = bandana ? 0.001 * Math.sin(9 * a + 4 * top) * o : 0;   // a folded cloth is never quite even
@@ -988,7 +1001,7 @@ const DETAIL_ALBEDO = `
   if (isReg(0.0) && vPar.w > 0.5 && vEdge < 0.999) {
     float bd = 1.0 - vEdge, fine = clamp(2.0 - length(vViewPosition) / 1.1, 0.0, 1.0);
     float sp = mix(0.5, cNoise(vRest * 1500.0) * 0.6 + cNoise(vRest * 520.0) * 0.4, fine);
-    diffuseColor.rgb *= mix(vec3(1.0), vec3(0.33, 0.32, 0.33), clamp(bd * (0.7 + 1.0 * sp), 0.0, 1.0));
+    diffuseColor.rgb *= mix(vec3(1.0), vec3(0.3, 0.29, 0.3), clamp(bd * (1.1 + 1.2 * sp), 0.0, 1.0));
   }
   if (isReg(7.0) && vPar.w > 0.5 && vPar.z < 0.0 && vColor.r + vColor.g + vColor.b > 0.03) {
     float ir = length(vPar.xy);
