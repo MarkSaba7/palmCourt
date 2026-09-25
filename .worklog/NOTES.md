@@ -63,8 +63,8 @@ reliability matter. Run with `play.cmd` (serve.py: http://localhost:8765 for the
   in code: character look fields (hair crop/wavy/long/curly/textured, headwear none/headband/bandana/cap, beard 0..1,
   face{jaw,cheek,nose,brow,chin,eyes}, sleeve 0 = sleeveless, collar crew/polo/v, muscle 0..1), Avatar.setLook(look),
   Avatar.setStyle(style) (A10, not merged yet), player.persona {aggression,topspin,slice,drop,net,serve,consistency,
-  defense,speed} for the CPU, src/pros.js roster (Djokovic, Nadal L, Federer, Sinner, Alcaraz + custom; display names
-  only there — real names/likenesses need licensing before any commercial release).
+  defense,speed} for the CPU, src/pros.js roster of fictional pros (Varga, Rivas L, Adler, Ferro, Aranda + custom; display names only
+  there). The replay line call is labelled "Line review" (Hawk-Eye is a trademark).
 - GitHub Pages: .github/workflows/pages.yml deploys index.html + controller.html + src/ on every push to main
   (Settings → Pages → Source: GitHub Actions). Live at https://marksaba7.github.io/palmCourt/. Opening index.html
   from a folder doesn't work (ES modules blocked on file://).

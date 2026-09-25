@@ -203,7 +203,7 @@ const UI = {
     if (o === 'custom') return 'custom';
     return proById(o) && o !== me ? o : randomPro([me]).id;
   },
-  // Online names: a pro's name, or your own when you both picked the same pro (two "Nadal"s on the board help nobody).
+  // Online names: a pro's name, or your own when you both picked the same pro (two "Rivas"es on the board help nobody).
   onlineNames(pros, own) {
     const same = !!proById(pros[0]) && pros[0] === pros[1];
     return own.map((n, i) => (same ? n : proName(pros[i], n)));

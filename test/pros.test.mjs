@@ -12,7 +12,7 @@ const test = (name, fn) => { fn(); n++; console.log('ok', name); };
 
 test('roster: the custom player, then the five pros', () => {
   assert.equal(PROS[0].id, 'custom');
-  assert.deepEqual(REAL_PROS.map((p) => p.id), ['djokovic', 'nadal', 'federer', 'sinner', 'alcaraz']);
+  assert.deepEqual(REAL_PROS.map((p) => p.id), ['varga', 'rivas', 'adler', 'ferro', 'aranda']);
   assert.equal(new Set(PROS.map((p) => p.id)).size, PROS.length);
 });
 test('every pro is complete and uses the shared vocabularies', () => {
@@ -32,11 +32,11 @@ test('every pro is complete and uses the shared vocabularies', () => {
     for (const kit of [p.kit, p.alt]) for (const k of KIT) assert.ok(kit[k] != null, `${p.id} kit.${k}`);
     for (const k of KIT) assert.ok(!(k in p.look), `${p.id}: ${k} belongs in the kit`);
   }
-  assert.equal(proById('nadal').handed, 'L');
+  assert.equal(proById('rivas').handed, 'L');
 });
 test('lookups', () => {
   for (const id of ['custom', 'random', undefined, null, '', '__proto__', 'toString']) assert.equal(proById(id), null);
-  assert.equal(proName('federer', 'Me'), 'Federer');
+  assert.equal(proName('adler', 'Me'), 'Adler');
   assert.equal(proName('custom', 'Me'), 'Me');
   for (let i = 0; i < 300; i++) { const a = randomPro(), b = randomPro([a.id]); assert.ok(a && b && a.id !== b.id); }
   assert.ok(randomPro(REAL_PROS.map((p) => p.id)));   // nothing left to avoid: still a pro
