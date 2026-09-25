@@ -529,6 +529,10 @@ function main() {
     { name: 'red poster; paddle out of view 1.5 s', sc: { extras: poster }, clip: hide(R3, [[2.2, 3.7]]), min: 0.95, wrong: 0 },
     { name: 'red ball flies through', sc: {}, clip: { ...R3, dyn: ball }, min: 0.95, wrong: 0 },
     { name: 'heavy sensor noise', sc: {}, clip: { ...R3, cam: { noise: 11 } }, min: 0.93 },
+    // (the lips were hidden behind the paddle at the lock, so they aren't known clutter: a few frames on them are allowed)
+    { name: 'lost while stepping back from the lock', sc: {}, clip: hide(R3, [[1.05, 1.9]]), min: 0.95, wrong: 6 },
+    { name: 'camera at 60 fps', sc: {}, clip: { ...R35, fps: 60, cam: { exposure: 1 / 120 } }, min: 0.98 },
+    { name: 'camera at 5 fps (busy PC)', sc: {}, clip: { ...R2, fps: 5 }, min: 0.9 },
   ];
   for (const s of scenarios) {
     const sc = makeScene(s.sc), [n, o] = runClip(sc, s.clip, [newTracker(), oldTracker()]);
