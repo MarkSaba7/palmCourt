@@ -1,6 +1,7 @@
 import { clamp, Clock, Settings } from './core.js';
 import { Sound } from './match.js';
 import { canvas } from './render/world.js';
+import { Perf } from './render/renderer.js';
 import { Game } from './game.js';
 import { UI } from './ui.js';
 import { SwingDetector, pickHand, palmSize, PALM_REF, segmentColor, lockColorFromPatch, adaptColor } from './camswing.js';
@@ -261,7 +262,7 @@ const Tracker = {
   status: document.getElementById('camStatus'),
   wrap: document.getElementById('camWrap'),
   stream: null, kind: null, running: false, gen: 0, camGen: 0, loopGen: 0, opening: null,
-  worker: null, workerState: 'none', workerLoading: null, inFlight: false, sentAt: 0, stalls: 0, next: null, feed: null, noFeed: false, noSteer: false,
+  worker: null, workerState: 'none', workerLoading: null, inFlight: false, sentAt: 0, stalls: 0, next: null, feed: null, noFeed: false, noSteer: false, gpuBad: false, retrying: null,
   landmarker: null, loading: null, lastMain: 0, lastTs: 0, lastVT: -1, delegate: '', where: '', loadError: '', startMs: 0, readyAt: 0,
   procMs: 0, lagMs: 0, rate: 0, rateN: 0, rateT: 0, stamp: '', aspect: 4 / 3, arrOff: Infinity,
   palm: 0, scale: 1, offHand: 0, trail: [], picker: new HandPicker(), palmScale: new PalmScale(), nh: HAND_OPTS.numHands, good: 0, locks: 0,
@@ -317,8 +318,16 @@ const Tracker = {
     this.setStatus('Loading hand tracker…');
     if (this.workerState !== 'failed') {
       try { await (this.workerLoading || (this.workerLoading = this.startWorker())); return; }
-      catch (e) { console.warn('Background hand tracking unavailable, running it on the main thread instead.', e); this.workerState = 'failed'; this.loadError = e.message; }
-      finally { this.workerLoading = null; }
+      catch (e) {
+        // Stuck setting up the GPU (the worker went silent): a fresh worker on the CPU usually starts in a second or two.
+        let err = e;
+        if (e.gpu) {
+          this.gpuBad = true;
+          try { await (this.retrying || (this.retrying = this.startWorker())); return; } catch (e2) { err = e2; }
+        }
+        console.warn('Background hand tracking unavailable, running it on the main thread instead.', err);
+        this.workerState = 'failed'; this.loadError = err.message;
+      } finally { this.workerLoading = null; }
     }
     if (!this.landmarker) {
       this.setStatus('Loading hand tracker…');
@@ -344,14 +353,15 @@ const Tracker = {
         if (this.workerState === 'loading') this.workerState = 'none';
         reject(err);
       };
-      const arm = (ms, what) => { clearTimeout(timer); timer = setTimeout(() => fail(new Error(`The hand tracker stopped responding while ${what}.`)), ms); };
+      let stage = '';
+      const arm = (ms, what) => { clearTimeout(timer); timer = setTimeout(() => fail(Object.assign(new Error(`The hand tracker stopped responding while ${what}.`), { gpu: stage === 'GPU' })), ms); };
       arm(HAND_WAIT.download, 'loading');
       w.onmessage = (e) => {
         const m = e.data;
         if (done) return;
         if (m.type === 'progress') {
           if (m.stage === 'download') { this.setStatus(`Loading hand tracker… ${Math.round(m.frac * 100)}%`); arm(HAND_WAIT.download, 'downloading'); }
-          else { this.setStatus(m.delegate === 'GPU' ? 'Starting hand tracker…' : 'Starting hand tracker (without the graphics chip)…'); arm((HAND_WAIT[m.delegate] || 20000) + 8000, 'starting'); }
+          else { stage = m.delegate; this.setStatus(m.delegate === 'GPU' ? 'Starting hand tracker…' : 'Starting hand tracker (without the graphics chip)…'); arm((HAND_WAIT[m.delegate] || 20000) + 8000, 'starting'); }
         } else if (m.type === 'ready') {
           done = true; clearTimeout(timer); URL.revokeObjectURL(url);
           this.worker = w; this.workerState = 'ready'; this.delegate = m.delegate; this.where = 'background thread'; this.nh = HAND_OPTS.numHands;
@@ -363,9 +373,13 @@ const Tracker = {
         } else if (m.type === 'error') fail(new Error(m.message));
       };
       w.onerror = (e) => { if (e.preventDefault) e.preventDefault(); fail(new Error(e.message || 'The hand tracker worker failed.')); };
-      w.postMessage({ type: 'init', base: MP_BASE, model: MP_MODEL, origin: performance.timeOrigin, opts: HAND_OPTS, delegates: ['GPU', 'CPU'], wait: HAND_WAIT });
+      w.postMessage({ type: 'init', base: MP_BASE, model: MP_MODEL, origin: performance.timeOrigin, opts: HAND_OPTS, delegates: this.delegates(), wait: HAND_WAIT });
     });
   },
+  // Where to run MediaPipe, in order of preference. Not on a software-emulated GPU (no graphics driver, or it's
+  // blocked): that is many times slower than the CPU path and takes time from drawing the court. Nor on a GPU that has
+  // already hung once.
+  delegates() { return Perf.software || this.gpuBad ? ['CPU'] : ['GPU', 'CPU']; },
   // The worker crashed, hung or keeps failing: start a fresh one (the model is cached by then), once per minute at most.
   recover(why) {
     if (this.workerState !== 'ready') return;
@@ -451,8 +465,12 @@ const Tracker = {
     const vision = await timeLimit(import(`${MP_BASE}/vision_bundle.mjs`), HAND_WAIT.download * 2, 'Loading the hand tracker');
     const fileset = await vision.FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
     const make = (delegate) => timeLimit(vision.HandLandmarker.createFromOptions(fileset, { ...HAND_OPTS, baseOptions: { modelAssetPath: MP_MODEL, delegate } }), HAND_WAIT[delegate] + HAND_WAIT.download, `Starting the hand tracker on the ${delegate}`);
-    try { const lm = await make('GPU'); this.delegate = 'GPU'; return lm; }
-    catch (e) { console.warn('GPU hand tracking failed, using CPU', e); this.delegate = 'CPU'; return await make('CPU'); }
+    if (this.delegates()[0] === 'GPU') {
+      try { const lm = await make('GPU'); this.delegate = 'GPU'; return lm; }
+      catch (e) { console.warn('GPU hand tracking failed, using CPU', e); }
+    }
+    this.delegate = 'CPU';
+    return await make('CPU');
   },
   stop() {
     this.gen++; this.camGen++;
