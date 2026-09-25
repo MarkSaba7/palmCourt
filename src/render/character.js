@@ -219,88 +219,351 @@ function torsoWeights(y) {
   return [['chest', 1]];
 }
 
-// The head's surface from unit-sphere coordinates (front is -z): skull, jaw and the face's features. The hair
-// shell uses it too, pushed outward, so it always sits on the same shape.
-function headShape(ux, uy, uz, d) {
+// ---- head: face, ears, eyes, brows, hair, facial hair, headwear ----
+// look.hair: 'short' | 'buzz' | 'bald' | 'ponytail' | 'crop' | 'wavy' | 'long' | 'curly' | 'textured'
+// look.headwear: 'none' | 'headband' | 'bandana' | 'cap' (absent: the old look.headband boolean)
+// look.beard: 0 clean-shaven .. 0.3 stubble .. 1 short full beard; look.face: { jaw, cheek, nose, brow, chin, eyes }
+// multipliers around 1; look.eyeColor (optional).
+const HC = [0, 1.708, -0.006], HR = [0.083, 0.112, 0.099];   // head centre (note the 6 mm z offset) and radii
+const FACE0 = { jaw: 1, cheek: 1, nose: 1, brow: 1, chin: 1, eyes: 1 };
+const gs = (a, w) => Math.exp(-((a / w) ** 2));
+const sst = (x, a, b) => THREE.MathUtils.smoothstep(x, a, b);   // 0 below a, 1 above b (a < b)
+
+// The head's surface from unit-sphere coordinates (front is -z): skull, jaw and the face's features. Hair, beard,
+// brows and headwear are all laid on this same surface, so nothing pokes through.
+function headShape(ux, uy, uz, d, F = FACE0) {
   let [x, y, z] = d;
-  const f = Math.max(0, -uz), g = (a, w) => Math.exp(-((a / w) ** 2));   // f: how much this point faces forward
-  if (uy < 0) { const t = Math.min(1, -uy * 1.2); x *= 1 - 0.3 * t * t; if (uz < 0) z -= 0.01 * t; }   // jaw narrows
-  if (uy > 0.1 && uz > 0) z += 0.008 * uy;                                                          // back of the skull
-  z -= 0.027 * g(ux, 0.12) * g(uy + 0.28, 0.2) * f;                          // nose, tip below the eyes
-  z -= 0.009 * g(ux, 0.08) * g(uy - 0.02, 0.2) * f;                          // bridge
-  z -= 0.007 * g(uy - 0.27, 0.07) * g(ux, 0.55) * f;                         // brow ridge
-  z += 0.009 * g(Math.abs(ux) - 0.37, 0.13) * g(uy - 0.13, 0.1) * f;         // eye sockets
-  x *= 1 + 0.045 * g(uy + 0.05, 0.18) * f;                                   // cheekbones
-  z -= 0.006 * g(ux, 0.3) * g(uy + 0.55, 0.14) * f;                          // mouth
-  z -= 0.008 * g(ux, 0.22) * g(uy + 0.86, 0.1) * f;                          // chin
+  const f = Math.max(0, -uz), ax = Math.abs(ux);
+  const fa = Math.max(0, -uz / Math.max(1e-4, Math.hypot(ux, uz)));   // faces forward, however high or low
+  if (uy > 0.1 && uz > 0) z += 0.008 * uy;                                                    // back of the skull
+  if (uy < 0) {                                                                                // jaw and lower face
+    const t = -uy, j = 2 - F.jaw;
+    x *= 1 - 0.13 * j * t - 0.5 * j * Math.max(0, t - 0.55) ** 1.5 - 0.1 * fa * fa * t * t;  // square angle, in to the chin
+    z -= (0.004 + 0.011 * sst(t, 0.25, 0.6) + 0.013 * F.chin * sst(t, 0.6, 0.9)) * fa * fa; // mouth and chin under the nose
+    y -= 0.005 * (F.chin - 1) * sst(t, 0.7, 0.95) * fa;
+  }
+  const N = F.nose * f;                                                                        // nose: bridge, tip, wings
+  z -= N * (0.0035 + 0.016 * sst(-uy, -0.1, 0.25)) * (1 - sst(-uy, 0.3, 0.41)) * gs(ux, 0.07 + 0.05 * sst(-uy, 0, 0.3));
+  z -= N * 0.005 * gs(ux, 0.1) * gs(uy + 0.27, 0.06);
+  z -= N * 0.006 * gs(ax - 0.16, 0.07) * gs(uy + 0.32, 0.055);
+  x *= 1 + 0.12 * (F.nose - 1) * gs(ax - 0.16, 0.1) * gs(uy + 0.3, 0.08) * f;
+  z -= 0.0075 * F.brow * gs(uy - 0.22, 0.075) * gs(ux, 0.5) * f;                             // brow ridge
+  z += 0.009 * gs(ax - 0.38, 0.14) * gs(uy - 0.07, 0.1) * f;                                 // eye sockets
+  x *= 1 + 0.04 * F.cheek * gs(uy + 0.08, 0.16) * f;                                         // cheekbones
+  z -= 0.004 * F.cheek * gs(ax - 0.5, 0.16) * gs(uy + 0.12, 0.12) * f;
+  z += 0.0025 * gs(ax - 0.56, 0.12) * gs(uy + 0.42, 0.12) * f;                               // under the cheekbone
+  z -= 0.0035 * gs(ux, 0.24) * gs(uy + 0.5, 0.045) * fa;                                     // upper lip
+  z -= 0.004 * gs(ux, 0.22) * gs(uy + 0.6, 0.045) * fa;                                      // lower lip
+  z += 0.002 * gs(ax - 0.3, 0.05) * gs(uy + 0.55, 0.05) * fa;                                // mouth corners
+  z += 0.002 * gs(ux, 0.25) * gs(uy + 0.7, 0.04) * fa;                                       // fold under the lip
+  z -= 0.008 * F.chin * gs(ux, 0.26) * gs(uy + 0.82, 0.09) * fa;                             // chin
   return [x, y, z];
 }
 
-const BAND = [1.764, 1.795];   // headband, bottom and top edge heights
+// A point on the head (rest pose) at unit-sphere coordinates u, pushed out by `off` metres.
+function headAt(u, F, off = 0) {
+  const [x, y, z] = headShape(u[0], u[1], u[2], [u[0] * HR[0], u[1] * HR[1], u[2] * HR[2]], F);
+  const k = 1 + off / Math.hypot(x, y, z);
+  return [HC[0] + x * k, HC[1] + y * k, HC[2] + z * k];
+}
+// Unit-sphere coordinates at polar angle ph (0 = crown) and azimuth a (0 = front, +π/2 = the figure's right, +x).
+const unitAt = (ph, a) => [Math.sin(ph) * Math.sin(a), Math.cos(ph), -Math.sin(ph) * Math.cos(a)];
+// ... and at a height on the head (rest-pose y) instead of a polar angle.
+const unitAtY = (y, a) => { const uy = THREE.MathUtils.clamp((y - HC[1]) / HR[1], -1, 1), r = Math.sqrt(1 - uy * uy); return [r * Math.sin(a), uy, -r * Math.cos(a)]; };
 
-function buildBody(bld, look) {
-  // ---- torso, shorts and collar ----
-  buildTorso(bld, look);
-  // ---- neck & head ----
+// A rows × cols grid of optional vertices (columns wrap round unless open) turned into quads wherever all four
+// corners exist; only vertices a quad uses are created. at(i, j) gives [x, y, z, weights, par, edge] or null.
+// Rows running down an outward surface with columns running toward +x at the front face outward; `inside(i)` (a
+// point inside the shape at row i) makes it check and flip instead.
+function grid(bld, rows, cols, at, region, { wrap = true, inside = null } = {}) {
+  const V = [], jn = wrap ? cols : cols - 1;
+  for (let i = 0; i < rows; i++) { const r = []; for (let j = 0; j < cols; j++) r.push(at(i, j)); V.push(r); }
+  const quads = [];
+  for (let i = 0; i < rows - 1; i++) for (let j = 0; j < jn; j++) {
+    const j1 = (j + 1) % cols;
+    if (V[i][j] && V[i + 1][j] && V[i][j1] && V[i + 1][j1]) quads.push([i, j, j1]);
+  }
+  let flip = false;
+  if (inside && quads.length) {
+    const [i, j, j1] = quads[Math.floor(quads.length / 2)], a = V[i][j], b = V[i + 1][j], c = V[i][j1], o = inside(i);
+    const e1 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], e2 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    flip = n[0] * (a[0] - o[0]) + n[1] * (a[1] - o[1]) + n[2] * (a[2] - o[2]) < 0;
+  }
+  const I = V.map((r) => r.map(() => -1));
+  const vi = (i, j) => { if (I[i][j] < 0) { const v = V[i][j]; I[i][j] = bld.vert(v[0], v[1], v[2], v[3], v[4], v[5]); } return I[i][j]; };
+  for (const [i, j, j1] of quads) {
+    const a = vi(i, j), b = vi(i + 1, j), c = vi(i, j1), d = vi(i + 1, j1);
+    if (flip) { bld.tri(a, b, c, region); bld.tri(c, b, d, region); } else { bld.tri(a, c, b, region); bld.tri(c, d, b, region); }
+  }
+}
+
+// Piecewise curve through [x, y] points (x ascending), eased between them.
+function curve(pts, x) {
+  if (x <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], t = (x - x0) / (x1 - x0);
+    return y0 + (y1 - y0) * t * t * (3 - 2 * t);
+  }
+  return pts[pts.length - 1][1];
+}
+function hash3(x, y, z) {
+  let h = (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0; h = Math.imul(h ^ (h >>> 13), 3266489917) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+// Nearest point of a jittered 3D lattice (cellular noise): its distance and the cell's random id. Makes curl clumps.
+function cells(x, y, z) {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  let d1 = 9, id = 0;
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+    const cx = ix + a, cy = iy + b, cz = iz + c;
+    const d = Math.hypot(cx + hash3(cx, cy, cz) - x, cy + hash3(cx + 31, cy, cz) - y, cz + hash3(cx, cy + 57, cz) - z);
+    if (d < d1) { d1 = d; id = hash3(cx, cy, cz + 91); }
+  }
+  return [d1, id];
+}
+
+// Hair styles. hl: the hairline, as the lowest head-unit height with hair by angle from the front (0..π); soft: its
+// fade width; top/side/back: thickness in metres; lift: extra at the front of the top.
+const HL = [[0, 0.7], [0.35, 0.72], [0.7, 0.6], [0.95, 0.4], [1.12, 0.18], [1.27, -0.1], [1.42, -0.12], [1.52, 0.18], [1.92, 0.22], [2.15, -0.08], [2.55, -0.36], [Math.PI, -0.46]];
+const HAIR = {
+  short: { hl: HL, soft: 0.12, top: 0.013, side: 0.006, back: 0.008, lift: 0.005 },
+  buzz: { hl: HL, soft: 0.07, top: 0.003, side: 0.0025, back: 0.0025, lift: 0 },
+  ponytail: { hl: [[0, 0.66], [0.6, 0.62], [1.0, 0.36], [1.3, 0.06], [1.45, 0.1], [1.52, 0.2], [1.92, 0.2], [2.2, -0.12], [2.6, -0.42], [Math.PI, -0.5]], soft: 0.14, top: 0.007, side: 0.0045, back: 0.006, lift: 0 },
+  crop: { hl: [[0, 0.72], [0.35, 0.74], [0.7, 0.68], [0.95, 0.5], [1.12, 0.2], [1.27, -0.04], [1.42, -0.06], [1.52, 0.18], [1.92, 0.22], [2.15, -0.1], [2.55, -0.38], [Math.PI, -0.48]], soft: 0.1, top: 0.017, side: 0.0035, back: 0.004, lift: 0.007 },
+  textured: { hl: [[0, 0.64], [0.35, 0.67], [0.7, 0.6], [0.95, 0.42], [1.12, 0.18], [1.27, -0.08], [1.42, -0.1], [1.52, 0.18], [1.92, 0.22], [2.15, -0.1], [2.55, -0.38], [Math.PI, -0.48]], soft: 0.08, top: 0.02, side: 0.0045, back: 0.006, lift: 0.004 },
+  curly: { hl: [[0, 0.6], [0.35, 0.62], [0.7, 0.55], [0.95, 0.38], [1.12, 0.18], [1.27, -0.06], [1.42, -0.08], [1.52, 0.2], [1.92, 0.24], [2.15, -0.1], [2.55, -0.4], [Math.PI, -0.5]], soft: 0.08, top: 0.033, side: 0.013, back: 0.018, lift: 0.003 },
+  wavy: { hl: [[0, 0.7], [0.35, 0.72], [0.7, 0.6], [0.95, 0.4], [1.12, 0.16], [1.27, -0.12], [1.42, -0.14], [1.52, 0.1], [1.92, 0.14], [2.15, -0.14], [2.55, -0.46], [Math.PI, -0.6]], soft: 0.11, top: 0.021, side: 0.013, back: 0.016, lift: 0.006 },
+  long: { hl: [[0, 0.7], [0.35, 0.72], [0.7, 0.6], [0.95, 0.4], [1.08, 0.12], [1.2, -0.3], [Math.PI, -0.3]], soft: 0.11, top: 0.017, side: 0.018, back: 0.018, lift: 0.002 },
+};
+
+// Headband / bandana: bottom and top edge heights at the front and at the back (they sit tilted, low on the
+// occiput); the cap's lower edge likewise.
+const BAND = { headband: [[1.761, 1.793], [1.737, 1.769]], bandana: [[1.748, 1.801], [1.722, 1.768]] };
+const CAP = [1.767, 1.735];
+const bandAt = (kind, a) => { const B = BAND[kind], k = (1 - Math.cos(a)) / 2; return [B[0][0] + (B[1][0] - B[0][0]) * k, B[0][1] + (B[1][1] - B[0][1]) * k]; };
+const capAt = (a) => CAP[0] + (CAP[1] - CAP[0]) * (1 - Math.cos(a)) / 2;
+
+// How dark a hair colour is (0 fair .. 1 black): stubble on fair hair barely shows.
+function hairDark(hex) {
+  const c = new THREE.Color(hex ?? 0x2b1d14), l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  return 1 - Math.min(0.85, Math.sqrt(l) * 1.6);
+}
+// Where a beard grows (0..1) by head-unit coordinates: jaw and cheeks below a line from the sideburn to the mouth
+// corner, the upper lip, the chin and under the jaw; never the lips.
+function beardZone(u) {
+  const [ux, uy, uz] = u, ax = Math.abs(ux), a = Math.atan2(ax, -uz);
+  if (uy > 0.05) return 0;
+  const band = (x, lo, hi, w) => sst(x, lo - w, lo) * (1 - sst(x, hi, hi + w)), front = sst(-uz, 0.6, 0.8);
+  const back = 1.48 + 0.25 * sst(-uy, 0.35, 0.6);
+  let d = sst(curve([[0.35, -0.46], [1.3, -0.1]], a) - uy, -0.01, 0.08) * (1 - sst(a, back, back + 0.14));
+  d = Math.max(d, band(uy, -0.49, -0.39, 0.03) * (1 - sst(ax, 0.26, 0.36)) * front);   // moustache
+  return d * (1 - band(uy, -0.61, -0.5, 0.015) * (1 - sst(ax, 0.25, 0.33)) * front);   // lips stay clear
+}
+// How much hair thickness the headwear leaves at a point on the head (rest-pose height y, angle a): pressed flat
+// under a band or cap, bulging back out above and below it.
+function hairPress(wear, y, a) {
+  if (wear === 'headband' || wear === 'bandana') {
+    const [b, t] = bandAt(wear, a);
+    return 0.0024 + (y > t ? 0.8 * (y - t) : 1.2 * Math.max(0, b - y));
+  }
+  if (wear === 'cap') { const c = capAt(a) - 0.004; return 0.0045 + 1.2 * Math.max(0, c - y); }
+  return Infinity;
+}
+
+function buildHead(bld, look) {
+  const F = { ...FACE0, ...(look.face || {}) }, H = [['head', 1]];
+  const style = look.hair === 'bald' ? 'bald' : HAIR[look.hair] ? look.hair : 'short';
+  const wear = ['none', 'headband', 'bandana', 'cap'].includes(look.headwear) ? look.headwear : look.headband ? 'headband' : 'none';
+  const beard = THREE.MathUtils.clamp(+look.beard || 0, 0, 1);
   bld.loft([
     [1.47, 0.064, 0.063, 0.063, 2, 'skin', [['chest', 0.6], ['neck', 0.4]], 0, 0.01],
     [1.53, 0.062, 0.06, 0.06, 2, 'skin', [['neck', 1]], 0, 0.01],
     [1.585, 0.06, 0.058, 0.058, 2, 'skin', [['neck', 0.5], ['head', 0.5]], 0, 0.008],
     [1.64, 0.05, 0.048, 0.048, 2, 'skin', [['head', 1]], 0, 0.004],
   ], 16);
-  const HC = [0, 1.708, -0.006], HR = [0.083, 0.112, 0.099];
-  bld.ellipsoid(HC, HR, 40, 56, [['head', 1]], 'skin', { deform: headShape });
+  // Skull and face: rows and columns bunch up on the face. aEdge carries the stubble shadow (1 = none) for the shader.
+  const LAT = 44, LON = 60, stub = beard * hairDark(look.hairColor);
+  const phW = (v) => Math.PI * v + 0.2 * (Math.sin(2 * Math.PI * (v - 0.05)) + Math.sin(2 * Math.PI * 0.05));
+  const aW = (j) => { const s = 2 * j / LON - 1; return Math.PI * s - 0.4 * Math.sin(Math.PI * s); };
+  grid(bld, LAT + 1, LON, (i, j) => {
+    const u = unitAt(phW(i / LAT), aW(j));
+    return [...headAt(u, F), H, [u[0], u[1], u[2], 1], 1 - stub * beardZone(u)];
+  }, 'skin');
   for (const s of [-1, 1]) {
-    bld.ellipsoid([s * 0.082, 1.7, 0.006], [0.013, 0.029, 0.02], 6, 10, [['head', 1]], 'skin');
-    bld.ellipsoid([s * 0.033, 1.72, -0.0866], [0.0115, 0.0078, 0.006], 8, 12, [['head', 1]], 'eye');
-    bld.ellipsoid([s * 0.035, 1.744, -0.093], [0.019, 0.0036, 0.004], 4, 10, [['head', 1]], 'hair');
+    // ear: a thin shell tilted back, hollowed on the outside, its back edge standing off the head
+    grid(bld, 8, 12, (i, j) => {
+      const ph = Math.PI * i / 7, th = 2 * Math.PI * j / 12, ux = Math.sin(ph) * Math.cos(th), uy = Math.cos(ph), uz = Math.sin(ph) * Math.sin(th);
+      let x = ux * 0.0105, y = uy * 0.03, z = uz * 0.018;
+      if (ux * s > 0) x -= s * 0.007 * Math.max(0, 1 - (uy / 0.75) ** 2 - (uz / 0.75) ** 2);
+      x += s * 0.005 * (uz + 1) / 2;
+      const c = Math.cos(0.22), sn = Math.sin(0.22);
+      [y, z] = [y * c - z * sn, y * sn + z * c];
+      return [s * 0.079 + x, 1.699 + y, 0.01 + z, H, PAR0, 1];
+    }, 'skin');
+    // eye: set into the socket; its detail coordinates are stretched so the shader's iris comes out a real size
+    const ex = s * 0.032, ey = 1.7136, ue = [ex / HR[0], (ey - HC[1]) / HR[1], 0];
+    ue[2] = -Math.sqrt(1 - ue[0] ** 2 - ue[1] ** 2);
+    const ez = headAt(ue, F)[2] + 0.002, er = [0.0122 * F.eyes, 0.0068 * F.eyes, 0.0066];
+    const eyeU = (i, j, n, m) => { const ph = Math.PI * i / n, th = 2 * Math.PI * j / m; return [Math.sin(ph) * Math.cos(th), Math.cos(ph), Math.sin(ph) * Math.sin(th)]; };
+    grid(bld, 9, 14, (i, j) => { const [ux, uy, uz] = eyeU(i, j, 8, 14); return [ex + ux * er[0], ey + uy * er[1], ez + uz * er[2], H, [ux * 1.3, uy * 1.08, uz, 1], 1]; }, 'eye');
+    // upper lid: a skin hood over the top of the eye, its rim resting on the eyeball
+    grid(bld, 5, 8, (i, j) => {
+      const ph = 1.25 * i / 4, th = Math.PI + Math.PI * j / 7, ux = Math.sin(ph) * Math.cos(th), uy = Math.cos(ph), uz = Math.sin(ph) * Math.sin(th);
+      const k = 1.1 + 0.18 * (1 - i / 4) + 0.06 / er[2] * 0.001;
+      return [ex + ux * er[0] * (k + 0.05), ey + 0.0006 + uy * er[1] * (k + 0.12), ez + uz * er[2] * k, H, PAR0, 1];
+    }, 'skin', { wrap: false });
+    // brow: a curved strip on the brow ridge, thick at the inner end and tapering out, soft at both ends
+    grid(bld, 5, 9, (i, j) => {
+      const k = j / 8, v = i / 2 - 1, ux = s * (0.1 + 0.5 * k);
+      const uy = 0.215 + 0.045 * Math.sin(Math.PI * Math.pow(k, 0.75)) - 0.03 * k + v * (0.042 - 0.024 * k) * (0.8 + 0.2 * F.brow);
+      const u = [ux, uy, -Math.sqrt(Math.max(0, 1 - ux * ux - uy * uy))];
+      const edge = sst(k, 0, 0.12) * (1 - sst(k, 0.8, 1)) * (1 - 0.7 * Math.abs(v) ** 2);
+      return [...headAt(u, F, 0.0011 + (1 - v * v) * (0.0012 + 0.0012 * (1 - k)) * F.brow), H, [u[0], u[1], u[2], 1], edge];
+    }, 'hair', { wrap: false, inside: () => HC });
   }
-  // hair: a shell that hugs the skull, thickest on the crown and thinning to nothing at the hairline, so the edge
-  // is soft instead of a stepped rim (the shader also fades the colour and strands out toward it)
-  const style = look.hair;
-  if (style !== 'bald') {
-    const buzz = style === 'buzz', line = buzz ? 0.2 : 0.08, bulk = buzz ? 0.004 : 0.013;
-    const margin = (u) => u[1] - (line - 0.55 * Math.max(0, u[2]) + (u[2] < 0 ? 0.5 * -u[2] : 0));   // forehead hairline ~7 cm above the eyes
-    const edgeOf = (u) => THREE.MathUtils.smoothstep(margin(u), 0, buzz ? 0.08 : 0.2);
-    bld.ellipsoid(HC, HR, 30, 44, [['head', 1]], 'hair', {
-      keep: (u) => margin(u) > -0.035,
-      edge: edgeOf,
-      deform(ux, uy, uz, d) {
-        const [x, y, z] = headShape(ux, uy, uz, d);   // follows the skull and brow, so no skin shows through
-        const e = edgeOf([ux, uy, uz]);
-        // volume: fuller on top, a little lift at the front for a short cut, flat over the ears
-        let t = 0.0016 + bulk * e * (0.7 + 0.45 * Math.max(0, uy));
-        if (!buzz && uz < -0.25 && uy > 0.35) t += 0.006 * e * Math.min(1, (-uz - 0.25) * 2);
-        if (Math.abs(ux) > 0.8 && uy < 0.35) t *= 0.55;
-        const hy = HC[1] + uy * HR[1];
-        if (look.headband && hy > BAND[0] - 0.008 && hy < BAND[1] + 0.008) t = Math.min(t, 0.0028);   // pressed under the band
-        const k = 1 + t / 0.095;
-        return [x * k, y * k, z * k];
-      },
-    });
-    if (style === 'ponytail') {
-      bld.loft([
-        [1.73, 0.03, 0.025, 0.025, 2, 'hair', [['head', 1]], 0, 0.1],
-        [1.66, 0.034, 0.028, 0.028, 2, 'hair', [['head', 1]], 0, 0.125],
-        [1.57, 0.026, 0.022, 0.022, 2, 'hair', [['head', 0.6], ['neck', 0.4]], 0, 0.135],
-        [1.5, 0.012, 0.01, 0.01, 2, 'hair', [['neck', 1]], 0, 0.13],
-      ], 10);
+  // Full beard: a hair shell over the stubble shadow, on the same grid as the face so it sits parallel to it.
+  if (beard > 0.4) {
+    const bk = (beard - 0.4) / 0.6;
+    grid(bld, LAT + 1, LON, (i, j) => {
+      if (i < LAT * 0.4) return null;
+      const u = unitAt(phW(i / LAT), aW(j)), d = beardZone(u);
+      if (d < 0.02) return null;
+      const chin = gs(u[0], 0.35) * sst(-u[1], 0.6, 0.85);
+      return [...headAt(u, F, 0.0016 + bk * (0.0045 + 0.003 * chin) * Math.pow(d, 0.7)), H, [u[0], u[1], u[2], 1], d];
+    }, 'hair');
+  }
+  if (style !== 'bald') buildHair(bld, look, F, style, wear, H);
+  if (wear !== 'none') buildHeadwear(bld, F, wear, H);
+}
+
+// Hair: one shell over the skull that thickens from nothing at a soft hairline (its edge tucks under the skin, so
+// the boundary is a smooth curve, and the shader dithers it out), shaped per style; long hair carries on below the
+// skull as a curtain that folds back up inside itself, so it is a closed volume from every side.
+function buildHair(bld, look, F, style, wear, H) {
+  const S = HAIR[style], long = style === 'long', curly = style === 'curly', tex = style === 'textured', wavy = style === 'wavy';
+  const rows = curly ? 42 : long || wavy || tex ? 38 : 34, cols = curly ? 84 : long || wavy || tex ? 72 : 64;
+  const low = Math.min(...S.hl.map((p) => p[1])) - 0.08;
+  const phMax = long ? Math.PI / 2 + 0.12 : Math.acos(Math.max(-0.97, low));
+  const nC = long ? 12 : 0, nI = long ? 6 : 0;
+  const aOf = (j) => { const s = 2 * j / cols - 1; return Math.PI * s - 0.2 * Math.sin(Math.PI * s); };
+  const skull = (ph, a) => {
+    const u = unitAt(ph, a), [ux, uy, uz] = u, aa = Math.abs(a);
+    const m = uy - curve(S.hl, aa), e = sst(m, 0, S.soft);
+    if (m < -0.07) return null;
+    const topW = sst(uy, 0.15, 0.8), backW = sst(uz, 0.15, 0.7) * (1 - topW), sideW = 1 - topW - backW;
+    let side = S.side;
+    if (style === 'crop') side *= 0.35 + 0.65 * sst(uy, -0.3, 0.35);   // tapered short back and sides
+    let t = S.top * topW + side * sideW + S.back * backW + S.lift * sst(-uz, 0.2, 0.75) * sst(uy, 0.35, 0.75);
+    if (!long && !wavy) t *= 1 - 0.4 * gs(aa - 1.72, 0.25) * (1 - sst(uy, 0.25, 0.5));   // flat over the ears
+    let par = [ux, uy, uz, 1];
+    if (style === 'crop') t += 0.004 * topW * Math.max(0, 1 - cells(ux / 0.3, uy / 0.3, uz / 0.3)[0] / 0.7);
+    if (tex) {   // messy tufts on top
+      const [cd, id] = cells(ux / 0.26 + 3, uy / 0.26, uz / 0.26);
+      t += topW * 0.013 * (0.5 + id) * Math.max(0, 1 - cd / 0.75) ** 1.5;
+      par = [ux * Math.cos(id * 3) - uz * Math.sin(id * 3), uy, ux * Math.sin(id * 3) + uz * Math.cos(id * 3), 1];
     }
+    if (curly) {   // clumps of curls, with a finer set on top of them
+      const [c1, id] = cells(ux / 0.2, uy / 0.2, uz / 0.2), [c2] = cells(ux / 0.11 + 7, uy / 0.11, uz / 0.11);
+      t += (0.008 * topW + 0.0055 * (1 - topW)) * Math.sqrt(Math.max(0, 1 - (c1 / 0.8) ** 2)) + 0.0025 * Math.max(0, 1 - (c2 / 0.8) ** 2);
+      par = [ux * Math.cos(id * 6) - uz * Math.sin(id * 6), uy + 0.3 * (id - 0.5), ux * Math.sin(id * 6) + uz * Math.cos(id * 6), 1];
+    }
+    if (wavy) {   // side part, swept over to the other side and back, in loose waves
+      t *= 1 - 0.4 * gs(ux + 0.32, 0.09) * sst(uy, 0.5, 0.8);
+      t += 0.004 * topW * sst(ux, -0.3, 0.5) + 0.0035 * Math.sin((uz * HR[2]) / 0.034 * 2 * Math.PI + ux * 3) * (0.4 + 0.6 * topW);
+      const c = Math.cos(0.35), sn = Math.sin(0.35);   // strands run from the front hairline back, tilted off the part
+      par = [ux * c + uy * sn, -uz, -ux * sn + uy * c, 1];
+    }
+    t = m < 0 ? 0.0016 + m * 0.07 : Math.min(0.0016 + e * t, hairPress(wear, HC[1] + uy * HR[1], a));
+    return { p: headAt(u, F, t), t, e, par };
+  };
+  const last = new Map();   // long hair: the skull rim each curtain column hangs from
+  const rim = (j) => { if (!last.has(j)) last.set(j, skull(phMax, aOf(j))); return last.get(j); };
+  const curtain = (j, s, inset) => {
+    const a = aOf(j), aa = Math.abs(a), r = rim(j);
+    if (!r || aa < 1.2) return null;
+    const open = sst(aa, 1.2, 1.6), h = [Math.sin(a), 0, -Math.cos(a)];
+    const tip = 1.612 - 0.064 * sst(aa, 1.25, 2.9) + 0.008 * Math.sin(7 * a) + 0.005 * Math.sin(13 * a + 1);
+    const y = r.p[1] - (r.p[1] - tip) * s;
+    let out = -0.006 * Math.sin(Math.PI * s) + 0.008 * s * s - 0.018 * s * sst(aa, 2.0, 2.8) + 0.003 * Math.sin(3 * Math.PI * s + 5 * a);
+    out -= inset * open;
+    const nk = Math.min(0.5, Math.max(0, (1.66 - y) / 0.12) * 0.5);
+    const w = nk > 0 ? [['head', 1 - nk], ['neck', nk]] : H;
+    return [r.p[0] + h[0] * out, y, r.p[2] + h[2] * out, w, [Math.sin(a) * 0.99, Math.cos(phMax) - 0.8 * s, -Math.cos(a) * 0.99, 1], 0.3 + 0.7 * sst(aa, 1.2, 1.4)];
+  };
+  grid(bld, rows + nC + nI, cols, (i, j) => {
+    if (i < rows) { const v = skull(phMax * i / (rows - 1), aOf(j)); return v && [...v.p, H, v.par, v.e]; }
+    if (i < rows + nC) return curtain(j, (i - rows + 1) / nC, 0);
+    const q = (i - rows - nC + 1) / nI;   // back up the inside, from the tips to inside the skull
+    return curtain(j, 1 - q, 0.03 * sst(q, 0, 0.35));
+  }, 'hair');
+  if (style === 'ponytail') {
+    bld.loft([
+      [1.73, 0.03, 0.025, 0.025, 2, 'hair', [['head', 1]], 0, 0.1],
+      [1.66, 0.034, 0.028, 0.028, 2, 'hair', [['head', 1]], 0, 0.125],
+      [1.57, 0.026, 0.022, 0.022, 2, 'hair', [['head', 0.6], ['neck', 0.4]], 0, 0.135],
+      [1.5, 0.012, 0.01, 0.01, 2, 'hair', [['neck', 1]], 0, 0.13],
+    ], 10);
   }
-  if (look.headband) {
-    // Two rings laid on the actual head surface (brow ridge included), just outside the pressed-down hair.
-    const rings = [BAND[0], BAND[1]].map((y) => {
-      const uy = (y - HC[1]) / HR[1], rr = Math.sqrt(1 - uy * uy), out = [];
-      for (let k = 0; k < 40; k++) {
-        const th = (k / 40) * Math.PI * 2, ux = rr * Math.cos(th), uz = rr * Math.sin(th);
-        const [x, yy, z] = headShape(ux, uy, uz, [ux * HR[0], uy * HR[1], uz * HR[2]]), kk = 1 + 0.0055 / 0.095;
-        out.push(bld.vert(HC[0] + x * kk, HC[1] + yy * kk, HC[2] + z * kk, [['head', 1]], [Math.cos(th), Math.sin(th), y, 0]));
+}
+
+// Headwear in the band colour: a headband, a folded bandana knotted at the back with two tails, or a cap.
+function buildHeadwear(bld, F, wear, H) {
+  if (wear === 'headband' || wear === 'bandana') {
+    const n = 64, bandana = wear === 'bandana', off = 0.0027, th = bandana ? 0.0045 : 0.0035;
+    // cross-section loop: inner top, top, outer top, outer bottom, bottom, inner bottom (and back to the start)
+    const prof = [[1, 0, -0.0006], [1, 0.5, 0.0007], [1, 1, -0.0008], [0, 1, 0.0008], [0, 0.5, -0.0007], [0, 0, 0.0006]];
+    grid(bld, prof.length + 1, n, (i, j) => {
+      const [top, o, dy] = prof[i % prof.length], a = -Math.PI + 2 * Math.PI * j / n, [b, t] = bandAt(wear, a), y = (top ? t : b) + dy;
+      const lump = bandana ? 0.001 * Math.sin(9 * a + 4 * top) * o : 0;   // a folded cloth is never quite even
+      return [...headAt(unitAtY(y, a), F, off + o * th + lump), H, [Math.cos(a), Math.sin(a), y, 0], 1];
+    }, 'band');
+    if (bandana) {
+      const [b, t] = bandAt(wear, Math.PI), kn = headAt(unitAtY((b + t) / 2, Math.PI), F, off + th + 0.007);
+      bld.ellipsoid(kn, [0.016, 0.013, 0.011], 6, 10, H, 'band', { deform: (ux, uy, uz, d) => [d[0] * (1 + 0.15 * Math.sin(5 * uy)), d[1], d[2] * (1 + 0.2 * ux * ux)] });
+      for (const sd of [-1, 1]) {   // two tails hanging from the knot, twisting and flaring a little
+        const L = 0.13, w = 0.034;
+        const at = (s, c) => {
+          const tw = sd * (0.25 + 0.45 * s), cx = kn[0] + sd * (0.006 + 0.02 * s), cy = kn[1] - 0.006 - L * s * (c === 1 || c === 2 ? 1 : 0.86);
+          const cz = kn[2] + 0.004 + 0.022 * s + 0.006 * Math.sin(Math.PI * s);
+          const across = (c === 0 || c === 3 ? -0.5 : 0.5) * sd * (w - 0.006 * s), depth = c < 2 ? -0.001 : 0.001;
+          return [cx + across * Math.cos(tw) - depth * Math.sin(tw), cy, cz + across * Math.sin(tw) + depth * Math.cos(tw)];
+        };
+        grid(bld, 9, 4, (i, j) => {
+          const s = i / 8, p = at(s, j), nk = 0.35 * s;
+          return [...p, [['head', 1 - nk], ['neck', nk]], [0, 0, p[1], 0], 1];
+        }, 'band', { inside: (i) => at(i / 8, 0).map((v, k) => (v + at(i / 8, 2)[k]) / 2) });
       }
-      out.center = [HC[0], y, HC[2]];
-      return out;
-    });
-    bld.strip(rings[0], rings[1], 'band');
+    }
+  } else if (wear === 'cap') {
+    const n = 64, off = 0.0085, R = 14;
+    // crown: from the button down to the band, the front panels standing up a little; the edge rolls in onto the hair
+    grid(bld, R + 2, n, (i, j) => {
+      const a = -Math.PI + 2 * Math.PI * j / n, phc = Math.acos((capAt(a) - HC[1]) / HR[1]), s = Math.min(i, R) / R;
+      const u = unitAt(phc * s + (i > R ? 0.03 : 0), a);
+      const o = i > R ? 0.004 : off + 0.006 * (1 - s) ** 2 + 0.008 * Math.max(0, -u[2]) * (1 - s) * s;
+      return [...headAt(u, F, o), H, [Math.cos(a), Math.sin(a), 0, 0], 1];
+    }, 'band');
+    const top = headAt([0, 1, 0], F, off + 0.006);
+    bld.ellipsoid([top[0], top[1] + 0.001, top[2]], [0.006, 0.003, 0.006], 4, 8, H, 'band');
+    // brim: forward over the brow, curving down at the sides; top surface out to the edge, underside back
+    const BR = 8, BC = 25, aMax = 1.12;
+    grid(bld, 2 * BR + 2, BC, (i, j) => {
+      const q = (j / (BC - 1)) * 2 - 1, a = q * aMax, base = headAt(unitAtY(capAt(a), a), F, off + 0.001);
+      const s = i <= BR ? i / BR : (2 * BR + 1 - i) / BR, L = 0.072 * Math.sqrt(Math.max(0, 1 - q * q)), d = L * s;
+      const dir = [Math.sin(a) * 0.55, -Math.cos(a)], dl = Math.hypot(dir[0], dir[1]);
+      const under = i > BR ? 0.0035 * Math.sqrt(Math.max(0, 1 - q ** 4)) : 0;
+      return [base[0] + dir[0] / dl * d, base[1] - 0.2 * d - 0.16 * q * q * d - under, base[2] + dir[1] / dl * d, H, [q, s, 0, 0], 1];
+    }, 'band', { wrap: false });
   }
+}
+
+function buildBody(bld, look) {
+  // ---- torso, shorts and collar ----
+  buildTorso(bld, look);
+  // ---- neck & head ----
+  buildHead(bld, look);
   // ---- arms (downward from the shoulder) ----
   for (const s of [-1, 1]) { buildArm(bld, look, s); buildHand(bld, s); }
   // ---- legs (downward from the hip) ----

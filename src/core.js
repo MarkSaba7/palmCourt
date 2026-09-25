@@ -31,10 +31,14 @@ const FORMATS = {
   short:    { label: 'Short set', games: 4 },
   full:     { label: 'Full set', games: 6 },
 };
+// CPU opponents. speed/acc/react: legs (m/s, m/s², s). err: shot scatter. power/serve: pace ranges (0..1).
+// iq: shot choice (0 hits anywhere, 1 plays the percentages). pos: footwork, how far from the ideal contact point it
+// tends to arrive (m). judge: how far out (m) a ball must be before it lets it go. sErr: serve scatter. risk: how close
+// to the lines first serves go.
 const LEVELS = {
-  rookie: { label: 'Rookie', speed: 5.0, acc: 7.0, react: 0.30, err: 2.2,  power: [0.25, 0.55], serve: [0.35, 0.6] },
-  club:   { label: 'Club',   speed: 5.8, acc: 8.2, react: 0.20, err: 1.2,  power: [0.35, 0.75], serve: [0.5, 0.78] },
-  pro:    { label: 'Pro',    speed: 6.4, acc: 9.5, react: 0.12, err: 0.75, power: [0.45, 0.9],  serve: [0.62, 0.92] },
+  rookie: { label: 'Rookie', speed: 4.8, acc: 6.2, react: 0.30, err: 1.7,  power: [0.22, 0.55], serve: [0.08, 0.34], iq: 0.25, pos: 0.26, judge: 0.9, sErr: 1.6, risk: 0.25 },
+  club:   { label: 'Club',   speed: 5.5, acc: 7.2, react: 0.21, err: 1.05, power: [0.32, 0.76], serve: [0.3, 0.62],  iq: 0.55, pos: 0.18, judge: 0.45, sErr: 1.1, risk: 0.5 },
+  pro:    { label: 'Pro',    speed: 6.2, acc: 8.2, react: 0.15, err: 0.62, power: [0.45, 0.92], serve: [0.58, 0.95], iq: 0.9,  pos: 0.1,  judge: 0.2, sErr: 0.8, risk: 0.8 },
 };
 
 function netHeight(x) {
@@ -83,24 +87,28 @@ function walls(s) {
 // One fixed physics step, with net and ground collisions. Pushes events into ev.
 function stepBall(s, surf, ev) {
   if (s.rolling) {
-    const k = Math.max(0, 1 - 1.2 * DT);
+    const k = Math.max(0, 1 - 1.2 * DT), z0 = s.p.z;
     s.v.x *= k; s.v.z *= k; s.v.y = 0;
     s.p.x += s.v.x * DT; s.p.z += s.v.z * DT; s.p.y = BALL_R;
+    // A rolling ball stops against the net instead of rolling through it.
+    if (z0 !== 0 && (z0 > 0) !== (s.p.z > 0) && Math.abs(s.p.x) < COURT.postX + 0.05) { s.p.z = Math.sign(z0) * (BALL_R + 0.005); s.v.z *= -0.2; s.v.x *= 0.5; }
     walls(s);
     return;
   }
   const x0 = s.p.x, y0 = s.p.y, z0 = s.p.z;
   flight(s);
   const p = s.p, v = s.v, w = s.w;
-  if (!s.netDone && z0 !== 0 && (z0 > 0) !== (p.z > 0)) {
+  let netHit = false;
+  if (z0 !== 0 && (z0 > 0) !== (p.z > 0)) {
     const f = z0 / (z0 - p.z);
     const xc = x0 + (p.x - x0) * f, yc = y0 + (p.y - y0) * f;
     if (Math.abs(xc) < COURT.postX + 0.05) {
       const top = netHeight(xc), d = yc - top;
       if (d < BALL_R) {
-        s.netDone = true;
-        const side0 = z0 > 0 ? 1 : -1;
-        if (d > -0.4 * BALL_R) {
+        const side0 = z0 > 0 ? 1 : -1, cord = !s.netDone && d > -0.4 * BALL_R;
+        // One tape clip per shot; after that (a ball coming back at the net) the net just stops it.
+        s.netDone = netHit = true;
+        if (cord) {
           // Clipped the tape: the ball pops up and dribbles over, or drops back.
           const q = (d + 0.4 * BALL_R) / (1.4 * BALL_R);
           const over = q > 0.3;
@@ -117,6 +125,9 @@ function stepBall(s, surf, ev) {
     }
   }
   if (p.y < BALL_R && v.y < 0) {
+    // Where the ball met the court: part-way through this step, not where the step ends (that is up to v * DT deeper,
+    // 15 cm on a fast serve, and the line is judged at this spot).
+    const fc = netHit || !(y0 > p.y) ? 1 : clamp((y0 - BALL_R) / (y0 - p.y), 0, 1), cx = x0 + (p.x - x0) * fc, cz = z0 + (p.z - z0) * fc;
     p.y = BALL_R;
     const vin = -v.y;
     if (vin < 0.35) { s.rolling = true; v.y = 0; }
@@ -134,7 +145,7 @@ function stepBall(s, surf, ev) {
         const k = 1.5 / BALL_R;
         w.x -= k * jz; w.z += k * jx;
       }
-      ev.push({ type: 'bounce', x: p.x, z: p.z, vin });
+      ev.push({ type: 'bounce', x: cx, z: cz, vin });
     }
   }
   walls(s);
@@ -228,6 +239,7 @@ const Clock = {
 const Settings = {
   name: 'Player', control: 'mouse', handed: 'R', surface: 'hard', format: 'short', level: 'club',
   voice: true, assist: true, replays: true, sens: 1, latency: 0.09, paddle: null, cam: 'player', gfx: 'auto', showFps: false, phoneCode: '', tod: 'day',
+  playAs: 'custom', opponent: 'random',   // pros.js ids: who you play as, and the CPU ('random' pro, or 'custom' for the club player)
   load() { try { Object.assign(this, JSON.parse(localStorage.getItem('palmcourt.v1') || '{}')); } catch (e) { /* storage blocked */ } },
   save() {
     try {
