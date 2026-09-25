@@ -552,7 +552,7 @@ const Game = {
     if (this.mode !== 'cpu') return;
     const b = this.ball, hitter = this.players[b.lastHitter], recv = this.players[1 - b.lastHitter], b1 = this.bounceLog[0];
     if (!hitter) return;
-    const line = b1 ? lineMargin(b1.x, b1.z, b.serve ? { rSide: recv.side, court: b.serve.court } : null) : null;
+    const line = this.callMargin() == null ? null : lineMargin(b1.x, b1.z, b.serve ? { rSide: recv.side, court: b.serve.court } : null);
     Replay.consider({ reason, rally: b.rally, matchPoint: !!(ev && ev.match), hitT: b.hitT, tossT: this.tossT, endT: Clock.now(), bounces: this.bounceLog.slice(), line, hitter, receiver: recv });
   },
   scoreLine() {
@@ -586,10 +586,11 @@ const Game = {
     if (reason === 'out') Sound.nearMiss(this.callMargin(), 0.6);
     Sound.say('Fault', { rate: 1.1, pitch: 1.05, cancel: true });
   },
-  // How far the deciding bounce was from the line (metres, positive = out), for the crowd's reaction.
+  // How far the deciding bounce was from the line (metres, positive = out), for the crowd's reaction. None when the ball
+  // came down on the hitter's own half (into the net): no line decided that.
   callMargin() {
     const b = this.ball, b1 = this.bounceLog[0], recv = this.players[1 - b.lastHitter];
-    if (!b1 || !recv) return null;
+    if (!b1 || !recv || (b1.z >= 0 ? 1 : -1) !== recv.side) return null;
     return lineMargin(b1.x, b1.z, b.serve ? { rSide: recv.side, court: b.serve.court } : null).d;
   },
   announceLet() {
