@@ -196,6 +196,8 @@ function handWorkerMain() {
       const res = lm.detectForVideo(img, lastTs);
       out.landmarks = res.landmarks || [];
       out.handedness = (res.handedness || res.handednesses || []).map((h) => (h && h[0] ? { label: h[0].categoryName, score: h[0].score } : { label: '', score: 0 }));
+      // Found a hand outside the painted-over boxes: that's the one to follow, so show the whole picture again.
+      if (out.masked && out.landmarks.some((l) => !avoid.boxes.some((b) => l[9].x > b.x0 && l[9].x < b.x1 && l[9].y > b.y0 && l[9].y < b.y1))) avoid = null;
     } catch (err) { out.error = msg(err); }
     out.ms = performance.now() - t0;
     post(out);
@@ -235,11 +237,11 @@ function handWorkerMain() {
       try { m.bitmap.close(); } catch (err) { /* already closed */ }
     } else if (m.type === 'options' && lm) {
       // How many hands to look for. Changing it restarts MediaPipe's tracking, so the next frame searches the whole
-      // picture; `avoid` paints over the other hand for two frames so that search can only find the racket hand.
+      // picture; `avoid` paints over the other hand until that search finds a hand elsewhere (a few frames at most).
       try {
         const p = lm.setOptions(m.opts);
         if (m.opts.numHands) nh = m.opts.numHands;
-        avoid = m.avoid && m.avoid.length && typeof OffscreenCanvas === 'function' ? { boxes: m.avoid, n: 2 } : null;
+        avoid = m.avoid && m.avoid.length && typeof OffscreenCanvas === 'function' ? { boxes: m.avoid, n: 5 } : null;
         Promise.resolve(p).catch((err) => post({ type: 'optionsError', message: msg(err) }));
       } catch (err) { post({ type: 'optionsError', message: msg(err) }); }
     }

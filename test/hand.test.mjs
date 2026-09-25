@@ -301,21 +301,28 @@ console.log('Tracker worker (fake MediaPipe)');
 
 {
   // Tracking one hand instead of two: the page asks for it with the other hand's box; MediaPipe's options change and
-  // the next two frames have that box painted over (so its fresh search can only find the racket hand), then plain.
-  const w = runWorker({ gpu: 'ok', detect: (img) => ({ landmarks: [], handedness: [], seenImg: img }) });
+  // the next frames have that box painted over (so its fresh search can only find the racket hand) until a hand turns
+  // up elsewhere, then plain.
+  let found = false;
+  const w = runWorker({ gpu: 'ok', detect: (img) => (found ? { landmarks: [hand(0.3, 0.6)], handedness: [[{ categoryName: 'Left', score: 0.9 }]] } : { landmarks: [], handedness: [] }) });
   w.send(INIT);
   await waitFor(() => w.out.some((m) => m.type === 'ready'));
   const lmk = w.made[0];
   w.send({ type: 'options', opts: { numHands: 1 }, avoid: [{ x0: 0.5, y0: 0.25, x1: 0.75, y1: 0.75 }] });
   const bmps = [0, 1, 2].map((k) => ({ width: 640, height: 480, k, close() {} }));
-  for (const [k, b] of bmps.entries()) w.send({ type: 'frame', t: 2000 + 33 * k, bitmap: b });
+  for (const [k, b] of bmps.entries()) { found = k === 1; w.send({ type: 'frame', t: 2000 + 33 * k, bitmap: b }); }
   const res = w.out.filter((m) => m.type === 'result');
   const imgs = lmk.calls.slice(1).map((c) => c.img);
   check(lmk.opts.numHands === 1 && res.every((m) => m.nh === 1), 'worker: numHands option applied, results say so');
-  check(res[0].masked && res[1].masked && !res[2].masked && imgs[0] === imgs[1] && imgs[0].fills.length === 1 && imgs[0].drew === bmps[1] && imgs[2] === bmps[2], 'worker: two masked frames, then the camera picture itself');
+  check(res[0].masked && res[1].masked && !res[2].masked && imgs[0] === imgs[1] && imgs[0].fills.length === 1 && imgs[0].drew === bmps[1] && imgs[2] === bmps[2], 'worker: masked frames until the racket hand is found, then the camera picture itself');
   check(JSON.stringify(imgs[0].fills[0]) === JSON.stringify([320, 120, 160, 240]), `worker: the mask covers the other hand's box (${JSON.stringify(imgs[0].fills[0])})`);
+  // Nothing found: masking stops after 5 frames all the same.
+  found = false;
+  w.send({ type: 'options', opts: { numHands: 1 }, avoid: [{ x0: 0.5, y0: 0.25, x1: 0.75, y1: 0.75 }] });
+  for (let k = 0; k < 7; k++) w.send({ type: 'frame', t: 2100 + k, bitmap: { width: 640, height: 480, close() {} } });
+  check(w.out.filter((m) => m.type === 'result').slice(-7).map((m) => (m.masked ? 1 : 0)).join('') === '1111100', 'worker: masking gives up after 5 frames');
   w.send({ type: 'options', opts: { numHands: 2 } });
-  w.send({ type: 'frame', t: 2200, bitmap: { width: 640, height: 480, close() {} } });
+  w.send({ type: 'frame', t: 2300, bitmap: { width: 640, height: 480, close() {} } });
   const last = w.out.filter((m) => m.type === 'result').pop();
   check(lmk.opts.numHands === 2 && last.nh === 2 && !last.masked, 'worker: back to two hands, unmasked');
 }
