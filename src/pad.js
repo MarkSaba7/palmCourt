@@ -56,7 +56,8 @@ const Pad = {
     if (!gp) { if (this.id) { this.id = ''; this.prev = null; this.setActive(false); this.status(); } return; }
     if (gp.id !== this.id) {
       this.id = gp.id; this.prev = null;
-      this.kind = /054c|playstation|dualshock|dualsense|wireless controller/i.test(gp.id) ? 'ps' : /057e|nintendo|pro controller|joy-con/i.test(gp.id) ? 'nintendo' : 'xbox';
+      // ("Xbox Wireless Controller" also says "wireless controller", so Xbox first; a DualShock 4 is "Wireless Controller … 054c".)
+      this.kind = /xbox|xinput|045e/i.test(gp.id) ? 'xbox' : /054c|playstation|dualshock|dualsense|wireless controller/i.test(gp.id) ? 'ps' : /057e|nintendo|pro controller|joy-con/i.test(gp.id) ? 'nintendo' : 'xbox';
       this.status();
     }
     const down = gp.buttons.map((b) => !!(b && (b.pressed || b.value > 0.5))), was = this.prev || down;   // held at first sight: not a press

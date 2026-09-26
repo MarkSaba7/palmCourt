@@ -55,7 +55,7 @@ const TABS = [
   ['about', 'About', [{ t: 'about' }]],
 ];
 const DEFAULTS = {
-  level: 'club', format: 'short', surface: 'hard', handed: 'R', assist: true, timingMeter: true, replays: true, control: 'mouse', sens: 1, latency: 0.04,
+  level: 'club', format: 'short', surface: 'hard', handed: 'R', assist: true, timingMeter: true, replays: true, control: 'mouse', sens: 1, latency: 0.09,
   volume: 0.8, sfxVol: 1, crowdVol: 1, voiceVol: 1, voice: true, gfx: 'auto', cam: 'player', showFps: false, reduceMotion: false, bigHud: false, cbSafe: false,
 };
 // Screens' own way back, for Esc and controller B.
@@ -146,6 +146,7 @@ const Options = {
   },
   open(from, tab) {
     this.from = from === 'pause' ? 'pause' : 'menu';
+    this.ctl0 = Settings.control;
     this.refresh();
     UI.go('options');
     this.show(tab || this.tab);
@@ -153,6 +154,13 @@ const Options = {
     if (t) t.focus({ preventScroll: true });
   },
   close() {
+    // Swing input changed mid-match: a camera or phone needs its setup now (it returns to the pause menu), and the mouse
+    // lets the webcam go.
+    if (this.from === 'pause' && inMatch() && Settings.control !== this.ctl0) {
+      this.ctl0 = Settings.control; this.reopen = false;
+      if (Settings.control !== 'mouse') { UI.openControls('pause'); return; }
+      UI.ensureControls();
+    }
     UI.go(this.from);
     const b = $(this.from === 'pause' ? 'btnOpts2' : 'btnOpts');
     if (b) b.focus({ preventScroll: true });

@@ -137,7 +137,8 @@ details.howto b { color: var(--chalk); font-weight: 600; }
 /* ---------- settings screen, menu footer, controller glyphs, accessibility (src/options.js, src/pad.js) ---------- */
 .opt-slab { width: min(820px, 100%); gap: 16px; }
 .opt-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 16px; }
-.opt-body { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 22px; min-height: 380px; }
+.opt-body { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 22px; height: clamp(380px, calc(100dvh - 250px), 600px); }
+.opt-panes { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 8px; scrollbar-width: thin; }
 .opt-tabs { display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--edge); padding-right: 12px; }
 .opt-tab { appearance: none; background: none; border: 0; border-left: 2px solid transparent; padding: 10px 12px; text-align: left; font-weight: 700; letter-spacing: .02em; color: var(--mist); cursor: pointer; transition: color .15s, background .15s; }
 .opt-tab:hover { color: var(--chalk); background: rgba(242,245,238,.05); }
@@ -179,7 +180,8 @@ label.opt-row { cursor: pointer; }
 .linkish:hover { color: var(--chalk); }
 .linkish:focus-visible { outline: 2px solid var(--optic); outline-offset: 2px; }
 @media (max-width: 640px) {
-  .opt-body { grid-template-columns: minmax(0, 1fr); min-height: 0; gap: 14px; }
+  .opt-body { grid-template-columns: minmax(0, 1fr); height: auto; gap: 14px; }
+  .opt-panes { overflow: visible; padding-right: 0; }
   .opt-tabs { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--edge); padding: 0; scrollbar-width: none; }
   .opt-tab { border-left: 0; border-bottom: 2px solid transparent; padding: 9px 10px; white-space: nowrap; }
   .opt-tab[aria-selected="true"] { border-bottom-color: var(--optic); }
