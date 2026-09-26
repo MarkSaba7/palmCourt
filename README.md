@@ -60,6 +60,33 @@ The two browsers connect directly (WebRTC via [PeerJS](https://peerjs.com)). Pee
   3. Push to `main` (or open the Actions tab → Deploy to GitHub Pages → Run workflow).
   4. After a minute it's live at `https://<your-username>.github.io/<repository>/`. Links you create from there work for anyone, and the phone racket works there too (open the phone link the game shows).
 
+## Publishing
+
+Every release setting is in `src/config.js`. There is one build for every edition; you change the config, not the code.
+
+| Setting | What it does |
+| --- | --- |
+| `edition` | `'web'`: free, with ads and a **Wishlist on Steam** button. `'steam'`: the paid build, with no ads and no wishlist button. |
+| `portal` | Which ad SDK to load: `'auto'` (the default), `'none'`, `'crazygames'`, `'poki'`, `'gd'` (GameDistribution) or `'adsense'` (Google H5 Games Ads). `'auto'` uses AdSense on the web edition once `adsense.client` is set, and otherwise shows no ads. The page only loads the SDK you pick. |
+| `steamUrl` | Your Steam store page, e.g. `https://store.steampowered.com/app/1234560/Palm_Court/`. While it still holds the `YOUR_APP_ID` placeholder, the wishlist buttons (main menu and match-over screen) stay hidden. |
+| `ads` | `interstitialEveryMatches` (default 2) and `minGapS` (150) pace the breaks. `rewardedDoubleFuzz` turns the optional "watch an ad to double your Fuzz" offer on or off. |
+| `cloud` | Supabase cloud saves. Only the publishable key goes here, never any other Supabase key. Cloud saves stay off until `enabled: true`. |
+
+To test without editing the file, add URL parameters: `?portal=poki`, `?edition=steam`, `?showWishlist=1` (shows the wishlist button while the URL is still the placeholder), `?adEvery=1` (a break before every match after the first), `?consent=ask` (always show the ad-consent prompt), and `?adTest=1&adClient=ca-pub-…` (AdSense test ads).
+
+**How ads behave.** A break only comes between matches: never during a match, never before the first match of a visit, and no more often than the pacing allows. During an ad the match clock, the sound and the umpire's voice pause. If an SDK is blocked (ad-blocker), fails, or never answers, the game carries on after a few seconds without the ad. The optional rewarded ad is `Platform.ads.rewarded('doubleFuzz')`, which resolves `true` only when the ad was watched to the end. `src/platform.js` also tells the portal when play starts and stops, and marks big wins as "happy time" on SDKs that support it.
+
+**Portal requirements.** These change, so check each portal's current developer docs before you submit.
+
+- **Own domain (Google H5 Games Ads / AdSense):** your AdSense account must be approved for the H5 Games Ads (Ad Placement API) beta on your domain. Set `adsense.client: 'ca-pub-…'`. Publish `ads.txt` at the root of the domain: fill in the template in this repository and uncomment its line. In the EU and UK, Google expects a Google-certified consent platform. The simplest option is AdSense → Privacy & messaging → a GDPR message. Once that's live, set `consentPrompt: 'never'`. Until then, the game's own small prompt asks EU/UK players (detected from their time zone) whether ads may be personalised, and it requests non-personalised ads until the player says yes.
+- **CrazyGames:** set `portal: 'crazygames'` and upload the folder as an HTML5 game. The SDK (v3) handles consent and ad pacing itself. Their QA checks the gameplay start/stop calls, which the game already makes.
+- **Poki:** set `portal: 'poki'`. Poki reviews games before publishing. Their SDK handles consent and decides when a break actually shows, so `interstitialEveryMatches: 1` is fine there.
+- **GameDistribution:** set `portal: 'gd'` and `gd.gameId` to the id from your GameDistribution dashboard. Their SDK handles consent.
+- **External links:** the wishlist button, the Privacy page and the Credits page open in a new tab. Some portals restrict links to other stores, so read their link policy and set `showWishlist`/`steamUrl` to suit.
+- **Steam:** set `edition: 'steam'`. It forces `portal: 'none'`, so there are no ads and no wishlist button.
+
+**Legal pages.** `privacy.html` covers the camera (frames never leave the device), local save data, online play, what the ad partners may collect, and a contact placeholder (fill in `[contact email]` before you publish). `credits.html` lists the open-source licences (three.js MIT, MediaPipe Apache-2.0, PeerJS MIT, the fonts under OFL). Both are linked from the main menu, and the Pages workflow publishes them with `ads.txt`.
+
 ## What makes it realistic
 
 - **Real court:** ITF dimensions (23.77 m × 8.23 m singles, net 0.914 m at the centre and 1.07 m at the posts, lines inside the court). A ball touching any part of a line is in.

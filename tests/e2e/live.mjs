@@ -87,6 +87,7 @@ export function directCamera(P) {
 // through Tracker.process with capture time t0 + g / 30 s, however slow this machine is. The color is locked through
 // the camera check's button while each lock clip holds the paddle in the circle.
 export async function playSuite(P, suite, cam, rec) {
+  const { UI } = await import('/src/ui.js');   // the Lock button counts down 3 s for a real player: lock at once here
   const segs = suite.segments.map((s) => { const c = CLIPS.find((x) => x.name === s.name); return { ...s, clip: c, script: c.build() }; });
   const statics = {}, stFor = (d) => statics[d] || (statics[d] = { stat: makeStatic({ distractor: d, seed: 7 }), st: {} });
   const t0 = performance.now() + 50, locks = [];
@@ -97,7 +98,7 @@ export async function playSuite(P, suite, cam, rec) {
     renderLive(t, { script: s.script, stat: S.stat, color: PADDLE[s.clip.color], exposure: s.clip.exposure, frame: k, clip: s.id }, cam.img.data, S.st);
     cam.show();
     if (/lock$/.test(s.name) && t >= LOCK_WINDOW[0] + 0.2 && !locks.some((l) => l.clip === s.name)) {
-      document.getElementById('btnLockColor').click();
+      UI.lockColor(true);
       const p = P.Settings.paddle;
       locks.push({ clip: s.name, at: +t.toFixed(2), msg: document.getElementById('swingLog').textContent, col: p && { h: +p.h.toFixed(1), s: +p.s.toFixed(2), v: +p.v.toFixed(2), tol: +p.tol.toFixed(1), css: p.css } });
     }

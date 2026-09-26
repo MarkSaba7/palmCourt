@@ -326,6 +326,7 @@ const Platform = {
 .pf-wish:focus-visible, .pf-links a:focus-visible, .pf-link:focus-visible, .pf-consent .btn:focus-visible { outline: 2px solid var(--optic, #d6f04a); outline-offset: 2px; }
 .pf-wish svg { width: 14px; height: 14px; fill: var(--optic, #d6f04a); flex: none; }
 .pf-over-wish { display: flex; justify-content: center; margin-top: 12px; }
+@media (max-height: 860px) and (min-width: 700px) { .over-slab > .pf-over-wish { grid-column: 1; grid-row: 3; align-self: end; justify-content: flex-start; margin: 0; } }   /* two-column match-over: just above the buttons */
 .pf-consent { position: fixed; z-index: 60; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(520px, calc(100% - 32px)); box-sizing: border-box;
   background: var(--panel, rgba(8,18,29,.95)); border: 1px solid var(--edge, #444); border-radius: 12px; padding: 16px; color: var(--chalk, #fff);
   box-shadow: 0 12px 40px rgba(0,0,0,.45); backdrop-filter: blur(10px); font-size: 14px; }

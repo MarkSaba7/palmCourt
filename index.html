@@ -230,7 +230,9 @@ details.howto b { color: var(--chalk); font-weight: 600; }
 .swatch-pair .swatch { margin: 0; }
 .tuning { display: grid; gap: 8px; }
 .setup-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
-.setup-foot .fine { font-size: 12px; }
+.setup-foot .fine { font-size: 12px; flex: 1 1 200px; }
+.setup-mode { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--mist); }
+.setup-mode .opts label { padding: 7px 14px; }
 #setupTipsBox { padding-top: 10px; }
 #setupTipsBox .steps { margin-top: 8px; font-size: 13px; }
 @media (max-height: 760px) and (min-width: 761px) {
@@ -239,6 +241,7 @@ details.howto b { color: var(--chalk); font-weight: 600; }
   .step-card { padding: 12px 14px; gap: 8px; }
   .step-card h3 { font-size: 24px; }
   .step-text { font-size: 13px; }
+  #setup:not([data-mode="mouse"]) #setupTipsBox { display: none; }   /* the steps say the same; room for the card */
 }
 @media (prefers-reduced-motion: reduce) { .tile.now, .tile.miss { animation: none; } .spip i { transition: none; } }
 .steps { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--mist); }
@@ -674,7 +677,7 @@ details.howto b { color: var(--chalk); font-weight: 600; }
         <details class="howto" id="setupTipsBox"><summary>Tips</summary><ol class="steps" id="setupSteps"></ol></details>
       </div>
     </div>
-    <footer class="setup-foot"><button id="btnSetupDone" class="btn primary">Done</button><p class="fine" id="trackInfo"></p></footer>
+    <footer class="setup-foot"><button id="btnSetupDone" class="btn primary">Done</button><div class="setup-mode"><span id="setupModeLabel">Controls</span><div class="opts" role="radiogroup" aria-labelledby="setupModeLabel" id="setupMode"><label><input type="radio" name="setup-control" value="hand">Hand</label><label><input type="radio" name="setup-control" value="paddle">Paddle</label><label><input type="radio" name="setup-control" value="mouse">Mouse</label></div></div><p class="fine" id="trackInfo"></p></footer>
   </section>
 </main>
 
