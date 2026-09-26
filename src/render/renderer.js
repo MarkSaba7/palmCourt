@@ -165,7 +165,7 @@ const DofShader = {
 // on long thin edges such as court lines, net tape and rackets). sunCascade: size of the soft stadium-wide sun
 // shadow map (0 = none; the court always has its own sharp one). floodShadow: night floodlight shadow map size.
 export const PRESETS = {
-  low:    { label: 'Low',    maxDpr: 1.0,  scale: 0.8, shadow: 1024, radius: 1.2, ao: false, bloom: false, samples: 0, aa: 'fxaa', sunCascade: 0,    floodShadow: 0,    crowd: 0.45, detail: 0 },
+  low:    { label: 'Low',    maxDpr: 1.0,  scale: 0.8, shadow: 1024, radius: 1.2, ao: false, bloom: false, samples: 0, aa: 'fxaa', sunCascade: 0,    floodShadow: 0,    crowd: 0.3,  detail: 0 },
   medium: { label: 'Medium', maxDpr: 1.25, scale: 1.0, shadow: 2048, radius: 1.6, ao: false, bloom: true,  samples: 2, aa: 'smaa', sunCascade: 1024, floodShadow: 512,  crowd: 0.75, detail: 1 },
   high:   { label: 'High',   maxDpr: 1.5,  scale: 1.0, shadow: 2048, radius: 2.0, ao: true,  bloom: true,  samples: 4, aa: 'smaa', sunCascade: 2048, floodShadow: 1024, crowd: 1.0,  detail: 2 },
   ultra:  { label: 'Ultra',  maxDpr: 2.0,  scale: 1.0, shadow: 4096, radius: 2.6, ao: true,  bloom: true,  samples: 4, aa: 'smaa', sunCascade: 2048, floodShadow: 2048, crowd: 1.0,  detail: 3 },
@@ -192,8 +192,10 @@ export const Perf = {
   presetKey() {
     const g = Settings.gfx === 'fast' ? 'low' : Settings.gfx === 'sharp' ? 'ultra' : Settings.gfx;
     if (PRESETS[g]) return g;
-    return this.software ? 'low' : this.integrated ? 'medium' : 'high';
+    const k = this.software ? 'low' : this.integrated ? 'medium' : 'high', keys = Object.keys(PRESETS);
+    return keys[Math.min(keys.indexOf(k), this.cap)];   // cap: lowered by frame() when even the lowest resolution was too slow
   },
+  cap: 9, bad: 0, upAt: -1e9, hold: 5000, slowSince: 0,
   cfg() { return PRESETS[this.preset]; },
   mode() { return Settings.gfx === 'auto' || !PRESETS[Settings.gfx] ? 'auto' : Settings.gfx; },
   apply() {
@@ -209,6 +211,16 @@ export const Perf = {
   },
   listeners: [],
   onChange(fn) { this.listeners.push(fn); },
+  // Main-thread time per frame by section, for tuning: PalmCourt.Perf.profile(), play a while, then read
+  // PalmCourt.Perf.sections ({ Game: { avg, mean, max, n }, … } in ms; avg is smoothed). Off (null) by default, when
+  // the frame loop skips it entirely. info() adds the draw calls, triangles and shader programs of the last frame.
+  sections: null,
+  profile(on = true) { this.sections = on ? {} : null; return this; },
+  section(k, ms) {
+    const s = this.sections[k] || (this.sections[k] = { avg: ms, mean: 0, max: 0, n: 0, sum: 0 });
+    s.avg += (ms - s.avg) * 0.05; s.sum += ms; s.n++; s.mean = s.sum / s.n; if (ms > s.max) s.max = ms;
+  },
+  info() { const i = renderer.info; return { preset: this.preset, scale: +this.scale.toFixed(2), calls: i.render.calls, triangles: i.render.triangles, programs: i.programs ? i.programs.length : 0, geometries: i.memory.geometries, textures: i.memory.textures }; },
   setScale(s) {
     this.scale = s;
     readView();
@@ -216,21 +228,40 @@ export const Perf = {
     renderer.setSize(view.w, view.h, false);
     if (composer) { composer.setPixelRatio(s); composer.setSize(view.w, view.h); }
   },
-  frame(ms) {
-    this.avg = this.avg * 0.92 + ms * 0.08;
+  // Auto quality, once per drawn frame (ms since the last one). Too slow: lower the resolution a step at a time,
+  // and if even the lowest is too slow for a few seconds, drop to the next preset down (only when calm: menus,
+  // between points; it stays down for the session). Fast for a while: raise the resolution again. A step up that
+  // turns out too slow doubles the wait before the next try, so it settles instead of see-sawing.
+  frame(ms, calm = true) {
+    this.avg = this.avg * 0.92 + Math.min(ms, 50) * 0.08;   // one long frame (a shader compiling) is a hitch, not a slow GPU
     this.fps = 1000 / this.avg;
     if (this.mode() !== 'auto') return;
     const now = performance.now();
     if (now < this.lastAdjust) return;
     if (this.avg > 21) {
-      if (this.scale > this.min + 0.01 && now - this.lastAdjust > 1200) { this.setScale(Math.max(this.min, this.scale * 0.85)); this.lastAdjust = now; }
       this.goodSince = 0;
+      if (this.scale > this.min + 0.01) {
+        this.slowSince = 0;
+        if (now - this.lastAdjust > 1200) {
+          if (now - this.upAt < 10000) this.hold = Math.min(120000, this.hold * 2);
+          this.setScale(Math.max(this.min, this.scale * 0.85)); this.lastAdjust = now;
+        }
+      } else if (this.avg > 24 && this.preset !== 'low') {
+        if (!this.slowSince) this.slowSince = now;
+        if (calm && now - this.slowSince > 4000) {
+          this.cap = Object.keys(PRESETS).indexOf(this.preset) - 1; this.slowSince = 0;
+          console.warn(`Palm Court: graphics too slow, auto quality steps down to ${PRESETS[Object.keys(PRESETS)[this.cap]].label}.`);
+          this.apply();
+        }
+      } else this.slowSince = 0;
     } else if (this.avg < 17.8) {
+      this.slowSince = 0;
       if (!this.goodSince) this.goodSince = now;
-      if (now - this.goodSince > 5000 && now - this.lastAdjust > 5000 && this.scale < this.max - 0.01) {
-        this.setScale(Math.min(this.max, this.scale * 1.1)); this.lastAdjust = now; this.goodSince = now;
+      if (this.upAt > this.lastAdjust - 1 && now - this.upAt > 60000) this.hold = 5000;   // the last step up held: back to quick steps
+      if (now - this.goodSince > this.hold && now - this.lastAdjust > 5000 && this.scale < this.max - 0.01) {
+        this.setScale(Math.min(this.max, this.scale * 1.1)); this.lastAdjust = this.upAt = now; this.goodSince = now;
       }
-    } else this.goodSince = 0;
+    } else this.goodSince = this.slowSince = 0;
   },
 };
 
