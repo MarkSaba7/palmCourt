@@ -9,6 +9,9 @@ import { Phone } from './phone.js';
 import { UI } from './ui.js';
 import { Replay } from './replay.js';
 import { BallKids } from './render/ballkids.js';
+import { Profile } from './profile.js';
+import { Progress } from './progress.js';
+import * as Economy from './economy.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t, p) => { const el = $('loadingMsg'); if (el) el.textContent = t; if (p != null && $('loadBar')) $('loadBar').style.setProperty('--p', p + '%'); };
@@ -79,7 +82,7 @@ async function boot() {
   UI.go('menu');
   const q = new URLSearchParams(location.search).get('join');
   if (q && /^[A-Za-z0-9]{5}$/.test(q)) UI.openLobby(q.toUpperCase());
-  window.PalmCourt = { Game, Net, Input, Settings, Clock, Perf, Tracker, Phone, Env, Stadium, World, Cam, Crowd, Replay, Effects, renderer, scene, camera };
+  window.PalmCourt = { Game, Net, Input, Settings, Clock, Perf, Tracker, Phone, Env, Stadium, World, Cam, Crowd, Replay, Effects, renderer, scene, camera, Profile, Progress, Economy };
 }
 boot().catch((e) => {
   console.error(e);

@@ -8,6 +8,8 @@ import { Net } from './net.js';
 import { Phone, drawQR } from './phone.js';
 import { Bus } from './events.js';
 import { PROS, REAL_PROS, proById, proName, randomPro, proPortrait, randomPortrait } from './pros.js';
+import { Profile } from './profile.js';
+import { isUnlocked, unlockHint } from './economy.js';
 
 // =====================================================================
 // UI: menus, lobby, camera check, HUD, main loop
@@ -35,6 +37,9 @@ const UI = {
   init() {
     this.buildSettings();
     this.initPros();
+    Profile.ready.then(() => this.applyLocks());
+    for (const e of ['levelup', 'unlock']) Profile.on(e, () => this.applyLocks());
+    Bus.on('screen', ({ screen }) => { if (screen === 'menu') this.applyLocks(); });
     const note = document.createElement('p');
     note.id = 'menuNote'; note.className = 'status'; note.setAttribute('role', 'status');
     $('menu').querySelector('.actions').after(note);
@@ -243,6 +248,31 @@ const UI = {
     if (document.fonts) document.fonts.addEventListener('loadingdone', () => this.fitNames());
     this.renderPros();
   },
+  // Progression locks (economy.js): locked pros, surfaces and times of day show as locked (with how they unlock), and
+  // a locked pick falls back to the free one. Nothing is locked until the saved profile has loaded.
+  applyLocks() {
+    if (!Profile.loaded || !$('settings')) return;
+    if (!$('lockCss')) {
+      const css = document.createElement('style');
+      css.id = 'lockCss';
+      css.textContent = '.seg label.locked{opacity:.45;cursor:not-allowed}.seg label.locked::after{content:attr(data-lock);font-size:.62em;margin-left:.3em;opacity:.9}.pp-chip.locked{opacity:.35;filter:grayscale(1);cursor:not-allowed}';
+      document.head.append(css);
+    }
+    let fixed = false;
+    for (const [key, kind, def] of [['surface', 'surface', 'hard'], ['tod', 'tod', 'day'], ['playAs', 'pro', 'custom']]) {
+      if (!isUnlocked(`${kind}:${Settings[key]}`)) { Settings[key] = def; fixed = true; if (key !== 'playAs') this.onSetting(key); }
+    }
+    if (fixed) Settings.save();
+    for (const key of ['surface', 'tod']) {
+      for (const inp of document.querySelectorAll(`input[name="opt-${key}"]`)) {
+        const id = `${key}:${inp.value}`, ok = isUnlocked(id), lab = inp.parentElement;
+        inp.disabled = !ok; inp.checked = Settings[key] === inp.value;
+        lab.classList.toggle('locked', !ok);
+        if (ok) { lab.removeAttribute('data-lock'); lab.removeAttribute('title'); } else { lab.dataset.lock = unlockHint(id).replace(/^Level /, 'L'); lab.title = `Locked: ${unlockHint(id)}`; }
+      }
+    }
+    if ($('proPicker')) this.renderPros();
+  },
   // Long names (or a wide fallback font) shrink to fit the card instead of being cut off.
   fitNames() {
     for (const el of document.querySelectorAll('.pp-name')) {
@@ -265,6 +295,9 @@ const UI = {
         inp.checked = inp.value === id;
         inp.disabled = side === 'opp' && !!proById(inp.value) && inp.value === Settings.playAs;   // no mirror matches
         inp.parentElement.title = inp.disabled ? `${inp.getAttribute('aria-label')} (you)` : inp.getAttribute('aria-label');
+        const locked = side === 'you' && Profile.loaded && !isUnlocked(`pro:${inp.value}`);   // progression: pros you haven't unlocked
+        inp.parentElement.classList.toggle('locked', locked);
+        if (locked) { inp.disabled = true; inp.parentElement.title = `${inp.getAttribute('aria-label')} (locked: ${unlockHint(`pro:${inp.value}`)})`; }
       }
     }
     this.fitNames();
