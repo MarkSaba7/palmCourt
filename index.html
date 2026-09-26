@@ -241,6 +241,7 @@ details.howto b { color: var(--chalk); font-weight: 600; }
   .step-card { padding: 12px 14px; gap: 8px; }
   .step-card h3 { font-size: 24px; }
   .step-text { font-size: 13px; }
+  #setup:not([data-mode="mouse"]) #setupTipsBox { display: none; }   /* the steps say the same; room for the card */
 }
 @media (prefers-reduced-motion: reduce) { .tile.now, .tile.miss { animation: none; } .spip i { transition: none; } }
 .steps { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--mist); }

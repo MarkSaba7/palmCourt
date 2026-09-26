@@ -462,6 +462,7 @@ const UI = {
     this.go('setup');
     const mode = Settings.control, cam = mode !== 'mouse';
     const c = (this.camCheck = { mode, cam, plan: cam ? this.calPlan(mode) : [], step: null, done: {}, list: [], camErr: '', light: null, on: null, t: 0, lightT: 0, good: 0, next: 0 });
+    $('setup').dataset.mode = mode;
     $('setupEyebrow').textContent = cam ? `Camera check · ${mode === 'hand' ? 'hand' : 'paddle'}` : 'Controls · mouse and keyboard';
     $('setupTitle').textContent = cam ? 'Set up your swing' : 'Test your swing';
     $('setupSteps').innerHTML = STEPS[mode];
@@ -636,7 +637,7 @@ const UI = {
     }
     if (id === 'frame' || id === 'paddle') {
       const ul = $('calChecks');
-      if (ul) ul.replaceChildren(...this.camChecks().map((k) => {
+      if (ul) ul.replaceChildren(...this.camChecks().filter((k) => k.k !== 'fps').map((k) => {   // speed: see the health chips
         const li = document.createElement('li'), s = document.createElement('span'), b = document.createElement('b');
         li.className = k.st; s.textContent = k.label; b.textContent = k.text;
         li.append(s, b);
