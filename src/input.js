@@ -251,7 +251,7 @@ function handWorkerMain() {
 
 // Hand tracker settings, and how long each way of running it may take to start (ms) before the next is tried.
 const HAND_OPTS = { runningMode: 'VIDEO', numHands: 2, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.4 };
-const HAND_WAIT = { GPU: 15000, CPU: 25000, download: 30000 };
+const HAND_WAIT = { GPU: 12000, CPU: 15000, download: 30000 };
 const STREAM_DELAY = 5;   // ms from a camera frame's capture to the tracker reading it straight from the stream (Chrome)
 const handLabels = (res) => (res.handedness || res.handednesses || []).map((h) => (h && h[0] ? { label: h[0].categoryName, score: h[0].score } : { label: '', score: 0 }));
 const timeLimit = (p, ms, what) => new Promise((ok, no) => {

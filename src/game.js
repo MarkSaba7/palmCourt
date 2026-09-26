@@ -590,13 +590,17 @@ const Game = {
     // Hitting frame: +x is where groundShot's aimX > 0 lands. Our own spot, and where the opponent is heading.
     const mx = pl.x * side, md = Math.abs(pl.z);
     const ox = clamp((opp.x + opp.vx * 0.3) * side, -6, 6), od = Math.abs(opp.z + opp.vz * 0.3), bhX = opp.handed === 'R' ? 1 : -1;
-    const diff = this.shotDifficulty(pl), stretch = sstep(0.3, 0.95, reach);
-    const low = sstep(volley ? 0.8 : 0.7, 0.35, y), high = volley ? 0 : sstep(1.35, 1.9, y), hurry = sstep(0.25, -0.15, pl.chase ? pl.chase.slack : 1);
-    const press = clamp(0.55 * diff + 0.5 * stretch + 0.3 * low + 0.25 * high + 0.3 * hurry, 0, 1);
-    const q = clamp(1 - 0.45 * stretch - 0.2 * low - 0.15 * high - 0.2 * hurry, 0.35, 1);
+    // Pressure: pace of the incoming ball, how far it had to run and how late it got there, reaching for it, and a
+    // ball below the net tape or above the shoulder. Defenders cope a little better on the run.
+    const c = pl.chase || { run: 0, slack: 1 }, stretch = sstep(0.3, 0.95, reach);
+    const pace = sstep(14, 30, Math.hypot(b.v.x, b.v.y, b.v.z)), run = sstep(1.5, 5.5, c.run) * lerp(1.2, 0.8, S.defense);
+    const low = sstep(volley ? 0.8 : 0.7, 0.35, y), high = volley ? 0 : sstep(1.35, 1.9, y), hurry = sstep(0.3, -0.15, c.slack);
+    const srv = b.serve ? pace * (b.serve.no === 1 ? 1 : 0.5) : 0;   // returning a big serve
+    const press = clamp(0.3 * pace + 0.35 * run + 0.35 * hurry + 0.45 * stretch + 0.25 * low + 0.2 * high + 0.3 * srv, 0, 1);
+    const q = clamp(1 - 0.45 * stretch - 0.25 * hurry - 0.15 * run - 0.2 * low - 0.15 * high - 0.2 * srv, 0.35, 1), diff = press;
     const errMul = L.err * lerp(1.3, 0.75, S.consistency);
-    const short = sstep(11.3, 8.5, md) * (1 - press);
-    const risk = clamp(0.32 + 0.55 * (S.aggression - 0.5) - 0.55 * press + 0.35 * short - 0.15 * (S.consistency - 0.5), 0, 1);
+    const b1 = pl.path && pl.path.bounce1, short = Math.max(sstep(11.3, 8.5, md), b1 && !volley ? sstep(9.6, 7.6, Math.abs(b1.z)) : 0) * (1 - press);
+    const risk = clamp(0.4 + 0.55 * (S.aggression - 0.5) - 0.55 * press + 0.35 * short - 0.15 * (S.consistency - 0.5), 0, 1);
     // Margins from its own typical scatter: a precise player aims closer to the lines.
     const kx = lerp(2.3, 1.0, risk), kz = lerp(2.3, 1.15, risk);
     const wideAim = (p, k = kx) => W - clamp((0.4 + p * p) * errMul * 1.25 * k, 0.45, 2.6);
@@ -604,7 +608,7 @@ const Game = {
     const drive = (t) => lerp(L.power[0], L.power[1], clamp(t, 0, 1));
     const open = Math.abs(ox) < 0.5 ? (Math.random() < 0.5 ? -1 : 1) : -Math.sign(ox);
     const cc = Math.abs(mx) < 0.6 ? open : -Math.sign(mx);   // crosscourt from where it stands
-    let power = drive(0.25 + 0.5 * S.aggression + 0.3 * short + gauss() * 0.12) * (1 - 0.45 * press);
+    let power = drive(0.45 + 0.5 * S.aggression + 0.3 * short + gauss() * 0.12) * (1 - 0.35 * press);
     let spin = clamp(lerp(0.15, 0.95, S.topspin) + gauss() * 0.15, -0.2, 1), aimX = 0, depth = null, lob = false, kind = null;
     let mode = md > 9 ? 'base' : ai.mode;
     if (volley) {
@@ -644,11 +648,12 @@ const Game = {
       const sl = Math.random() < clamp(0.15 + 0.8 * (S.slice - 0.5) + 0.3 * low + (plan && plan.stroke === 'bh' ? 0.15 : 0), 0.05, 0.85);
       power = lerp(0.22, 0.5, 1 - press) * lerp(0.9, 1.15, S.aggression);
       spin = sl ? rand(-0.8, -0.45) : 0.55 + 0.35 * S.topspin; if (sl) kind = 'Slice';
-      aimX = cc * wideAim(power, kx + 0.6) * rand(0.3, 0.8); depth = deepAim(power, kz + 0.5);
+      // On the run it can't control the length: the ball often sits up mid-court.
+      aimX = cc * wideAim(power, kx + 0.25) * rand(0.45, 0.95); depth = lerp(deepAim(power, kz + 0.2), rand(6.5, 8.5), sstep(0.55, 1, press) * lerp(1, 0.6, S.defense));
     } else if (short > 0.3 && y > 0.6) {
       // A short ball: drop shot (opponent deep), approach and come in (net players), or go for the open court.
       const dropP = od > 12.2 ? clamp(0.03 + 0.6 * Math.max(0, S.drop - 0.35), 0, 0.5) : 0;
-      const netP = clamp(0.03 + 1.1 * Math.max(0, S.net - 0.3), 0, 0.85) * sstep(11, 8.5, md);
+      const netP = clamp(0.03 + 1.1 * Math.max(0, S.net - 0.3), 0, 0.85) * sstep(0.3, 0.7, short) * sstep(12.5, 10.5, md);
       const r = Math.random();
       if (r < dropP) { power = 0.1; spin = -0.85; aimX = open * rand(0.8, 2.4); depth = rand(2.4, 3.6); kind = 'Drop shot'; }
       else if (r < dropP + netP) {
@@ -656,18 +661,21 @@ const Game = {
         power = sl ? rand(0.45, 0.6) : drive(0.65); spin = sl ? -0.5 : 0.35 + 0.3 * S.topspin; kind = 'Approach'; mode = 'net';
         aimX = (Math.abs(mx) > 0.8 && Math.random() < 0.7 ? Math.sign(mx) : bhX) * wideAim(power, kx + 0.2); depth = deepAim(power);
       } else {
-        const angle = Math.abs(mx) > 1.5 && Math.random() < 0.35;
-        power = drive(0.75 + 0.3 * S.aggression + 0.1 * gauss()); spin = lerp(0.05, 0.75, S.topspin);
-        aimX = open * wideAim(power); depth = angle ? rand(6, 7.5) : deepAim(power);
+        // Going for the winner: flatter and harder, closer to the lines.
+        const angle = Math.abs(mx) > 1.0 && Math.random() < 0.45, k = lerp(kx, 0.75, 0.4 + 0.4 * S.aggression);
+        power = drive(0.85 + 0.3 * (S.aggression - 0.5) + 0.08 * gauss()); spin = lerp(0.05, 0.6, S.topspin);
+        aimX = open * wideAim(power, k); depth = angle ? rand(6, 7.5) : deepAim(power, lerp(kz, 1, 0.5));
       }
     } else {
       // Neutral rally: mostly crosscourt (safest from out wide, over the low middle of the net), sometimes down the line
       // or at the backhand, behind a player who is running, the odd slice and (for some) a surprise drop shot.
       const r = Math.random(), wide = Math.abs(mx) > 2.0, pDTL = (wide ? 0.1 : 0.22) + 0.25 * risk;
       let dir = r < pDTL ? Math.sign(mx) || open : r < pDTL + 0.25 * iq ? bhX : cc;
-      if (Math.abs(opp.vx) > 3 && Math.random() < 0.25 * iq) dir = -Math.sign(opp.vx * side);
+      // An opponent still out of position: into the open court, or behind them if they're already running back.
+      if (Math.random() < iq * sstep(0.8, 2.6, Math.abs(ox))) dir = open;
+      if (Math.abs(opp.vx) > 3 && Math.random() < 0.2 * iq) dir = -Math.sign(opp.vx * side);
       const dtl = Math.abs(mx) > 0.6 && dir === Math.sign(mx);
-      aimX = dir * wideAim(power, kx + (dtl ? 0.35 : 0)) * rand(0.7, 1); depth = deepAim(power);
+      aimX = dir * wideAim(power, kx + (dtl ? 0.35 : 0)) * rand(0.7, 1); depth = deepAim(power) - rand(0, 2) - 1.5 * press;
       if (Math.random() < clamp(0.04 + 0.5 * (S.slice - 0.4) + (plan && plan.stroke === 'bh' ? 0.08 : -0.03) + 0.2 * low, 0, 0.6)) {
         spin = rand(-0.7, -0.35); power *= 0.85; kind = 'Slice'; depth = deepAim(power, kz + 0.3);
       } else if (od > 12.4 && md < 12.6 && Math.random() < 0.1 * Math.max(0, S.drop - 0.55) * (1 - press)) {
@@ -677,8 +685,11 @@ const Game = {
     // A low-IQ player often just hits it back somewhere.
     if (!volley && !lob && power > 0.15 && Math.random() < 0.45 * (1 - iq)) { aimX = rand(-2.8, 2.8); depth = null; }
     ai.mode = mode;
+    // The follow-through (longer after a lunge or a big swing) comes before the first recovery step.
+    pl.moveAfter = Clock.now() + (volley ? 0.08 : 0.16) + 0.3 * stretch + 0.12 * power;
     const shot = this.groundShot(pl, { power, spin, aimX, depth, lob, q, tau: 0, errMul, diff });
     if (kind) shot.kind = kind;
+    this._dbg = { br: volley ? "volley" : od < 7 && md > 6.5 ? "pass" : b.serve ? "ret" : press > 0.62 ? "def" : short > 0.3 && y > 0.6 ? "att" : "rally", press, short, md, od, power, aimX, depth, q, diff, reach, y }; // DBG
     ai.aim = { x: side * aimX, z: -side * (depth ?? 9) };
     return shot;
   },
@@ -702,9 +713,26 @@ const Game = {
     rotateElevation(sol.v, gauss() * (0.005 + 0.006 * o.power + 0.03 * (1 - o.q)) * (1 + 0.6 * pressure) * (o.errMul || 1));
     return { sol, rpm, kind, tau: o.tau, q: o.q, power: o.power, aim: o.aimX };
   },
+  // The CPU's serve: T, body or wide (rarely the same three times running in a court), big servers going for the
+  // corners, a lefty's slider wide in the ad court and a right-hander's in the deuce court; second serves slower, with
+  // more margin, into the body or the backhand. Net players sometimes follow it in.
   cpuServeParams(pl) {
-    const L = pl.level, first = this.match.serveNo === 1;
-    return { power: first ? rand(L.serve[0], L.serve[1]) : rand(0.3, 0.52), a: clamp(pick([0.06, 0.5, 0.94]) + gauss() * 0.07, 0, 1), q: 0.93, errMul: L.err * (first ? 1 : 0.65) };
+    const L = pl.level, S = this.cpuStyle(pl), ai = this.cpuMind(pl), m = this.match, first = m.serveNo === 1, deuce = m.court === 'deuce';
+    const R = this.players[1 - pl.idx], bhWide = (R.handed === 'R') !== deuce, slider = (pl.handed === 'L') !== deuce ? 1 : 0, sv = S.serve - 0.5;
+    const w = first ? { T: 0.4 + 0.15 * sv, wide: 0.32 + 0.12 * slider + 0.1 * sv, body: 0.24 - 0.2 * sv } : { T: bhWide ? 0.18 : 0.42, wide: bhWide ? 0.42 : 0.18, body: 0.4 };
+    const key = m.court + m.serveNo, last = ai.serves.filter((s) => s.k === key).slice(-2);
+    if (last.length === 2 && last[0].d === last[1].d) w[last[0].d] *= 0.3;
+    let r = Math.random() * (w.T + w.wide + w.body), dir = 'T';
+    if ((r -= w.T) > 0) dir = r - w.wide > 0 ? 'body' : 'wide';
+    ai.serves.push({ k: key, d: dir }); if (ai.serves.length > 12) ai.serves.shift();
+    // How wide: 0 = the T .. 1 = the sideline. A body serve goes at the receiver, a little inside them.
+    const risk = clamp(L.risk + 0.3 * sv, 0, 1) * (first ? 1 : 0.4);
+    const wd = dir === 'T' ? lerp(0.24, 0.03, risk) : dir === 'wide' ? lerp(0.76, 0.97, risk) : clamp((Math.abs(R.x) - 1.3) / 3.45, 0.3, 0.7);
+    const power = first ? clamp(rand(L.serve[0], L.serve[1]) + 0.14 * sv, 0, 1) : clamp(0.5 * L.serve[0] + rand(0.12, 0.3) + 0.1 * sv, 0.1, 0.62);
+    ai.snv = Math.random() < (first ? 1 : 0.3) * clamp(0.9 * (S.net - 0.55), 0, 0.45);
+    ai.mode = ai.snv ? 'net' : 'base';
+    ai.aim = { x: (deuce ? R.side : -R.side) * lerp(0.3, 3.75, wd), z: R.side * 5.6 };
+    return { power, a: deuce ? 1 - wd : wd, q: lerp(0.88, 0.97, S.serve), errMul: L.sErr * lerp(1.15, 0.85, S.serve) * (first ? 1 : 0.7) };
   },
   serveShot(pl, o) {
     const b = this.ball, m = this.match, second = m.serveNo === 2;
@@ -750,7 +778,7 @@ const Game = {
       if (this.state === 'rally' && b.lastHitter >= 0 && b.lastHitter !== pl.idx) {
         const fresh = !pl.plan;
         this.planFor(pl, now);
-        if (pl.ctl === 'cpu' && fresh) pl.moveAfter = now + pl.react;
+        if (pl.ctl === 'cpu' && fresh) pl.moveAfter = Math.max(pl.moveAfter, now + this.cpuReact(pl));
         // Remember how far this ball makes the player run, and how much time it leaves, for shotDifficulty.
         if (fresh && pl.plan) {
           const d = Math.hypot(pl.plan.bx - pl.x, pl.plan.bz - pl.z);
@@ -760,30 +788,58 @@ const Game = {
     }
   },
   // Choose where and when to meet the ball: after its bounce, near waist height, forehand or backhand side, reachable in time.
+  // The CPU also volleys when it is at the net (a smash up to racket height), prefers its forehand and an early or a
+  // late ball by style, lets a ball go that it judges clearly out, and doesn't run to the exact ideal spot.
   planFor(pl, now) {
-    const b = this.ball;
+    const b = this.ball, cpu = pl.ctl === 'cpu';
     const path = predictPath(b, SURFACES[World.surface], 3.2, b.simT);
     pl.path = path;
     const hs = pl.handed === 'R' ? 1 : -1;
-    let best = null;
+    let best = null, volleys = false, bhCost = 0.2, tCost = 0.18, deepMax = 17, yIdeal = 0.95, yCost = 1.1, backCost = 0, home = 99;
+    if (cpu) {
+      const S = this.cpuStyle(pl), ai = this.cpuMind(pl), b1 = path.bounce1;
+      ai.leave = false;
+      if (b1 && !b.serve && (b1.z > 0 ? 1 : -1) === pl.side) {
+        const out = Math.max(Math.abs(b1.x) - 4.115, Math.abs(b1.z) - 11.885);
+        if (out > pl.level.judge * rand(0.6, 1.4) + 0.05) { ai.leave = true; pl.plan = null; return; }
+      }
+      volleys = !b.serve && Math.abs(pl.z) < 8.5;
+      bhCost = 0.2 + 0.3 * Math.max(0, S.aggression - 0.5) + 0.3 * Math.max(0, S.topspin - 0.5) - 0.2 * Math.max(0, S.consistency - 0.7);
+      tCost = Math.max(0.03, 0.18 + 0.3 * (S.aggression - 0.5) - 0.3 * (S.defense - 0.5));
+      deepMax = 15.5; yIdeal = 1.05; yCost = 0.9;
+      // Backing up behind the baseline gives the court away: attackers take the ball early, defenders give ground.
+      home = 12.3 + 1.2 * (S.defense - 0.5); backCost = 0.3 * lerp(0.6, 1.4, S.aggression);
+    }
     for (const s of path) {
       const tAvail = s.t - now;
-      if (tAvail < 0.05 || s.b < 1) continue;
+      if (tAvail < 0.05) continue;
       if (s.b >= 2) break;
+      const pre = s.b < 1;
+      if (pre && !volleys) continue;
       if ((s.z > 0 ? 1 : -1) !== pl.side) continue;
-      if (s.y < 0.3 || s.y > 1.8 || Math.abs(s.z) < 1.2 || Math.abs(s.z) > 17) continue;
+      if (pre ? s.y < 0.35 || s.y > 2.3 : s.y < 0.3 || s.y > 1.8) continue;
+      if (Math.abs(s.z) < 1.2 || Math.abs(s.z) > deepMax) continue;
       for (const stroke of ['fh', 'bh']) {
         const lat = (stroke === 'fh' ? 1 : -1) * hs * 0.8;
         const bx = s.x - pl.side * lat, bz = s.z + pl.side * 0.3;
         const need = travelTime(Math.max(0, Math.hypot(bx - pl.x, bz - pl.z) - 0.55), pl.maxSpeed, pl.acc) + pl.react;
-        let cost = Math.abs(s.y - 0.95) * 1.1 + (stroke === 'bh' ? 0.2 : 0) + tAvail * 0.18;
+        let cost = Math.abs(s.y - yIdeal) * yCost + (stroke === 'bh' ? bhCost : 0) + tAvail * tCost + backCost * Math.max(0, Math.abs(bz) - home);
+        // At the net: volley it rather than back off and let it bounce.
+        if (volleys) cost += pre ? -0.8 - Math.abs(s.y - 0.95) * 0.7 : 0.35 * Math.max(0, Math.abs(s.z) - Math.abs(pl.z));
         const late = need - tAvail;
         if (late > 0) cost += 8 + late * 6;
-        if (!best || cost < best.cost) best = { cost, t: s.t, x: s.x, y: s.y, z: s.z, bx, bz, stroke, ok: late <= 0 };
+        if (!best || cost < best.cost) best = { cost, t: s.t, x: s.x, y: s.y, z: s.z, bx, bz, stroke, ok: late <= 0, volley: pre };
       }
     }
     pl.plan = best;
     if (best) { pl.tx = best.bx; pl.tz = best.bz; }
+    // Footwork isn't perfect: the CPU arrives a little off the ideal spot (jammed or reaching).
+    if (best && cpu && pl.footFor !== b.hitT) {
+      const e = pl.level.pos * lerp(1.2, 0.8, this.cpuStyle(pl).speed);
+      pl.footFor = b.hitT;
+      pl.footErr = { x: clamp(gauss() * e, -0.45, 0.45), z: clamp(gauss() * e * 0.7, -0.35, 0.35) };
+    }
+    if (best && cpu && pl.footErr) { pl.tx += pl.footErr.x; pl.tz += pl.footErr.z; }
   },
 
   // ---- rulings (made by whichever machine the ball is travelling towards) ----

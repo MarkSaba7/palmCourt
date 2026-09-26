@@ -203,7 +203,7 @@ const UI = {
     if (o === 'custom') return 'custom';
     return proById(o) && o !== me ? o : randomPro([me]).id;
   },
-  // Online names: a pro's name, or your own when you both picked the same pro (two "Nadal"s on the board help nobody).
+  // Online names: a pro's name, or your own when you both picked the same pro (two "Rivas"es on the board help nobody).
   onlineNames(pros, own) {
     const same = !!proById(pros[0]) && pros[0] === pros[1];
     return own.map((n, i) => (same ? n : proName(pros[i], n)));
@@ -734,7 +734,7 @@ const UI = {
     }
     if (c) { c.count = null; $('camCount').hidden = true; }
     const prev = Tracker.lockPrev, r = Tracker.lockColor();
-    const ok = r === true || (!!r && typeof r === 'object' && r.ok !== false), why = r && typeof r === 'object' ? r.message || r.reason : '';
+    const ok = r === true || (!!r && typeof r === 'object' && r.ok !== false), why = r && typeof r === 'object' ? r.message || r.reason : Tracker.lockInfo && !Tracker.lockInfo.ok ? Tracker.lockInfo.msg : '';
     let msg;
     if (!ok) msg = [typeof why === 'string' && why ? why : prev && prev.col ? 'That color won’t track well. Use the red side of the paddle, turn it to the light, and lock again.' : 'That color is too dull or dark to track. Use the red side of the paddle, turn it to the light, and lock again.', 'bad'];
     else {
