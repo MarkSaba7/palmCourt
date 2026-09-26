@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Palm Court credits</title>
+<meta name="description" content="Open-source libraries and fonts used by Palm Court, with their licences.">
+<style>
+:root { --ink: #09131d; --panel: #0f1f30; --edge: rgba(242,245,238,.13); --chalk: #f2f5ee; --mist: #93a7bb; --optic: #d6f04a;
+  --display: "Arial Narrow", "Roboto Condensed", Impact, sans-serif; --body: "Segoe UI", system-ui, -apple-system, sans-serif; --mono: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; }
+@media (prefers-color-scheme: light) { :root { --ink: #f4f6f0; --panel: #ffffff; --edge: rgba(9,19,29,.14); --chalk: #0b1622; --mist: #4a5b6c; --optic: #4f6b00; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ink); color: var(--chalk); font: 16px/1.6 var(--body); -webkit-font-smoothing: antialiased; }
+main { width: min(720px, 100%); margin: 0 auto; padding: 40px 16px 64px; }
+h1 { font: 900 clamp(34px, 7vw, 52px)/1 var(--display); text-transform: uppercase; letter-spacing: .01em; margin: 0 0 8px; }
+h2 { font: 800 20px/1.25 var(--body); margin: 32px 0 8px; }
+.lede, .meta, .lic { color: var(--mist); }
+a { color: var(--optic); }
+a:focus-visible { outline: 2px solid var(--optic); outline-offset: 2px; }
+.back { display: inline-block; margin-bottom: 24px; font-size: 14px; }
+.list { display: grid; gap: 10px; margin: 16px 0; padding: 0; list-style: none; }
+.list li { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 14px 16px; }
+.list b { font-size: 17px; }
+.lic { display: block; font-size: 14px; }
+pre { white-space: pre-wrap; background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 14px 16px; font: 12.5px/1.5 var(--mono); color: var(--mist); overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="index.html">← Back to the game</a>
+  <h1>Credits</h1>
+  <p class="lede">Palm Court: game design, code, procedural art and sound by the Palm Court team. Every model, texture and sound is generated in code; the game stands on these open-source projects.</p>
+
+  <h2>Libraries</h2>
+  <ul class="list">
+    <li><b><a href="https://threejs.org" rel="noopener">three.js</a></b> 0.186, 3D rendering (including its example add-ons)
+      <span class="lic">MIT License · Copyright © 2010–2025 three.js authors</span></li>
+    <li><b><a href="https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker" rel="noopener">MediaPipe Tasks Vision</a></b> 1.0.1 and the Hand Landmarker model, webcam hand tracking
+      <span class="lic">Apache License 2.0 · Copyright © Google LLC · <a href="https://www.apache.org/licenses/LICENSE-2.0" rel="noopener">licence text</a></span></li>
+    <li><b><a href="https://peerjs.com" rel="noopener">PeerJS</a></b> 1.5.5, online play and the phone racket
+      <span class="lic">MIT License · Copyright © 2015 Michelle Bu and Eric Zhang</span></li>
+  </ul>
+
+  <h2>Fonts</h2>
+  <ul class="list">
+    <li><b><a href="https://fonts.google.com/specimen/Big+Shoulders+Display" rel="noopener">Big Shoulders Display</a></b>, via Google Fonts
+      <span class="lic">SIL Open Font License 1.1 · Copyright © The Big Shoulders Project Authors · <a href="https://openfontlicense.org" rel="noopener">licence text</a></span></li>
+    <li><b><a href="https://fonts.google.com/specimen/Barlow" rel="noopener">Barlow</a></b>, via Google Fonts
+      <span class="lic">SIL Open Font License 1.1 · Copyright © The Barlow Project Authors · <a href="https://openfontlicense.org" rel="noopener">licence text</a></span></li>
+  </ul>
+
+  <h2>MIT License</h2>
+  <p class="meta">Applies to three.js and PeerJS, with the copyright lines above.</p>
+<pre>Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</pre>
+
+  <h2>Apache License 2.0 notice</h2>
+<pre>Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.</pre>
+
+  <p class="meta">All players, tournaments and teams in Palm Court are fictional. Any resemblance to real people is coincidental.</p>
+</main>
+</body>
+</html>
