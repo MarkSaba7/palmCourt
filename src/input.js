@@ -4,7 +4,6 @@ import { PaddleTrack, clampLock, lockPatch, frameValue, LOCK_MSG } from './camsw
 import { canvas } from './render/world.js';
 import { Perf } from './render/renderer.js';
 import { Game } from './game.js';
-import { UI } from './ui.js';
 import { SwingDetector, pickHand, palmSize, PALM_REF, segmentColor, lockColorFromPatch, adaptColor } from './camswing.js';
 import { racketLabel, palmCentre, handBox, PalmScale, HandPicker } from './camswing.js';
 
@@ -818,7 +817,6 @@ canvas.addEventListener('pointerdown', (e) => {
 });
 addEventListener('keydown', (e) => {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
-  if (e.code === 'Escape') { UI.togglePause(); return; }
   if (e.code === 'KeyC' && !e.repeat) { Settings.cam = Settings.cam === 'tv' ? 'player' : 'tv'; Settings.save(); return; }
   if (e.code === 'KeyF' && !e.repeat) { Settings.showFps = !Settings.showFps; Settings.save(); return; }
   if (!Game.inPlay() || e.repeat) return;

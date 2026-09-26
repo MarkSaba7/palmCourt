@@ -82,7 +82,7 @@ const VOWELS = { a: [730, 1090, 2440], e: [530, 1840, 2480], i: [300, 2200, 2900
 const VLIST = Object.values(VOWELS);
 
 const Sound = {
-  ctx: null, dead: false, master: null, out: null, crowd: null, verb: null, bedG: null, roomG: null, bedSrc: null,
+  ctx: null, dead: false, master: null, out: null, crowd: null, fx: null, fxVerb: null, crowdVol: null, verb: null, bedG: null, roomG: null, bedSrc: null,
   noise: null, grit: null, buf: {}, slots: new Float64Array(40), game: null,
   cam: { x: 0, y: 4, z: 22, rx: 1, ry: 0, rz: 0 }, P: { x: 0, y: 0, z: 0 },
   mood: -1, lastNow: 0, clapUntil: 0, clapSize: 0, oohUntil: 0, feet: [],
@@ -104,7 +104,15 @@ const Sound = {
   ok() { return !!this.ctx && this.ctx.state === 'running' && !!this.master; },
   t0() { return this.ctx.currentTime + 0.004; },
   volGain() { const v = clamp(fin(Settings.volume, 0.8), 0, 1); return 1.2 * v * v; },
-  setVolume() { if (this.master) this.master.gain.setTargetAtTime(this.volGain(), this.ctx.currentTime, 0.03); },
+  setVolume() { this.setMix(); },
+  // Settings → Audio faders under the master: effects (dry and their reverb send) and the crowd. Squared, like the
+  // master, so equal slider steps sound even.
+  fader(k) { const v = clamp(fin(Settings[k], 1), 0, 1); return v * v; },
+  setMix() {
+    if (!this.master) return;
+    const t = this.ctx.currentTime, set = (n, v) => n.gain.setTargetAtTime(v, t, 0.03);
+    set(this.master, this.volGain()); set(this.fx, this.fader('sfxVol')); set(this.fxVerb, this.fader('sfxVol')); set(this.crowdVol, this.fader('crowdVol'));
+  },
   duck(k) { if (this.crowd) this.crowd.gain.setTargetAtTime(k, this.ctx.currentTime, 0.12); },
 
   // The mix: sfx and crowd buses, a shared stadium reverb, then the master chain.
@@ -118,11 +126,13 @@ const Sound = {
     this.master.connect(glue); glue.connect(lim); lim.connect(clip); clip.connect(c.destination);
     this.verb = c.createConvolver(); this.verb.buffer = this.makeIR(1.5);
     const wet = c.createGain(); wet.gain.value = 0.5; this.verb.connect(wet); wet.connect(this.master);
-    this.out = c.createGain(); this.out.connect(this.master);
+    this.fx = c.createGain(); this.fx.gain.value = this.fader('sfxVol'); this.fx.connect(this.master);
+    this.fxVerb = c.createGain(); this.fxVerb.gain.value = this.fader('sfxVol'); this.fxVerb.connect(this.verb);
+    this.out = c.createGain(); this.out.connect(this.fx);
     // The crowd bus: audience microphones are a little dull up top.
     const shelf = c.createBiquadFilter(); shelf.type = 'highshelf'; shelf.frequency.value = 5000; shelf.gain.value = -5; shelf.connect(this.master);
-    this.crowd = c.createGain(); this.crowd.connect(shelf);
-    const cs = c.createGain(); cs.gain.value = 0.22; this.crowd.connect(cs); cs.connect(this.verb);
+    this.crowd = c.createGain(); this.crowdVol = c.createGain(); this.crowdVol.gain.value = this.fader('crowdVol'); this.crowd.connect(this.crowdVol); this.crowdVol.connect(shelf);
+    const cs = c.createGain(); cs.gain.value = 0.22; this.crowdVol.connect(cs); cs.connect(this.verb);
     // Stadium air: a low rumble that never quite goes away while a match is on.
     this.roomG = c.createGain(); this.roomG.gain.value = 0; this.roomG.connect(this.crowd);
     const room = c.createBufferSource(), lp = c.createBiquadFilter();
@@ -373,7 +383,7 @@ const Sound = {
     dry.gain.value = n; w.gain.value = wet * Math.sqrt(n);
     let tail = g;
     if (c.createStereoPanner) { tail = c.createStereoPanner(); tail.pan.value = this.panOf(pos); g.connect(tail); }
-    tail.connect(dry); dry.connect(this.out); tail.connect(w); w.connect(this.verb);
+    tail.connect(dry); dry.connect(this.out); tail.connect(w); w.connect(this.fxVerb);
     g.chain = [g, tail, dry, w];
     return g;
   },
@@ -674,7 +684,7 @@ const Sound = {
       if (cancel) speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text), v = this.voice();
       if (v) { u.voice = v; u.lang = v.lang; }
-      u.rate = rate; u.pitch = pitch; u.volume = clamp(fin(Settings.volume, 0.8) * 1.2, 0, 1);
+      u.rate = rate; u.pitch = pitch; u.volume = clamp(fin(Settings.volume, 0.8) * 1.2 * fin(Settings.voiceVol, 1), 0, 1);
       u.onstart = () => this.duck(0.7);   // the crowd dips under the umpire's microphone
       u.onend = u.onerror = () => this.duck(1);
       speechSynthesis.speak(u);
