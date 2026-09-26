@@ -206,7 +206,7 @@ const UI = {
       return { name: pro.short, full: pro.name, meta: `${pro.country} · ${hand(h)}`, blurb: pro.blurb, look: { ...pro.kit, ...pro.look }, note: side === 'you' && h !== pro.handed ? `Plays ${h === 'L' ? 'left' : 'right'}-handed: your Plays setting decides the swinging hand` : '' };
     }
     if (id === 'random') return { name: 'Random', full: 'Random pro', meta: 'Any pro', blurb: 'A different pro every match', look: null };
-    if (side === 'you') return { name: Settings.name, full: 'Your player', meta: `You · ${hand(Settings.handed)}`, blurb: 'Your own player, under your name', look: KITS[0] };
+    if (side === 'you') return { name: Settings.name, full: 'Your player', meta: `You · ${hand(Settings.handed)}`, blurb: 'Your own player, under your name', look: this.customLook ? this.customLook() : KITS[0] };   // customLook: your equipped kit (progress-ui.js)
     return { name: 'Club', full: 'Club player', meta: 'House CPU', blurb: 'The club regular, in a new kit each match', look: KITS[1] };
   },
   initPros() {
