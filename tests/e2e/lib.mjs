@@ -247,6 +247,6 @@ export function practiceReport(r, title) {
   const dts = r.coach.plans.map((p) => { const s = r.swings.filter((w) => w.tEff != null).sort((a, b) => Math.abs(a.tEff - p.planT) - Math.abs(b.tEff - p.planT))[0]; return s ? s.tEff - p.planT : NaN; }).filter(Number.isFinite);
   const lat = r.coach.plans.map((p) => { const s = r.swings.filter((w) => w.dir === p.stroke).sort((a, b) => Math.abs(a.t0 - p.aimT) - Math.abs(b.t0 - p.aimT))[0]; return s ? s.t0 - p.aimT : NaN; }).filter(Number.isFinite);
   L.push(`swings reported ${r.swings.length} (${JSON.stringify(count(r.swings.map((s) => s.dir || 'up/down')))}); tEff − planned contact ${msr(mean(dts))} ± ${msr(sd(dts))} ms (n ${dts.length}); t0 − true peak ${msr(mean(lat))} ± ${msr(sd(lat))} ms`);
-  if (r.errs) L.push(`live camera: ${r.camFrames} frames in ${f1(r.camSecs)} s (${f1(r.camFrames / r.camSecs)} fps, draw ${f1(q(r.drawMs, 0.5))} ms), tracker saw ${r.seen}, found the paddle in ${pct(r.found, r.seen)}, error median ${f1(q(r.errs, 0.5), 3)} p90 ${f1(q(r.errs, 0.9), 3)} frame widths`);
+  if (r.errs && r.drawMs) L.push(`live camera: ${r.camFrames} frames in ${f1(r.camSecs)} s (${f1(r.camFrames / r.camSecs)} fps, draw ${f1(q(r.drawMs, 0.5))} ms), tracker saw ${r.seen}, found the paddle in ${pct(r.found, r.seen)}, error median ${f1(q(r.errs, 0.5), 3)} p90 ${f1(q(r.errs, 0.9), 3)} frame widths`);
   return L.join('\n');
 }
