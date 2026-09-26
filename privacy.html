@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Palm Court privacy</title>
+<meta name="description" content="What Palm Court stores, what never leaves your device, and what ad partners may collect.">
+<style>
+:root { --ink: #09131d; --panel: #0f1f30; --edge: rgba(242,245,238,.13); --chalk: #f2f5ee; --mist: #93a7bb; --optic: #d6f04a; --optic-ink: #1b2300;
+  --display: "Arial Narrow", "Roboto Condensed", Impact, sans-serif; --body: "Segoe UI", system-ui, -apple-system, sans-serif; }
+@media (prefers-color-scheme: light) { :root { --ink: #f4f6f0; --panel: #ffffff; --edge: rgba(9,19,29,.14); --chalk: #0b1622; --mist: #4a5b6c; --optic: #4f6b00; --optic-ink: #ffffff; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ink); color: var(--chalk); font: 16px/1.6 var(--body); -webkit-font-smoothing: antialiased; }
+main { width: min(720px, 100%); margin: 0 auto; padding: 40px 16px 64px; }
+h1 { font: 900 clamp(34px, 7vw, 52px)/1 var(--display); text-transform: uppercase; letter-spacing: .01em; margin: 0 0 8px; }
+h2 { font: 800 20px/1.25 var(--body); margin: 32px 0 8px; }
+p, li { color: var(--chalk); } .lede, .meta { color: var(--mist); }
+.meta { font-size: 14px; margin: 0 0 24px; }
+ul { padding-left: 20px; } li + li { margin-top: 6px; }
+a { color: var(--optic); }
+.box { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 16px 18px; margin: 16px 0; }
+.todo { background: rgba(214,240,74,.18); border-radius: 4px; padding: 0 4px; }
+button { font: 700 14px var(--body); background: var(--optic); color: var(--optic-ink); border: 0; border-radius: 8px; padding: 10px 14px; cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--optic); outline-offset: 2px; }
+.back { display: inline-block; margin-bottom: 24px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="index.html">← Back to the game</a>
+  <h1>Privacy</h1>
+  <p class="meta">Palm Court · last updated 26 September 2026</p>
+  <p class="lede">Palm Court is a browser game. It has no accounts and no analytics, and the camera picture never leaves your device. The free web version shows ads, and the companies that serve them may collect data as described below.</p>
+
+  <div class="box">
+    <b>In short</b>
+    <ul>
+      <li>Camera frames are processed on your device and are never uploaded, recorded or stored.</li>
+      <li>Your settings and progress are saved in your own browser, not on our servers.</li>
+      <li>Ad partners may use cookies or device identifiers to show and measure ads. In the EU and UK they ask for your consent first.</li>
+    </ul>
+  </div>
+
+  <h2>Camera</h2>
+  <p>If you choose Hand or Paddle controls, the game asks your browser for the camera. Each frame is analysed in the page, on your device (hand tracking uses Google's MediaPipe library running locally; paddle tracking is plain colour matching), and then thrown away. Frames are never sent over the network, recorded or saved. The only thing kept is the paddle colour you lock, as a colour value in your settings. You can revoke camera access at any time in your browser's site settings.</p>
+
+  <h2>Data saved on your device</h2>
+  <p>Palm Court saves your settings (name, controls, graphics, sensitivity) and your progress (level, XP, Fuzz, unlocks, match history and stats) in your browser's local storage and IndexedDB. It stays on this device and browser. Clearing the site's data in your browser deletes it; the game's export option lets you keep a copy. Cloud saves are off; if a later version offers them, they will be optional and described here first.</p>
+
+  <h2>Online play and the phone racket</h2>
+  <p>To connect two browsers (a friend's game, or your phone as a racket), the game uses the PeerJS public broker, which briefly sees both devices' IP addresses to introduce them. After that, the devices talk directly (WebRTC). Only game data is sent: swings, ball positions, scores and your display name. As with any direct connection, the other device can see your IP address.</p>
+
+  <h2>Ads</h2>
+  <p>The free web version shows ads between matches, and optional rewarded ads you choose to watch. Depending on where you play, ads come from the site you play on or its ad partners: <a href="https://www.crazygames.com" rel="noopener">CrazyGames</a>, <a href="https://poki.com" rel="noopener">Poki</a>, <a href="https://gamedistribution.com" rel="noopener">GameDistribution</a>, or Google (<a href="https://policies.google.com/technologies/partner-sites" rel="noopener">how Google uses information from sites that use its services</a>). These companies act under their own privacy policies. They may collect your IP address, browser and device information, cookies or similar identifiers, and how you interact with ads, to serve, cap, measure and (with your consent where the law requires it) personalise ads, and to prevent fraud. Palm Court itself receives no personal data from them.</p>
+  <p>On a game portal, the portal asks for consent itself. Where Palm Court serves Google ads directly to players in the EU or UK, the game asks you once whether ads may be personalised; if you decline, only non-personalised ads are shown. You can change your answer under <b>Ad choices</b> in the main menu, or here:</p>
+  <p><button type="button" id="resetConsent">Reset my ad choice</button> <span id="resetMsg" class="meta" role="status"></span></p>
+  <p>The Steam version has no ads.</p>
+
+  <h2>Other requests your browser makes</h2>
+  <p>Like any web page, the game downloads its libraries and fonts from content networks (jsDelivr, Google Fonts, Google's storage for the hand-tracking model). Those services see your IP address and browser details when they deliver the files.</p>
+
+  <h2>Children</h2>
+  <p>Palm Court doesn't ask for or knowingly collect personal information from anyone, children included. Ad partners on children's portals follow their own rules for younger players.</p>
+
+  <h2>Your choices and rights</h2>
+  <p>Everything Palm Court stores is on your device, so you control it: clear the site's data to delete it. For data held by an ad partner, use their privacy tools or contact them. For questions about this policy, contact <span class="todo">[contact email]</span>.</p>
+</main>
+<script>
+document.getElementById('resetConsent').onclick = () => {
+  let msg = 'Done. The game will ask again next time.';
+  try { localStorage.removeItem('palmcourt.consent'); } catch (e) { msg = 'Your browser blocked site storage, so there is nothing saved to reset.'; }
+  document.getElementById('resetMsg').textContent = msg;
+};
+</script>
+</body>
+</html>

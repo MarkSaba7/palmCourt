@@ -33,11 +33,12 @@ jobs:
           for f in $(find src -name '*.js'); do
             node --input-type=module --check < "$f" || { echo "::error file=$f::syntax error"; exit 1; }
           done
-      # Only what the browser needs: the game, the phone racket page and the modules (no serve.py, tests or notes).
+      # Only what the browser needs: the game, the phone racket page, the privacy and credits pages and the modules
+      # (no serve.py, tests or notes).
       - name: Collect the site
         run: |
           mkdir _site
-          cp index.html controller.html _site/
+          cp index.html controller.html privacy.html credits.html _site/
           cp -r src _site/
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
