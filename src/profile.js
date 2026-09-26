@@ -189,7 +189,7 @@ export const Profile = {
     const fresh = !best;
     this.data = best || freshData();
     this.loaded = true;
-    if (fresh || bad || fromBak) this.save(true); else this.lastGood = JSON.stringify(this.data);
+    if (fresh || bad || fromBak) await this.save(true); else this.lastGood = JSON.stringify(this.data);
     emit('change', this);
     return this;
   },
