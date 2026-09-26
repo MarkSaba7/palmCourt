@@ -12,6 +12,7 @@ import { BallKids } from './render/ballkids.js';
 import { Profile } from './profile.js';
 import { Progress } from './progress.js';
 import * as Economy from './economy.js';
+import { ProgressUI } from './progress-ui.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t, p) => { const el = $('loadingMsg'); if (el) el.textContent = t; if (p != null && $('loadBar')) $('loadBar').style.setProperty('--p', p + '%'); };
@@ -73,6 +74,7 @@ async function boot() {
   Env.setTimeOfDay(Settings.tod || 'day');
   status('Warming up…', 92); await yieldFrame();
   UI.init();
+  ProgressUI.init();
   Game.init();
   if (software) UI.gpuWarning();
   Game.startAttract();
@@ -82,7 +84,7 @@ async function boot() {
   UI.go('menu');
   const q = new URLSearchParams(location.search).get('join');
   if (q && /^[A-Za-z0-9]{5}$/.test(q)) UI.openLobby(q.toUpperCase());
-  window.PalmCourt = { Game, Net, Input, Settings, Clock, Perf, Tracker, Phone, Env, Stadium, World, Cam, Crowd, Replay, Effects, renderer, scene, camera, Profile, Progress, Economy };
+  window.PalmCourt = { Game, Net, Input, Settings, Clock, Perf, Tracker, Phone, Env, Stadium, World, Cam, Crowd, Replay, Effects, renderer, scene, camera, Profile, Progress, Economy, ProgressUI };
 }
 boot().catch((e) => {
   console.error(e);
