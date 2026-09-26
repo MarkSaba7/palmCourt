@@ -7,9 +7,12 @@ import { Game } from './game.js';
 import { Net } from './net.js';
 import { Phone, drawQR } from './phone.js';
 import { Bus } from './events.js';
+import { Platform } from './platform.js';
 import { PROS, REAL_PROS, proById, proName, randomPro, proPortrait, randomPortrait } from './pros.js';
 import { Profile } from './profile.js';
 import { isUnlocked, unlockHint } from './economy.js';
+import { Options } from './options.js';
+import { Pad } from './pad.js';
 
 // =====================================================================
 // UI: menus, lobby, camera check, HUD, main loop
@@ -33,7 +36,7 @@ const STEPS = {
 const CUE = { flight: 1.05, bt: 0.4 };
 
 const UI = {
-  screen: 'menu', calloutTimer: 0, shotTimer: 0, ambLevel: -1, setupReturn: 'menu', hostPrepped: false,
+  screen: 'loading', calloutTimer: 0, shotTimer: 0, ambLevel: -1, setupReturn: 'menu', hostPrepped: false,
   init() {
     this.buildSettings();
     this.initPros();
@@ -71,6 +74,7 @@ const UI = {
     Input.on((ev) => this.onInputEvent(ev));
     document.addEventListener('visibilitychange', () => { if (document.hidden && Game.mode === 'cpu' && this.screen === null) this.pause(); });
     if (Settings.control === 'phone') Phone.ensure();   // so a phone paired before a reload finds the game again by itself
+    Options.init();   // Settings screen, Esc / controller back, gamepads, focus-loss pause
   },
   buildSettings() {
     const host = $('settings');
@@ -171,6 +175,7 @@ const UI = {
     Sound.init();
     $('btnPractice').disabled = true;
     const ok = await this.ensureControls(() => this.startCpu(opts));
+    if (ok) await Platform.ads.interstitial('next-match');   // between matches only, paced in platform.js; never hangs
     $('btnPractice').disabled = false;
     if (!ok) return;
     const { opponent, oppHanded, tod, ...rest } = opts;
@@ -204,7 +209,7 @@ const UI = {
       return { name: pro.short, full: pro.name, meta: `${pro.country} · ${hand(h)}`, blurb: pro.blurb, look: { ...pro.kit, ...pro.look }, note: side === 'you' && h !== pro.handed ? `Plays ${h === 'L' ? 'left' : 'right'}-handed: your Plays setting decides the swinging hand` : '' };
     }
     if (id === 'random') return { name: 'Random', full: 'Random pro', meta: 'Any pro', blurb: 'A different pro every match', look: null };
-    if (side === 'you') return { name: Settings.name, full: 'Your player', meta: `You · ${hand(Settings.handed)}`, blurb: 'Your own player, under your name', look: KITS[0] };
+    if (side === 'you') return { name: Settings.name, full: 'Your player', meta: `You · ${hand(Settings.handed)}`, blurb: 'Your own player, under your name', look: this.customLook ? this.customLook() : KITS[0] };   // customLook: your equipped kit (progress-ui.js)
     return { name: 'Club', full: 'Club player', meta: 'House CPU', blurb: 'The club regular, in a new kit each match', look: KITS[1] };
   },
   initPros() {
@@ -355,9 +360,9 @@ const UI = {
     this.go(null);
   },
   rematchFromRemote() { if (Net.role === 'host' && Game.mode === 'online' && Game.state === 'over') this.startOnlineAsHost(); },
-  connectionLost(wasPlaying) {
-    if (this.screen === 'lobby') { this.lobbyStatus('Your friend disconnected.', 'err'); $('btnStartOnline').hidden = true; $('lobbyStart').hidden = false; $('lobbyHost').hidden = true; return; }
-    if (wasPlaying) { Game.startAttract(); this.go('menu'); this.menuNote('The connection to your friend was lost.', 'err'); }
+  connectionLost(wasPlaying, left) {
+    if (this.screen === 'lobby') { this.lobbyStatus(left ? 'Your friend left.' : 'Your friend disconnected.', 'err'); $('btnStartOnline').hidden = true; $('lobbyStart').hidden = false; $('lobbyHost').hidden = true; return; }
+    if (wasPlaying) { Game.startAttract(); this.go('menu'); this.menuNote(left ? 'Your friend left the match.' : 'The connection to your friend was lost.', 'err'); }
   },
   netInfo() {
     const el = $('netInfo');
@@ -1261,7 +1266,7 @@ const UI = {
     el.dataset.key = key;
     el.replaceChildren(...sets.map((s) => { const c = document.createElement('i'); c.textContent = s[i]; if (s[i] > s[1 - i]) c.className = 'won'; return c; }));
   },
-  calm() { return matchMedia('(prefers-reduced-motion: reduce)').matches; },
+  calm() { return !!Settings.reduceMotion || matchMedia('(prefers-reduced-motion: reduce)').matches; },
   // Broadcast names: a pro's short name, else the surname of a long full name; a country code if the player has one.
   shortName(i) {
     const pl = Game.players[i], full = String(Game.names[i] || '').trim(), parts = full.split(/\s+/);
@@ -1326,7 +1331,7 @@ const UI = {
     let t = '';
     if (me && m && (Game.mode === 'cpu' || Game.mode === 'online') && this.screen === null) {
       const serving = m.currentServer === me.idx;
-      if (Game.state === 'serve' && serving) t = Settings.control === 'mouse' ? (matchMedia('(pointer: coarse)').matches ? 'Tap to toss' : 'Click (or press Space) to toss') : Settings.control === 'phone' ? 'Tap or lift your phone to toss' : 'Raise your hand above the toss line to toss';
+      if (Game.state === 'serve' && serving) t = Pad.active ? `Press ${Pad.glyph('a')} to toss` : Settings.control === 'mouse' ? (matchMedia('(pointer: coarse)').matches ? 'Tap to toss' : 'Click (or press Space) to toss') : Settings.control === 'phone' ? 'Tap or lift your phone to toss' : 'Raise your hand above the toss line to toss';
       else if (Game.state === 'toss' && serving) t = 'Swing!';
       else if (Game.state === 'serve' && Game.mode === 'online') t = `${Game.names[m.currentServer]} to serve`;
     }

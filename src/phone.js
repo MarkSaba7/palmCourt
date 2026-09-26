@@ -15,7 +15,7 @@ const Phone = {
   prefix: 'palmcourt-rk-',
   peer: null, peerError: false, peerTimer: 0, idRetries: 0,
   ws: null, wsRetries: 0, relayOff: false, relayConn: null,
-  conn: null, code: null, device: '', via: '', armed: false, calibrated: false, rtt: 0, lastSwing: null, lastStateKey: '',
+  conn: null, watchdog: 0, code: null, device: '', via: '', armed: false, calibrated: false, rtt: 0, lastSwing: null, lastStateKey: '',
   info: undefined, urls: [], pick: 0, url: undefined,
   connected() { return !!(this.conn && this.conn.open); },
   relayUp() { return !!(this.ws && this.ws.readyState === 1); },
@@ -105,7 +105,7 @@ const Phone = {
   // ---- a phone link (relay or PeerJS) ----
   bind(c, via) {
     c.via = via;
-    c.on('data', (m) => { try { this.onData(m, c); } catch (e) { console.warn(e); } });
+    c.on('data', (m) => { c.lastRecv = performance.now(); try { this.onData(m, c); } catch (e) { console.warn(e); } });
     c.on('close', () => { if (this.conn === c) { this.conn = null; UI.renderPhone(); UI.phoneChip(); } });
     c.on('error', (e) => console.warn('phone connection', e));
   },
@@ -120,6 +120,18 @@ const Phone = {
     }
     c.sid = m.sid;
     this.via = c.via; this.lastStateKey = '';
+    // A phone that locks its screen or leaves the Wi-Fi often never closes its PeerJS link: it pings every 1.5 s
+    // while linked, so a phone that has gone quiet for several seconds counts as gone (and can link up again).
+    clearInterval(this.watchdog);
+    let tick = performance.now();
+    this.watchdog = setInterval(() => {
+      const cur = this.conn, now = performance.now(), late = now - tick > 2500;
+      tick = now;
+      if (!cur) { clearInterval(this.watchdog); return; }
+      if (late || now - (cur.lastRecv || 0) < 6000) return;   // late: this page was busy, its messages may still be queued
+      try { cur.close(); } catch (e) { /* closed */ }
+      if (this.conn === cur) { this.conn = null; UI.renderPhone(); UI.phoneChip(); }
+    }, 1000);
     this.send({ type: 'welcome', handed: Settings.handed, name: Settings.name });
     this.pushState();
   },
