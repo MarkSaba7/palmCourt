@@ -123,10 +123,12 @@ const Phone = {
     // A phone that locks its screen or leaves the Wi-Fi often never closes its PeerJS link: it pings every 1.5 s
     // while linked, so a phone that has gone quiet for several seconds counts as gone (and can link up again).
     clearInterval(this.watchdog);
+    let tick = performance.now();
     this.watchdog = setInterval(() => {
-      const cur = this.conn;
+      const cur = this.conn, now = performance.now(), late = now - tick > 2500;
+      tick = now;
       if (!cur) { clearInterval(this.watchdog); return; }
-      if (performance.now() - (cur.lastRecv || 0) < 6000) return;
+      if (late || now - (cur.lastRecv || 0) < 6000) return;   // late: this page was busy, its messages may still be queued
       try { cur.close(); } catch (e) { /* closed */ }
       if (this.conn === cur) { this.conn = null; UI.renderPhone(); UI.phoneChip(); }
     }, 1000);
