@@ -34,7 +34,7 @@ const STEPS = {
 const CUE = { flight: 1.05, bt: 0.4 };
 
 const UI = {
-  screen: 'menu', calloutTimer: 0, shotTimer: 0, ambLevel: -1, setupReturn: 'menu', hostPrepped: false,
+  screen: 'loading', calloutTimer: 0, shotTimer: 0, ambLevel: -1, setupReturn: 'menu', hostPrepped: false,
   init() {
     this.buildSettings();
     this.initPros();
