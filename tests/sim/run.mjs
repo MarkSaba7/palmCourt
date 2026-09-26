@@ -36,10 +36,10 @@ try {
   if (which === 'matches' || which === 'all') {
     const formats = ['tiebreak', 'short', 'full'], surfaces = ['hard', 'clay', 'grass'], levels = ['rookie', 'club', 'pro'];
     const combos = [];
-    for (const format of formats) for (const surface of surfaces) for (const level of levels) combos.push({ format, surface, level });
+    for (const format of formats) for (const surface of surfaces) for (const level of levels) combos.push({ format, surface, level, replays: combos.length % 3 !== 2 });
     const list = QUICK ? combos.filter((c, i) => i % 4 === 0) : combos;
     for (const [i, c] of list.entries()) {
-      const name = `match ${c.format}/${c.surface}/${c.level}`;
+      const name = `match ${c.format}/${c.surface}/${c.level}${c.replays ? '' : ' (replays off)'}`;
       if (only && !name.includes(only)) continue;
       const dt = i % 3 === 0 ? 1 / 30 : 1 / 60;   // some matches at 30 fps, like a slow machine
       const t0 = Date.now();
@@ -47,6 +47,7 @@ try {
         const S = await import('/tests/sim/sim-page.js'), C = S.getChecker(), G = window.PalmCourt.Game;
         C.reset();
         await S.startPractice({ ...c, first: Math.random() < 0.5 ? 0 : 1 });
+        window.PalmCourt.Settings.replays = c.replays;   // replays on for most matches, off for some
         const done = S.runUntil(() => G.state === 'over', c.format === 'full' ? 9000 : 6000, dt);
         const m = G.match;
         return { ...C.report(), ok: done, why: done ? '' : `not finished: ${G.state} ${JSON.stringify(m.toJSON())}`, score: m.tbOnly ? m.pts.join('-') : m.games.join('-') + (m.tb ? ` (${m.pts.join('-')})` : ''), gameT: S.V.t };

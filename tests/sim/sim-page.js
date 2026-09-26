@@ -252,7 +252,7 @@ class Checker {
       return { exp, e: { x: +e.x.toFixed(4), z: +e.z.toFixed(4) }, serve: !!b.serve, n };
     }, function (ctx) {
       if (!ctx) return;
-      // the bounces the call (crowd reaction, Hawk-Eye) looks at are this shot's, not the last one's
+      // the bounces the call (crowd reaction, line review) looks at are this shot's, not the last one's
       const stale = G.bounceLog.filter((e) => e.t < G.ball.hitT - 1e-6);
       if (stale.length) this.err(`bounce log holds ${stale.length} bounce(s) from before this shot`);
       const got = this.calls.filter((c) => c.kind !== 'fault' || !this.calls.some((d) => d.reason === 'df'));

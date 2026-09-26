@@ -106,8 +106,12 @@ const Game = {
     if (R.ctl === 'cpu') this.cpuReceive(R, S, court);
     for (const p of this.players) {
       p.vx = p.vz = 0; p.tx = p.x; p.tz = p.z; p.plan = null; p.path = null; p.hitFor = -1;
+      // Timers from the last point go too: online, the clock jumps to the host's when a friend connects, and a
+      // leftover "don't move until" from the menu match could freeze a player for minutes.
+      p.moveAfter = 0; p.windAt = -9; p.lastCam = null;
       p.avatar.idle(false); p.avatar.prep = 0;
     }
+    this.stTimer = 0;
     S.avatar.idle(true);
     // The server bounces the ball before serving: the CPU always, a human only if they take their time.
     this.bounceN = this.mode === 'online' ? 0 : S.ctl === 'cpu' ? pick([2, 2, 3]) : 2;

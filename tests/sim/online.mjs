@@ -3,7 +3,14 @@
 // PeerJS's reliable data channel delivers them). A scripted player swings on each side, and each page runs the rule
 // checker from sim-page.js.
 const SIM = '/tests/sim/sim-page.js';
-const load = (page) => page.evaluate(async (SIM) => { const S = await import(SIM); S.install(); S.checker(); S.getChecker().reset(); }, SIM);
+// Each page first shows the menu match for a while on a later clock, as a real page does before its player joins: the
+// guest's clock then jumps back to the host's when they connect (Net sets Clock.offset from the pings).
+const load = (page) => page.evaluate(async (SIM) => {
+  const S = await import(SIM), P = window.PalmCourt;
+  S.install(); S.checker(); S.getChecker().reset();
+  S.V.t = 9000; P.Game.startAttract(); S.run(40);
+  S.getChecker().reset();
+}, SIM);
 
 // Deliver messages sent on one page to the other at send time + latency (+ jitter), never overtaking each other.
 function schedule(queue, out, lat, jit, state) {
@@ -63,6 +70,11 @@ export async function onlineMatch(A, B, o = {}) {
   }
   const rep = async (page) => page.evaluate((SIM) => import(SIM).then((S) => { const r = S.getChecker().report(); const P = window.PalmCourt, ui = document.getElementById('menuNote'); return { ...r, mode: P.Game.mode, st: P.Game.state, note: ui && ui.textContent }; }), SIM);
   const rA = await rep(A), rB = await rep(B);
+  // the same scripted player on both sides: each should get its racket on the ball about as often
+  for (const [who, r] of [['host', rA], ['guest', rB]]) {
+    const sw = r.counts.botSwing || 0, hit = r.counts.groundStroke || 0;
+    if (sw >= 8 && hit < 0.7 * sw) fail(`${who} connected with only ${hit} of ${sw} on-time swings (${r.counts['timing:Missed'] || 0} "Missed")`);
+  }
   if (disconnectAt != null || quitAt != null) {
     for (const [who, r] of [['host', rA], ['guest', rB]]) if (r.mode !== 'attract') fail(`${who} still in mode ${r.mode} after the connection went`);
     if (disconnectAt != null && !/lost/.test(rA.note)) fail('host not told the connection was lost: ' + rA.note);
