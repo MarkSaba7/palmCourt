@@ -1,6 +1,6 @@
 // The ball: felt material with seams, real and contact shadows, a motion streak, and the bounce-spot marker.
 import * as THREE from 'three';
-import { clamp, BALL_R } from '../core.js';
+import { clamp, BALL_R, Settings } from '../core.js';
 import { scene, camera } from './renderer.js';
 import { canvasTex } from './textures.js';
 import { World, addBallMark, clearBallMarks } from './court.js';
@@ -68,6 +68,7 @@ export const BallView = (() => {
       const maxLen = clamp(sp * 0.055, 0.35, 2.4);
       let m = 1, len = 0;
       while (m < n) { len += Math.hypot(hist[m * 3] - hist[m * 3 - 3], hist[m * 3 + 1] - hist[m * 3 - 2], hist[m * 3 + 2] - hist[m * 3 - 1]); if (len > maxLen) break; m++; }
+      const cb = Settings.cbSafe;   // colour-blind-safe: a white streak reads on every court
       for (let i = 0; i < TRAIL; i++) {
         const j = Math.min(Math.round((i * (m - 1)) / (TRAIL - 1)), n - 1), k = Math.min(j + 1, n - 1), jm = Math.max(0, j - 1);
         tmp.set(hist[j * 3], hist[j * 3 + 1], hist[j * 3 + 2]);
@@ -77,13 +78,14 @@ export const BallView = (() => {
         side.crossVectors(tan, view).normalize();
         const f = 1 - i / (TRAIL - 1), w = VISUAL_R * (0.25 + 0.75 * f);
         tPos.set([tmp.x + side.x * w, tmp.y + side.y * w, tmp.z + side.z * w, tmp.x - side.x * w, tmp.y - side.y * w, tmp.z - side.z * w], i * 6);
-        const a = f * f * 0.42 * strength;
-        tCol.set([0.86, 1, 0.45, a, 0.86, 1, 0.45, a], i * 8);
+        const a = f * f * 0.42 * strength * (cb ? 1.5 : 1);
+        tCol.set(cb ? [1, 1, 1, a, 1, 1, 1, a] : [0.86, 1, 0.45, a, 0.86, 1, 0.45, a], i * 8);
       }
       tGeo.attributes.position.needsUpdate = true; tGeo.attributes.color.needsUpdate = true;
     },
     marker(x, z, alpha) {
       marker.position.x = x; marker.position.z = z; marker.material.opacity = alpha;
+      marker.material.color.setHex(Settings.cbSafe ? 0xffffff : 0xd6f04a);
       const sc = 1 + (1 - alpha) * 0.4; marker.scale.set(sc, sc, 1);
     },
     mark(x, z, vx, vz) { addBallMark(x, z, vx, vz, World.surface); },
