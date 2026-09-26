@@ -76,7 +76,7 @@ export function humanBot() {
   else if (Game.state === 'rally' && pl.plan && b.lastHitter === 1 - pl.idx && pl.hitFor !== b.rally && pl.botFor !== b.hitT) {
     // (keyed by the time of the opponent's stroke: rally numbers repeat every point)
     if (pl.botShot !== b.hitT) { pl.botShot = b.hitT; pl.botAt = pl.plan.t + (Math.random() - 0.5) * 2 * Bot.scatter; pl.botMiss = Math.random() < Bot.miss; }
-    if (now >= pl.botAt - 0.02 && !pl.botMiss) { pl.botFor = b.hitT; Input.press(0.35 + 0.5 * Math.random(), Math.random() * 1.4 - 0.4, 'mouse'); }
+    if (now >= pl.botAt - 0.02 && !pl.botMiss) { pl.botFor = b.hitT; if (C) C.count('botSwing'); Input.press(0.35 + 0.5 * Math.random(), Math.random() * 1.4 - 0.4, 'mouse'); }
   }
 }
 export function onlineStep(secs, dt = 1 / 60, bot = true) {
@@ -150,6 +150,10 @@ class Checker {
     };
     w('startMatch', function (cfg) { this.inStart++; this.ref = new RefScore(cfg.format, cfg.first); return cfg; }, function (cfg) {
       this.inStart--; this.state = G.state; this.since = Clock.now(); this.prevBall = null;
+      // replays record every bone of both players into fixed-size frames: the skeletons must still fit them
+      const need = 11 + Replay.bones.reduce((n, b) => n + 4 + b.length * 4, 0);
+      if (need !== Replay.stride) this.err(`replay frame is ${Replay.stride} floats, the players now need ${need}`);
+      if (Replay.bones.some((bs, i) => bs[0] !== Object.values(G.players[i].avatar.B)[0])) this.err('replay records an old skeleton');
       this.matches.push({ cfg: { mode: cfg.mode, format: cfg.format, surface: cfg.surface, level: cfg.level, first: cfg.first }, points: 0, over: false });
     });
     w('startPoint', null, function () {
@@ -248,6 +252,9 @@ class Checker {
       return { exp, e: { x: +e.x.toFixed(4), z: +e.z.toFixed(4) }, serve: !!b.serve, n };
     }, function (ctx) {
       if (!ctx) return;
+      // the bounces the call (crowd reaction, line review) looks at are this shot's, not the last one's
+      const stale = G.bounceLog.filter((e) => e.t < G.ball.hitT - 1e-6);
+      if (stale.length) this.err(`bounce log holds ${stale.length} bounce(s) from before this shot`);
       const got = this.calls.filter((c) => c.kind !== 'fault' || !this.calls.some((d) => d.reason === 'df'));
       const want = ctx.exp ? [ctx.exp] : [];
       const norm = (a) => JSON.stringify(a.map((c) => ({ kind: c.kind, w: c.w, reason: c.reason })));
@@ -274,6 +281,8 @@ class Checker {
       if (timeout) { self.count('eightSecondRule'); self.log.push(`8 s rule: rally ${b.rally} ball at ${b.p.x.toFixed(2)},${b.p.y.toFixed(2)},${b.p.z.toFixed(2)} v ${Math.hypot(b.v.x, b.v.y, b.v.z).toFixed(2)} rolling ${b.rolling} bounces ${b.bounces}`); }
       return origRB.call(this, now);
     };
+    const origTiming = UI.timing;
+    UI.timing = function (text) { self.count('timing:' + text); return origTiming.apply(this, arguments); };
     const origReplay = Replay.consider;
     Replay.consider = function (spec) { const r = origReplay.call(this, spec); if (this.phase === 'wait') self.count('replay:' + this.spec.style); return r; };
   }

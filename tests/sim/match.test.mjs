@@ -140,6 +140,11 @@ section('toJSON / load round trip mid-match');
   // load must copy, not alias (the message object is reused by the caller)
   const src = a.toJSON(), c = new Match('full', 0); c.load(src); c.pointTo(0);
   ok(src.pts !== c.pts, 'load copies arrays');
+  // only score fields are taken from the other machine
+  const d = new Match('short', 0);
+  d.load({ ...a.toJSON(), G: 99, fmtKey: 'x', tbOnly: true, pointTo: 'nope' });
+  ok(d.G === 4 && d.fmtKey === 'short' && !d.tbOnly && typeof d.pointTo === 'function', 'load ignores non-score fields');
+  eq(d.pts, a.pts, 'load takes the points');
 }
 
 // ---- random matches against an independent scorer ----
