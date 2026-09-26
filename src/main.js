@@ -14,25 +14,43 @@ const $ = (id) => document.getElementById(id);
 const status = (t, p) => { const el = $('loadingMsg'); if (el) el.textContent = t; if (p != null && $('loadBar')) $('loadBar').style.setProperty('--p', p + '%'); };
 
 let lastT = performance.now(), lastRaf = 0, lastRender = 0, booted = false;
+// Profiling (Perf.profile()): main-thread time of each part of the frame. When it's off, one test per part.
+let secT = 0;
+const sec = (k) => { const n = performance.now(); Perf.section(k, n - secT); secT = n; };
+renderer.info.autoReset = false;   // count the whole frame (shadow maps, scene and every post pass), not just the last pass
 function tick(t) {
   if (!booted) return;
-  const dt = Math.min(0.05, Math.max(0, (t - lastT) / 1000));
+  const dt = Math.min(0.05, Math.max(0, (t - lastT) / 1000)), prof = Perf.sections;
   lastT = t;
+  if (prof) secT = performance.now();
   // An instant replay takes over the players, the ball and the camera while it runs.
-  if (!Replay.update(dt)) {
+  const replay = Replay.update(dt);
+  if (prof) sec('Replay');
+  if (!replay) {
     Game.update(dt);
+    if (prof) sec('Game');
     BallKids.update(Clock.paused ? 0 : dt, Game);
+    if (prof) sec('BallKids');
     Replay.record(Game.ball, BallView.mesh.visible);
+    if (prof) sec('Replay');
     Cam.update(dt, Game.mode === 'cpu' || Game.mode === 'online' ? Game.me() : null, Game);
+    if (prof) sec('Cam');
   }
   if (!Clock.paused) for (const p of Game.players) p.avatar.updateBlur();   // a paused frame keeps its blur, like a photo
+  if (prof) sec('Blur');
   const secs = t / 1000, ball = BallView.mesh.visible ? BallView.mesh.position : null;
   Env.update(secs);
+  if (prof) sec('Env');
   World.update(Clock.now());
+  if (prof) sec('World');
   Stadium.update(secs, ball);
+  if (prof) sec('Stadium');
   Crowd.update(ball);
+  if (prof) sec('Crowd');
   Effects.update(Clock.paused ? 0 : Replay.active ? dt * Replay.timeScale : dt, ball, Game.players.map((p) => p.avatar));
+  if (prof) sec('Effects');
   UI.frame(dt);
+  if (prof) sec('UI');
 }
 function frame() {
   requestAnimationFrame(frame);
@@ -43,7 +61,11 @@ function frame() {
   const ms = lastRender ? now - lastRender : 16.7;
   lastRender = now;
   tick(now);
+  const prof = Perf.sections;
+  if (prof) secT = performance.now();
+  renderer.info.reset();
   render(now / 1000);
+  if (prof) { sec('render'); Perf.section('tick+render', performance.now() - now); Perf.section('interval', ms); }
   if (ms < 250) Perf.frame(ms);   // a longer gap means the window was hidden, not that the GPU is slow
 }
 // Browsers stop animation frames in hidden tabs. Keep the match logic (and line calls) running anyway.

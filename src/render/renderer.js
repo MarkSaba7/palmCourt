@@ -209,6 +209,16 @@ export const Perf = {
   },
   listeners: [],
   onChange(fn) { this.listeners.push(fn); },
+  // Main-thread time per frame by section, for tuning: PalmCourt.Perf.profile(), play a while, then read
+  // PalmCourt.Perf.sections ({ Game: { avg, mean, max, n }, … } in ms; avg is smoothed). Off (null) by default, when
+  // the frame loop skips it entirely. info() adds the draw calls, triangles and shader programs of the last frame.
+  sections: null,
+  profile(on = true) { this.sections = on ? {} : null; return this; },
+  section(k, ms) {
+    const s = this.sections[k] || (this.sections[k] = { avg: ms, mean: 0, max: 0, n: 0, sum: 0 });
+    s.avg += (ms - s.avg) * 0.05; s.sum += ms; s.n++; s.mean = s.sum / s.n; if (ms > s.max) s.max = ms;
+  },
+  info() { const i = renderer.info; return { preset: this.preset, scale: +this.scale.toFixed(2), calls: i.render.calls, triangles: i.render.triangles, programs: i.programs ? i.programs.length : 0, geometries: i.memory.geometries, textures: i.memory.textures }; },
   setScale(s) {
     this.scale = s;
     readView();
