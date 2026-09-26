@@ -36,7 +36,7 @@ const FORMATS = {
 // tends to arrive (m). judge: how far out (m) a ball must be before it lets it go. sErr: serve scatter. risk: how close
 // to the lines first serves go.
 const LEVELS = {
-  rookie: { label: 'Rookie', speed: 4.5, acc: 3.9, react: 0.38, err: 1.7,  power: [0.22, 0.55], serve: [0.1, 0.4], iq: 0.25, pos: 0.26, judge: 0.9, sErr: 2.0, risk: 0.25 },
+  rookie: { label: 'Rookie', speed: 4.3, acc: 3.6, react: 0.42, err: 1.7,  power: [0.22, 0.55], serve: [0.1, 0.4], iq: 0.25, pos: 0.26, judge: 0.9, sErr: 2.0, risk: 0.25 },
   club:   { label: 'Club',   speed: 5.1, acc: 4.5, react: 0.3, err: 1.05, power: [0.32, 0.76], serve: [0.35, 0.68], iq: 0.55, pos: 0.18, judge: 0.45, sErr: 1.5, risk: 0.5 },
   pro:    { label: 'Pro',    speed: 5.7, acc: 5.1, react: 0.24, err: 0.62, power: [0.45, 0.92], serve: [0.64, 1.0], iq: 0.9,  pos: 0.1,  judge: 0.2, sErr: 1.3, risk: 0.8 },
 };
