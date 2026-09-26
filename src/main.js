@@ -14,6 +14,7 @@ import { BallKids } from './render/ballkids.js';
 import { Platform } from './platform.js';
 import { Profile } from './profile.js';
 import { Progress } from './progress.js';
+import { TourUI } from './tourui.js';
 import * as Economy from './economy.js';
 import { ProgressUI } from './progress-ui.js';
 
@@ -175,6 +176,7 @@ async function boot() {
   status('Warming up…', 92); await yieldFrame();
   UI.init();
   ProgressUI.init();
+  TourUI.init();
   Game.init();
   if (software) UI.gpuWarning();
   Game.startAttract();

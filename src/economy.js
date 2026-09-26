@@ -83,6 +83,7 @@ export function recordMatch(st, s) {
     st.wins++; st.streak++; st.bestStreak = Math.max(st.bestStreak, st.streak);
     inc(st.winsBy, s.mode === 'online' ? null : s.level); inc(st.winsOn, s.surface); inc(st.winsAt, s.tod);
     if (s.mode === 'online') st.onlineWins++;
+    if (s.tour && s.tour.final) st.tourTitles = (st.tourTitles || 0) + 1;   // won a World Tour final
     if (s.mode !== 'online' && PRO_IDS.includes(s.opponent)) inc(st.beat, s.opponent);
     if (s.format !== 'tiebreak' && Array.isArray(s.games) && s.games[1] === 0) st.bagels++;
   } else { st.losses++; st.streak = 0; }
