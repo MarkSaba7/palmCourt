@@ -162,7 +162,7 @@ await test('career: tour matches on the Bus (match:end, match:quit, stale matche
 });
 
 await test('rankings: rolling points drop a season later; seasons roll over; entry by rank or level', () => {
-  search('');
+  search('edition=steam');   // entry rules apply to the full tour; the web edition stops at the Challenger tier
   fresh(1);
   const Tour = T.Tour;
   Tour.enter('palm-court', {}); winRun();
@@ -186,7 +186,7 @@ await test('rankings: rolling points drop a season later; seasons roll over; ent
   assert.equal(T.eligibility(t, T.eventById('neon-nights'), 1).ok, false, 'Finals: top 8 only');
 });
 
-await test('editions: web plays Challengers; ?edition=steam and ?unlockAll=1 open everything', () => {
+await test('editions: web plays Challengers; ?edition=steam and ?unlockAll=1 open everything', async () => {
   fresh(50);
   const t = T.Tour.t; t.week = 1;
   search('?edition=web');
@@ -196,7 +196,8 @@ await test('editions: web plays Challengers; ?edition=steam and ?unlockAll=1 ope
   assert.equal(T.eligibility(t, T.eventById('coral-bay'), 50).ok, true);
   search('?edition=steam'); assert.equal(T.fullTour(), true); assert.equal(T.eligibility(t, T.eventById('seaside'), 50).ok, true);
   search('?edition=web&unlockAll=1'); assert.equal(T.eligibility(t, T.eventById('neon-nights'), 1).ok, true);
-  search(''); assert.equal(T.edition(), 'full');
+  const { CONFIG } = await import('../src/config.js');
+  search(''); assert.equal(T.edition(), CONFIG.edition || 'full', 'no URL override → the configured edition');
 });
 
 await test('save/restore: a run survives a reload (JSON + Profile normalize), a live match is replayed', () => {

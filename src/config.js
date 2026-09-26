@@ -18,7 +18,7 @@ const CONFIG = {
     rewardedDoubleFuzz: true,      // offer "Watch an ad to double your Fuzz" on the post-match screen
   },
   gd: { gameId: '' },        // GameDistribution: the game id from their developer dashboard (required)
-  adsense: { client: null, test: false, frequencyHint: '120s' },   // H5 Games Ads: publisher id 'ca-pub-…' (null = no ads); test = adbreak test mode
+  adsense: { client: 'ca-pub-6534034175572614', test: false, frequencyHint: '120s' },   // H5 Games Ads: publisher id 'ca-pub-…' (null = no ads); test = adbreak test mode
   consentPrompt: 'auto',     // own EU consent prompt for personalised ads: 'auto' (only when the SDK has no CMP) | 'never' | 'ask'
   showWishlist: false,       // show the wishlist button even while steamUrl is the placeholder (testing)
 };
