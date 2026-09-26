@@ -181,7 +181,7 @@ export const Cam = {
         L.set(W.x, 1.25, W.z);
         return { fov: 16, w: 3, wl: 4, dof: [P.distanceTo(L), 12] };
       }
-      case 'mark': {     // Hawk-Eye style close-up of the ball's mark, low and circling it
+      case 'mark': {     // line-review style close-up of the ball's mark, low and circling it
         const m = this.markAt, a = this.orbit0 + u * 0.12, r = 1.55 - 0.25 * sstep(0, len, u);
         P.set(m.x + Math.cos(a) * r, 0.34 + 0.08 * sstep(0, len, u), m.z + Math.sin(a) * r);
         L.set(m.x, 0.02, m.z);

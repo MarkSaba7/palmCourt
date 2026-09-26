@@ -1,8 +1,7 @@
 // Pro roster: the players you can play as and against, and the CPU's playing personalities.
-// LICENSING: Djokovic, Nadal, Federer, Sinner and Alcaraz are real people. Their names and likenesses need a licence
-// (from the players or their agents) before any commercial release, Steam included. Every display name, country and
-// description lives in this one file, so renaming the roster (or turning it into fictional players) is a single edit.
-// No brand logos or trademarks anywhere: each pro is recognisable by build, hair, headwear, colours and style only.
+// Every pro is a fictional player. Display names, countries and descriptions all live in this one file, so renaming
+// the roster is a single edit. No brand logos or trademarks anywhere: each pro stands apart by build, hair, headwear,
+// colours and playing style only.
 
 const M = (m) => m / 1.83;   // character height is a scale on the 1.83 m base body
 
@@ -14,7 +13,7 @@ export const PROS = [
     look: {}, kit: null, alt: null, style: {}, persona: null,
   },
   {
-    id: 'djokovic', name: 'Novak Djokovic', short: 'Djokovic', country: 'SRB', handed: 'R', blurb: 'Elastic defence, the best return in the game',
+    id: 'varga', name: 'Luka Varga', short: 'Varga', country: 'SRB', handed: 'R', blurb: 'Elastic defence, the best return in the game',
     look: {
       height: M(1.88), width: 0.97, chest: 0.97, muscle: 0.45, arm: 1.1, leg: 1.07, skin: 0xe1ae88,
       hair: 'crop', hairColor: 0x1d1510, headwear: 'none', headband: false, beard: 0.3,
@@ -27,7 +26,7 @@ export const PROS = [
     persona: { aggression: 0.6, topspin: 0.55, slice: 0.4, drop: 0.45, net: 0.35, serve: 0.7, consistency: 0.95, defense: 0.98, speed: 0.9 },
   },
   {
-    id: 'nadal', name: 'Rafael Nadal', short: 'Nadal', country: 'ESP', handed: 'L', blurb: 'Lefty with heavy topspin and relentless legs',
+    id: 'rivas', name: 'Mateo Rivas', short: 'Rivas', country: 'ESP', handed: 'L', blurb: 'Lefty with heavy topspin and relentless legs',
     look: {
       height: M(1.85), width: 1.04, chest: 1.07, muscle: 0.95, arm: 1.24, leg: 1.17, skin: 0xcf9670,
       hair: 'long', hairColor: 0x2c1d13, headwear: 'bandana', headband: true, beard: 0.2,
@@ -40,7 +39,7 @@ export const PROS = [
     persona: { aggression: 0.6, topspin: 0.98, slice: 0.35, drop: 0.4, net: 0.35, serve: 0.55, consistency: 0.9, defense: 0.9, speed: 0.88 },
   },
   {
-    id: 'federer', name: 'Roger Federer', short: 'Federer', country: 'SUI', handed: 'R', blurb: 'One-handed backhand, all-court attack',
+    id: 'adler', name: 'Julian Adler', short: 'Adler', country: 'SUI', handed: 'R', blurb: 'One-handed backhand, all-court attack',
     look: {
       height: M(1.85), width: 1, chest: 1, muscle: 0.5, arm: 1.14, leg: 1.1, skin: 0xe0ab85,
       hair: 'wavy', hairColor: 0x4a3222, headwear: 'headband', headband: true, beard: 0.12,
@@ -53,7 +52,7 @@ export const PROS = [
     persona: { aggression: 0.85, topspin: 0.55, slice: 0.8, drop: 0.55, net: 0.85, serve: 0.9, consistency: 0.75, defense: 0.65, speed: 0.8 },
   },
   {
-    id: 'sinner', name: 'Jannik Sinner', short: 'Sinner', country: 'ITA', handed: 'R', blurb: 'Flat, early ball-striking and raw pace',
+    id: 'ferro', name: 'Luca Ferro', short: 'Ferro', country: 'ITA', handed: 'R', blurb: 'Flat, early ball-striking and raw pace',
     look: {
       height: M(1.91), width: 0.95, chest: 0.94, muscle: 0.3, arm: 1.06, leg: 1.03, skin: 0xf1c8a8,
       hair: 'curly', hairColor: 0xa4522a, headwear: 'none', headband: false, beard: 0,
@@ -66,7 +65,7 @@ export const PROS = [
     persona: { aggression: 0.9, topspin: 0.4, slice: 0.3, drop: 0.35, net: 0.4, serve: 0.8, consistency: 0.85, defense: 0.75, speed: 0.85 },
   },
   {
-    id: 'alcaraz', name: 'Carlos Alcaraz', short: 'Alcaraz', country: 'ESP', handed: 'R', blurb: 'Explosive speed, drop shots and variety',
+    id: 'aranda', name: 'Tomas Aranda', short: 'Aranda', country: 'ESP', handed: 'R', blurb: 'Explosive speed, drop shots and variety',
     look: {
       height: M(1.83), width: 1.02, chest: 1.03, muscle: 0.8, arm: 1.2, leg: 1.16, skin: 0xd49d74,
       hair: 'textured', hairColor: 0x1e1510, headwear: 'none', headband: false, beard: 0.1,
