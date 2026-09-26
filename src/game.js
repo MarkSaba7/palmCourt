@@ -106,8 +106,12 @@ const Game = {
     if (R.ctl === 'cpu') this.cpuReceive(R, S, court);
     for (const p of this.players) {
       p.vx = p.vz = 0; p.tx = p.x; p.tz = p.z; p.plan = null; p.path = null; p.hitFor = -1;
+      // Timers from the last point go too: online, the clock jumps to the host's when a friend connects, and a
+      // leftover "don't move until" from the menu match could freeze a player for minutes.
+      p.moveAfter = 0; p.windAt = -9; p.lastCam = null;
       p.avatar.idle(false); p.avatar.prep = 0;
     }
+    this.stTimer = 0;
     S.avatar.idle(true);
     // The server bounces the ball before serving: the CPU always, a human only if they take their time.
     this.bounceN = this.mode === 'online' ? 0 : S.ctl === 'cpu' ? pick([2, 2, 3]) : 2;
@@ -595,16 +599,23 @@ const Game = {
     const c = pl.chase || { run: 0, slack: 1 }, stretch = sstep(0.3, 0.95, reach);
     const pace = sstep(14, 30, Math.hypot(b.v.x, b.v.y, b.v.z)), run = sstep(1.5, 5.5, c.run) * lerp(1.2, 0.8, S.defense);
     const low = sstep(volley ? 0.8 : 0.7, 0.35, y), high = volley ? 0 : sstep(1.35, 1.9, y), hurry = sstep(0.3, -0.15, c.slack);
-    const srv = b.serve ? pace * (b.serve.no === 1 ? 1 : 0.5) : 0;   // returning a big serve
-    const press = clamp(0.3 * pace + 0.35 * run + 0.35 * hurry + 0.45 * stretch + 0.25 * low + 0.2 * high + 0.3 * srv, 0, 1);
-    const q = clamp(1 - 0.45 * stretch - 0.25 * hurry - 0.15 * run - 0.2 * low - 0.15 * high - 0.2 * srv, 0.35, 1), diff = press;
-    const errMul = L.err * lerp(1.3, 0.75, S.consistency);
+    const srv = b.serve ? pace * (b.serve.no === 1 ? 1 : 0.25) : 0;   // returning a big serve
+    const press = clamp(0.3 * pace + 0.35 * run + 0.35 * hurry + 0.45 * stretch + 0.25 * low + 0.2 * high + 0.45 * srv, 0, 1);
+    let q = clamp(1 - 0.45 * stretch - 0.25 * hurry - 0.15 * run - 0.2 * low - 0.15 * high - 0.3 * srv, 0.35, 1);
+    // A big serve, a lunge or a ball it's late on gets mistimed now and then (defenders less often).
+    const framed = Math.random() < (0.2 * srv + 0.2 * sstep(0.6, 1, stretch) + 0.08 * hurry) * lerp(1.3, 0.6, S.defense);
+    if (framed) q = 0.35;
+    const diff = press;
+    const errMul = L.err * lerp(1.3, 0.75, S.consistency) * lerp(0.8, 1.15, press);   // crisp on a sitter, ragged on the run
     const b1 = pl.path && pl.path.bounce1, short = Math.max(sstep(11.3, 8.5, md), b1 && !volley ? sstep(9.6, 7.6, Math.abs(b1.z)) : 0) * (1 - press);
-    const risk = clamp(0.4 + 0.55 * (S.aggression - 0.5) - 0.55 * press + 0.35 * short - 0.15 * (S.consistency - 0.5), 0, 1);
-    // Margins from its own typical scatter: a precise player aims closer to the lines.
-    const kx = lerp(2.3, 1.0, risk), kz = lerp(2.3, 1.15, risk);
-    const wideAim = (p, k = kx) => W - clamp((0.4 + p * p) * errMul * 1.25 * k, 0.45, 2.6);
-    const deepAim = (p, k = kz) => 11.885 - clamp((0.45 + 0.95 * p * p) * errMul * 1.25 * k, 0.9, 3.4);
+    // Against quick legs (a webcam player's auto-run is quick) a smart player goes for less and waits for the error.
+    const legs = sstep(30, 70, opp.maxSpeed * Math.sqrt(opp.acc) / (opp.react + 0.2));
+    const risk = clamp(0.5 + 0.55 * (S.aggression - 0.5) - 0.55 * press + 0.35 * short - 0.15 * (S.consistency - 0.5) - 0.4 * iq * legs, 0, 1);
+    // Margins from its own scatter (groundShot's error model): a precise player aims closer to the lines. It allows for
+    // a hard ball only in part, so pressure still costs errors.
+    const kx = lerp(2.3, 1.0, risk), kz = lerp(2.3, 1.15, risk), sdK = errMul * 1.1 * Math.sqrt((1 + 1.6 * (1 - q)) * (1 + 1.2 * press));
+    const wideAim = (p, k = kx) => W - clamp((0.4 + p * p) * sdK * k, 0.45, 2.6);
+    const deepAim = (p, k = kz) => 11.885 - clamp((0.45 + 0.95 * p * p) * sdK * k, 0.9, 3.4);
     const drive = (t) => lerp(L.power[0], L.power[1], clamp(t, 0, 1));
     const open = Math.abs(ox) < 0.5 ? (Math.random() < 0.5 ? -1 : 1) : -Math.sign(ox);
     const cc = Math.abs(mx) < 0.6 ? open : -Math.sign(mx);   // crosscourt from where it stands
@@ -641,15 +652,15 @@ const Game = {
       power = drive(second ? 0.35 + 0.5 * S.aggression : 0.1 + 0.35 * S.aggression) * (1 - 0.4 * press);
       if (chip) { spin = rand(-0.6, -0.3); kind = 'Slice'; }
       const r = Math.random();
-      aimX = (r < 0.55 ? cc : r < 0.8 ? bhX : open) * wideAim(power, kx + (second ? 0.2 : 0.6)) * rand(0.45, 0.95);
-      depth = deepAim(power, kz + (second ? 0 : 0.3));
+      aimX = (r < 0.55 ? cc : r < 0.8 ? bhX : open) * wideAim(power, kx + (second ? 0.2 : 0.3)) * rand(0.5, 1);
+      depth = second ? deepAim(power) : lerp(deepAim(power, kz + 0.3), rand(6.8, 8.8), sstep(0.35, 0.8, press));
     } else if (press > 0.62) {
       // Defending: buy time with a deep crosscourt ball, high heavy topspin or a floated slice, well inside the lines.
       const sl = Math.random() < clamp(0.15 + 0.8 * (S.slice - 0.5) + 0.3 * low + (plan && plan.stroke === 'bh' ? 0.15 : 0), 0.05, 0.85);
       power = lerp(0.22, 0.5, 1 - press) * lerp(0.9, 1.15, S.aggression);
       spin = sl ? rand(-0.8, -0.45) : 0.55 + 0.35 * S.topspin; if (sl) kind = 'Slice';
       // On the run it can't control the length: the ball often sits up mid-court.
-      aimX = cc * wideAim(power, kx + 0.25) * rand(0.45, 0.95); depth = lerp(deepAim(power, kz + 0.2), rand(6.5, 8.5), sstep(0.55, 1, press) * lerp(1, 0.6, S.defense));
+      aimX = cc * wideAim(power, kx * 0.85) * rand(0.8, 1); depth = lerp(deepAim(power, kz + 0.2), rand(6.5, 8.5), sstep(0.55, 1, press) * lerp(1, 0.6, S.defense));
     } else if (short > 0.3 && y > 0.6) {
       // A short ball: drop shot (opponent deep), approach and come in (net players), or go for the open court.
       const dropP = od > 12.2 ? clamp(0.03 + 0.6 * Math.max(0, S.drop - 0.35), 0, 0.5) : 0;
@@ -661,8 +672,10 @@ const Game = {
         power = sl ? rand(0.45, 0.6) : drive(0.65); spin = sl ? -0.5 : 0.35 + 0.3 * S.topspin; kind = 'Approach'; mode = 'net';
         aimX = (Math.abs(mx) > 0.8 && Math.random() < 0.7 ? Math.sign(mx) : bhX) * wideAim(power, kx + 0.2); depth = deepAim(power);
       } else {
-        // Going for the winner: flatter and harder, closer to the lines.
-        const angle = Math.abs(mx) > 1.0 && Math.random() < 0.45, k = lerp(kx, 0.75, 0.4 + 0.4 * S.aggression);
+        // Going for the winner: flatter and harder, and closer to the lines the more open the court is (against a
+        // player who is in position, pace does the work rather than the lines).
+        const gap = sstep(0.6, 2.6, Math.abs(ox)) * iq, angle = Math.abs(mx) > 1.0 && Math.random() < 0.45;
+        const k = lerp(kx, 0.75, clamp(0.15 + 0.6 * gap + 0.4 * (S.aggression - 0.5) - 0.3 * iq * legs, 0, 1));
         power = drive(0.85 + 0.3 * (S.aggression - 0.5) + 0.08 * gauss()); spin = lerp(0.05, 0.6, S.topspin);
         aimX = open * wideAim(power, k); depth = angle ? rand(6, 7.5) : deepAim(power, lerp(kz, 1, 0.5));
       }
@@ -682,6 +695,7 @@ const Game = {
         power = 0.1; spin = -0.85; aimX = open * rand(0.8, 2.2); depth = rand(2.6, 3.6); kind = 'Drop shot';
       }
     }
+    if (framed && !lob) { aimX = (Math.random() < 0.5 ? -1 : 1) * rand(2.5, 3.6); depth = rand(6, 12.8); kind = null; }
     // A low-IQ player often just hits it back somewhere.
     if (!volley && !lob && power > 0.15 && Math.random() < 0.45 * (1 - iq)) { aimX = rand(-2.8, 2.8); depth = null; }
     ai.mode = mode;
@@ -689,7 +703,6 @@ const Game = {
     pl.moveAfter = Clock.now() + (volley ? 0.08 : 0.16) + 0.3 * stretch + 0.12 * power;
     const shot = this.groundShot(pl, { power, spin, aimX, depth, lob, q, tau: 0, errMul, diff });
     if (kind) shot.kind = kind;
-    this._dbg = { br: volley ? "volley" : od < 7 && md > 6.5 ? "pass" : b.serve ? "ret" : press > 0.62 ? "def" : short > 0.3 && y > 0.6 ? "att" : "rally", press, short, md, od, power, aimX, depth, q, diff, reach, y }; // DBG
     ai.aim = { x: side * aimX, z: -side * (depth ?? 9) };
     return shot;
   },
@@ -991,7 +1004,7 @@ const Game = {
     const b = this.ball, pl = this.remote();
     b.p = { ...m.p }; b.v = { ...m.v }; b.w = { ...m.w }; b.simT = m.t; b.netDone = false; b.rolling = false; b.active = b.visible = true;
     b.lastHitter = pl.idx; b.bounces = 0; b.netTouched = false; b.serve = m.serve || null; b.rally = m.rally; b.hitT = m.t;
-    this.hist.length = 0; this.pending = null; this.state = 'rally';
+    this.hist.length = 0; this.bounceLog.length = 0; this.pending = null; this.state = 'rally';   // (the call looks at this shot's bounces only)
     if (m.serve) pl.avatar.serveHit(m.t); else pl.avatar.swing(m.stroke === 'bh' ? 'bh' : 'fh', m.t);
     Sound.hit(0.6, this.camDist(b.p), 1, !!m.serve);
     if (m.serve) this.match.stats.fastest[pl.idx] = Math.max(this.match.stats.fastest[pl.idx], m.kmh || 0);
@@ -1007,6 +1020,9 @@ const Game = {
     else if (m.kind === 'fault') { this.enterDead(1.6, 'fault'); this.announceFault(m.reason); }
     else if (m.kind === 'let') { this.enterDead(1.6, 'let'); this.announceLet(); }
     UI.updateScore();
+    // Both machines report every point and fault, not only the one that made the call.
+    if (m.kind === 'point') Bus.emit('point', { w: m.w, reason: m.reason, rally: m.rally, ev: m.ev, mode: this.mode, localIdx: this.localIdx });
+    else if (m.kind === 'fault') Bus.emit('fault', { reason: m.reason, serveNo: 1, mode: this.mode });
   },
 };
 Game.init = function () {
