@@ -595,9 +595,9 @@ const Game = {
     const c = pl.chase || { run: 0, slack: 1 }, stretch = sstep(0.3, 0.95, reach);
     const pace = sstep(14, 30, Math.hypot(b.v.x, b.v.y, b.v.z)), run = sstep(1.5, 5.5, c.run) * lerp(1.2, 0.8, S.defense);
     const low = sstep(volley ? 0.8 : 0.7, 0.35, y), high = volley ? 0 : sstep(1.35, 1.9, y), hurry = sstep(0.3, -0.15, c.slack);
-    const srv = b.serve ? pace * (b.serve.no === 1 ? 1 : 0.5) : 0;   // returning a big serve
-    const press = clamp(0.3 * pace + 0.35 * run + 0.35 * hurry + 0.45 * stretch + 0.25 * low + 0.2 * high + 0.3 * srv, 0, 1);
-    const q = clamp(1 - 0.45 * stretch - 0.25 * hurry - 0.15 * run - 0.2 * low - 0.15 * high - 0.2 * srv, 0.35, 1), diff = press;
+    const srv = b.serve ? pace * (b.serve.no === 1 ? 1 : 0.25) : 0;   // returning a big serve
+    const press = clamp(0.3 * pace + 0.35 * run + 0.35 * hurry + 0.45 * stretch + 0.25 * low + 0.2 * high + 0.45 * srv, 0, 1);
+    const q = clamp(1 - 0.45 * stretch - 0.25 * hurry - 0.15 * run - 0.2 * low - 0.15 * high - 0.3 * srv, 0.35, 1), diff = press;
     const errMul = L.err * lerp(1.3, 0.75, S.consistency);
     const b1 = pl.path && pl.path.bounce1, short = Math.max(sstep(11.3, 8.5, md), b1 && !volley ? sstep(9.6, 7.6, Math.abs(b1.z)) : 0) * (1 - press);
     const risk = clamp(0.4 + 0.55 * (S.aggression - 0.5) - 0.55 * press + 0.35 * short - 0.15 * (S.consistency - 0.5), 0, 1);
@@ -642,7 +642,7 @@ const Game = {
       if (chip) { spin = rand(-0.6, -0.3); kind = 'Slice'; }
       const r = Math.random();
       aimX = (r < 0.55 ? cc : r < 0.8 ? bhX : open) * wideAim(power, kx + (second ? 0.2 : 0.6)) * rand(0.45, 0.95);
-      depth = deepAim(power, kz + (second ? 0 : 0.3));
+      depth = second ? deepAim(power) : lerp(deepAim(power, kz + 0.3), rand(6.8, 8.8), sstep(0.35, 0.8, press));
     } else if (press > 0.62) {
       // Defending: buy time with a deep crosscourt ball, high heavy topspin or a floated slice, well inside the lines.
       const sl = Math.random() < clamp(0.15 + 0.8 * (S.slice - 0.5) + 0.3 * low + (plan && plan.stroke === 'bh' ? 0.15 : 0), 0.05, 0.85);
@@ -661,8 +661,10 @@ const Game = {
         power = sl ? rand(0.45, 0.6) : drive(0.65); spin = sl ? -0.5 : 0.35 + 0.3 * S.topspin; kind = 'Approach'; mode = 'net';
         aimX = (Math.abs(mx) > 0.8 && Math.random() < 0.7 ? Math.sign(mx) : bhX) * wideAim(power, kx + 0.2); depth = deepAim(power);
       } else {
-        // Going for the winner: flatter and harder, closer to the lines.
-        const angle = Math.abs(mx) > 1.0 && Math.random() < 0.45, k = lerp(kx, 0.75, 0.4 + 0.4 * S.aggression);
+        // Going for the winner: flatter and harder, and closer to the lines the more open the court is (against a
+        // player who is in position, pace does the work rather than the lines).
+        const gap = sstep(0.6, 2.6, Math.abs(ox)) * iq, angle = Math.abs(mx) > 1.0 && Math.random() < 0.45;
+        const k = lerp(kx, 0.75, clamp(0.15 + 0.6 * gap + 0.4 * (S.aggression - 0.5), 0, 1));
         power = drive(0.85 + 0.3 * (S.aggression - 0.5) + 0.08 * gauss()); spin = lerp(0.05, 0.6, S.topspin);
         aimX = open * wideAim(power, k); depth = angle ? rand(6, 7.5) : deepAim(power, lerp(kz, 1, 0.5));
       }
@@ -689,7 +691,7 @@ const Game = {
     pl.moveAfter = Clock.now() + (volley ? 0.08 : 0.16) + 0.3 * stretch + 0.12 * power;
     const shot = this.groundShot(pl, { power, spin, aimX, depth, lob, q, tau: 0, errMul, diff });
     if (kind) shot.kind = kind;
-    this._dbg = { br: volley ? "volley" : od < 7 && md > 6.5 ? "pass" : b.serve ? "ret" : press > 0.62 ? "def" : short > 0.3 && y > 0.6 ? "att" : "rally", press, short, md, od, power, aimX, depth, q, diff, reach, y }; // DBG
+    this._dbg = { br: volley ? "volley" : od < 7 && md > 6.5 ? "pass" : b.serve ? "ret" : press > 0.62 ? "def" : short > 0.3 && y > 0.6 ? "att" : "rally", press, short, md, od, ox, power, aimX, depth, q, diff, reach, y }; // DBG
     ai.aim = { x: side * aimX, z: -side * (depth ?? 9) };
     return shot;
   },
