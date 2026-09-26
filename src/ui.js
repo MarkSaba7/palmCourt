@@ -7,6 +7,7 @@ import { Game } from './game.js';
 import { Net } from './net.js';
 import { Phone, drawQR } from './phone.js';
 import { Bus } from './events.js';
+import { Platform } from './platform.js';
 import { PROS, REAL_PROS, proById, proName, randomPro, proPortrait, randomPortrait } from './pros.js';
 import { Profile } from './profile.js';
 import { isUnlocked, unlockHint } from './economy.js';
@@ -33,7 +34,7 @@ const STEPS = {
 const CUE = { flight: 1.05, bt: 0.4 };
 
 const UI = {
-  screen: 'menu', calloutTimer: 0, shotTimer: 0, ambLevel: -1, setupReturn: 'menu', hostPrepped: false,
+  screen: 'loading', calloutTimer: 0, shotTimer: 0, ambLevel: -1, setupReturn: 'menu', hostPrepped: false,
   init() {
     this.buildSettings();
     this.initPros();
@@ -171,6 +172,7 @@ const UI = {
     Sound.init();
     $('btnPractice').disabled = true;
     const ok = await this.ensureControls(() => this.startCpu(opts));
+    if (ok) await Platform.ads.interstitial('next-match');   // between matches only, paced in platform.js; never hangs
     $('btnPractice').disabled = false;
     if (!ok) return;
     const { opponent, oppHanded, tod, ...rest } = opts;
@@ -355,9 +357,9 @@ const UI = {
     this.go(null);
   },
   rematchFromRemote() { if (Net.role === 'host' && Game.mode === 'online' && Game.state === 'over') this.startOnlineAsHost(); },
-  connectionLost(wasPlaying) {
-    if (this.screen === 'lobby') { this.lobbyStatus('Your friend disconnected.', 'err'); $('btnStartOnline').hidden = true; $('lobbyStart').hidden = false; $('lobbyHost').hidden = true; return; }
-    if (wasPlaying) { Game.startAttract(); this.go('menu'); this.menuNote('The connection to your friend was lost.', 'err'); }
+  connectionLost(wasPlaying, left) {
+    if (this.screen === 'lobby') { this.lobbyStatus(left ? 'Your friend left.' : 'Your friend disconnected.', 'err'); $('btnStartOnline').hidden = true; $('lobbyStart').hidden = false; $('lobbyHost').hidden = true; return; }
+    if (wasPlaying) { Game.startAttract(); this.go('menu'); this.menuNote(left ? 'Your friend left the match.' : 'The connection to your friend was lost.', 'err'); }
   },
   netInfo() {
     const el = $('netInfo');

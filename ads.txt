@@ -1,0 +1,5 @@
+# ads.txt for Palm Court's own domain (Google AdSense / H5 Games Ads).
+# It must be served from the root of the domain the game runs on: https://<your-domain>/ads.txt
+# When AdSense approves the site: replace pub-0000000000000000 with your publisher id (CONFIG.adsense.client in
+# src/config.js without the leading "ca-"), then delete the "# " in front of the line below.
+# google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0
