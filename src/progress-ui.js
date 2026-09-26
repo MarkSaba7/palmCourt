@@ -142,7 +142,7 @@ const STYLE = `
 .pg-item.locked .pg-prev>:not(.pg-lock){filter:grayscale(.8) brightness(.62)}
 .pg-prev{position:relative;aspect-ratio:1.3;display:grid;place-items:center;overflow:hidden;background:radial-gradient(circle at 50% 38%,rgba(242,245,238,.12),rgba(0,0,0,.28) 75%)}
 .pg-prev>svg{width:100%;height:100%}
-.pg-lock{position:absolute;top:6px;right:6px;width:15px;height:15px;color:var(--chalk);opacity:.8}
+.pg-prev>svg.pg-lock{position:absolute;top:6px;right:6px;width:16px;height:16px;color:var(--chalk);opacity:.85}
 .pg-tag{position:absolute;top:6px;left:6px;font:700 9.5px/1 var(--body);letter-spacing:.12em;text-transform:uppercase;padding:3px 5px;background:var(--optic);color:var(--optic-ink)}
 .pg-tb{font:900 20px/1 var(--display);text-transform:uppercase;letter-spacing:.04em;padding:7px 10px;border:1px solid var(--optic);color:var(--optic);text-align:center;max-width:90%}
 .pg-iname{font:800 16px/1.05 var(--display);text-transform:uppercase;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -150,19 +150,19 @@ const STYLE = `
 .pg-item .btn{align-self:end;display:flex;justify-content:center;align-items:center;gap:6px;text-align:center;padding:7px 8px}
 .pg-item .btn.confirm{background:var(--coral);border-color:var(--coral);color:var(--ink)}
 .pg-locker{display:grid;grid-template-columns:220px minmax(0,1fr);gap:16px;align-items:start}
-.pg-man{display:grid;gap:8px;position:sticky;top:0}
-.pg-big{position:relative;aspect-ratio:1;background:radial-gradient(circle at 50% 36%,rgba(242,245,238,.14),rgba(0,0,0,.3) 72%);border:1px solid var(--edge);overflow:hidden}
+.pg-man{display:grid;gap:8px}
+.pg-big{position:relative;aspect-ratio:1.3;background:radial-gradient(circle at 50% 36%,rgba(242,245,238,.14),rgba(0,0,0,.3) 72%);border:1px solid var(--edge);overflow:hidden}
 .pg-big>svg{position:absolute;inset:0;width:100%;height:100%}
 .pg-big>svg.pg-rk{inset:auto -6% -4% auto;width:52%;height:52%}
 .pg-big .pg-tb{position:absolute;left:8px;bottom:8px;font-size:14px;padding:4px 7px;background:rgba(8,18,29,.8)}
-.pg-slots{display:grid;gap:4px}
-.pg-slot{appearance:none;display:grid;grid-template-columns:minmax(0,1fr);padding:6px 10px;border:1px solid var(--edge);background:transparent;text-align:left;cursor:pointer;color:inherit}
+.pg-slots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+.pg-slot{appearance:none;display:grid;grid-template-columns:minmax(0,1fr);padding:6px 8px;border:1px solid var(--edge);background:transparent;text-align:left;cursor:pointer;color:inherit}
 .pg-slot small{font:700 10px/1.2 var(--body);letter-spacing:.13em;text-transform:uppercase;color:var(--mist)}
 .pg-slot b{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pg-slot:hover{background:rgba(242,245,238,.06)}
 .pg-slot[aria-pressed=true]{border-color:var(--optic);background:rgba(214,240,74,.09)}
 .pg-note{margin:0 0 10px;font-size:12.5px;color:var(--mist)}
-@media (max-width:640px){.pg-locker{grid-template-columns:1fr}.pg-man{position:static;grid-template-columns:120px 1fr}}
+@media (max-width:640px){.pg-locker{grid-template-columns:1fr}.pg-man{grid-template-columns:130px 1fr}.pg-big{aspect-ratio:1}}
 .pg-chs{display:grid;gap:10px}
 .pg-ch{display:grid;grid-template-columns:44px minmax(0,1fr) auto;column-gap:14px;row-gap:9px;align-items:center;padding:14px 16px;border:1px solid var(--edge);background:rgba(242,245,238,.035)}
 .pg-ch-n{grid-row:span 2;font:900 38px/1 var(--display);color:rgba(242,245,238,.3);text-align:center}
@@ -195,7 +195,7 @@ const STYLE = `
 .pg-rw{position:relative;overflow:hidden;display:grid;gap:9px;padding:12px 14px;border:1px solid var(--edge);background:linear-gradient(160deg,rgba(214,240,74,.09),rgba(242,245,238,.02) 55%)}
 .pg-rw-top{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center}
 .pg-rw-xp{display:grid;gap:7px;min-width:0}
-.pg-rw-xpl{display:flex;justify-content:space-between;gap:8px;font:700 11px/1 var(--body);letter-spacing:.1em;text-transform:uppercase;color:var(--mist);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pg-rw-xpl{display:flex;justify-content:space-between;gap:8px;overflow:hidden;font:700 11px/1 var(--body);letter-spacing:.1em;text-transform:uppercase;color:var(--mist);font-variant-numeric:tabular-nums;white-space:nowrap}
 .pg-rw-xpl b{color:var(--chalk)}
 .pg-rw .pg-xp{height:10px}
 .pg-rw .pg-xp>i{transition:none}
@@ -224,7 +224,7 @@ const STYLE = `
 .pg-lvup small{font:700 12px/1 var(--body);letter-spacing:.32em;text-transform:uppercase;color:var(--optic)}
 .pg-lvup b{font:900 86px/.85 var(--display);color:var(--chalk);text-shadow:0 0 28px rgba(214,240,74,.65);animation:pgPop .7s var(--ease-back) both}
 .pg-lvup span{font-size:12.5px;color:var(--chalk);max-width:34ch}
-.pg-toasts{position:fixed;z-index:40;top:max(var(--hp,16px),env(safe-area-inset-top));right:var(--hp,16px);display:grid;gap:8px;width:min(330px,calc(100vw - 32px));pointer-events:none}
+.pg-toasts{position:fixed;z-index:40;bottom:max(var(--hp,16px),env(safe-area-inset-bottom));right:var(--hp,16px);display:grid;align-content:end;gap:8px;width:min(330px,calc(100vw - 32px));pointer-events:none}
 .pg-toast{display:grid;grid-template-columns:34px minmax(0,1fr);column-gap:11px;align-items:center;padding:10px 12px;background:var(--panel);border:1px solid var(--edge);border-left:3px solid var(--optic);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.35);animation:pgToast .5s var(--ease-back) both}
 .pg-toast.good{border-left-color:var(--good)}
 .pg-toast.out{animation:pgToastOut .35s ease-in both}
@@ -292,7 +292,8 @@ export const ProgressUI = {
     const pip = (id, text, hot) => { const el = $(`pgPip-${id}`); el.hidden = !text; el.textContent = text; el.classList.toggle('hot', !!hot); };
     pip('challenges', `${done}/${daily.length}`, done < daily.length);
     pip('achievements', `${got}`, false);
-    pip('shop', '', false);
+    const buyable = CATALOG.filter((i) => canBuy(i.id).ok).length;
+    pip('shop', buyable ? `${buyable}` : '', true);
   },
 
   // ---- the hub screen: Pro Shop, Locker, Challenges, Achievements ----
@@ -346,6 +347,7 @@ export const ProgressUI = {
   },
   card(item, mode) {
     const P = Profile, cosmetic = SLOTS.includes(item.kind), open = isUnlocked(item.id), on = cosmetic && equippedId(item.kind) === item.id;
+    const c = open ? null : canBuy(item.id), dim = !open && !(mode === 'shop' && c && (c.ok || c.reason === 'fuzz'));   // for sale now: full colour
     let meta = '', btn = '';
     const k = (a) => `data-key="${a}:${item.id}" data-id="${item.id}"`;
     if (open) {
@@ -353,14 +355,13 @@ export const ProgressUI = {
       if (cosmetic) btn = on ? `<button class="btn small" disabled ${k('eq')}>Equipped</button>` : `<button class="btn small" data-act="equip" ${k('eq')}>Equip</button>`;
       else if (item.kind === 'pro') btn = Settings.playAs === item.key ? `<button class="btn small" disabled ${k('eq')}>Playing as</button>` : `<button class="btn small" data-act="playas" ${k('eq')}>Play as</button>`;
     } else {
-      const c = canBuy(item.id);
       meta = item.how === 'earn' ? `Achievement: ${esc(titleFor(item.id) || '')}` : esc(unlockHint(item.id));
       if (mode === 'shop' && c.ok) btn = `<button class="btn small primary" data-act="buy" ${k('buy')}>Buy · ${FUZZ()} ${nf(item.price)}</button>`;
       else if (mode === 'shop' && c.reason === 'fuzz') btn = `<button class="btn small" disabled ${k('buy')}>Need ${nf(item.price - P.fuzz)} more</button>`;
       else if (mode === 'shop' && c.reason === 'level') btn = `<button class="btn small" disabled ${k('buy')}>Reach level ${item.level}</button>`;
       else if (mode === 'locker' && (item.how === 'buy' || item.how === 'level-or-buy')) btn = `<button class="btn small" data-act="toshop" ${k('shop')}>In the Pro Shop</button>`;
     }
-    return `<article class="pg-item${open ? '' : ' locked'}${on ? ' equipped' : ''}"><div class="pg-prev">${preview(item)}${open ? '' : LOCK}${on ? '<span class="pg-tag">On</span>' : ''}</div><b class="pg-iname" title="${esc(item.name)}">${esc(item.name)}</b><small class="pg-imeta">${meta}</small>${btn}</article>`;
+    return `<article class="pg-item${dim ? ' locked' : ''}${on ? ' equipped' : ''}"><div class="pg-prev">${preview(item)}${dim ? LOCK : ''}${on ? '<span class="pg-tag">On</span>' : ''}</div><b class="pg-iname" title="${esc(item.name)}">${esc(item.name)}</b><small class="pg-imeta">${meta}</small>${btn}</article>`;
   },
   shop() {
     const items = CATALOG.filter((i) => i.kind === this.cat && (i.how === 'buy' || i.how === 'level-or-buy'));
@@ -541,7 +542,7 @@ export const ProgressUI = {
     bar.children[0].style.width = pct(A.showXP); bar.children[1].style.width = pct(Math.max(A.base, A.xp0));
     $('pgRwLv').textContent = lv;
     $('pgRwGain').textContent = `+${nf(A.showXP - A.xp0)} XP`;
-    $('pgRwXp').textContent = need ? `Level ${lv} · ${nf(Math.max(0, A.showXP - from))} / ${nf(need)}` : `Level ${MAX_LEVEL}`;
+    $('pgRwXp').textContent = need ? `${nf(Math.max(0, A.showXP - from))} / ${nf(need)}` : 'Max level';
     $('pgRwFz').textContent = `+${nf(A.showFz - A.fz0)}`;
     $('pgRwBal').textContent = `Balance ${nf(A.showFz)} Fuzz`;
   },
@@ -578,7 +579,7 @@ export const ProgressUI = {
     let ok = false;
     try { ok = !!ads && typeof ads.rewarded === 'function' && typeof ads.available === 'function' && !!ads.available('rewarded'); } catch (e) { ok = false; }
     if (!ok || this.anim !== A || UI.screen !== 'over') return;
-    btn.innerHTML = `${FUZZ()} Watch an ad to double your Fuzz <b>+${nf(A.res.fuzz)}</b>`;
+    btn.innerHTML = `${FUZZ()} Watch an ad: double your Fuzz <b>+${nf(A.res.fuzz)}</b>`;
     btn.disabled = false; btn.hidden = false;
   },
   async watchAd() {
