@@ -1,6 +1,6 @@
 # Palm Court
 
-Webcam tennis in the browser. Swing your hand (or a brightly colored paddle) at the camera and your player hits the ball. Your player runs to the ball on their own; you only swing. Play a CPU, or send a friend a link and play them online.
+Tennis in the browser. Swing your phone like a racket, or your hand (or a brightly colored paddle) at the webcam, and your player hits the ball. Your player runs to the ball on their own; you only swing. Play a CPU, or send a friend a link and play them online.
 
 It's a static web page (`index.html` plus the `src/` modules): no build step, no game server, no accounts.
 
@@ -9,9 +9,15 @@ It's a static web page (`index.html` plus the `src/` modules): no build step, no
 - **Easiest:** double-click `play.cmd`. It starts a tiny local server with Python and opens the game at <http://localhost:8765>.
 - **Or** play it online once it's on GitHub Pages (see below). Opening `index.html` straight from a folder doesn't work: browsers block the game's modules on `file://` pages.
 
-The browser will ask for the camera the first time you choose **Hand** or **Paddle** controls. The hand tracker (about 8 MB) downloads on first use, then your browser caches it.
+Pick your controls in the menu (**Phone**, **Hand cam**, **Paddle cam** or **Mouse**; Mouse is the default), who you play as and which CPU pro you face, then **Practice vs CPU**.
 
-### Controls
+The browser will ask for the camera the first time you choose **Hand cam** or **Paddle cam**. Without a camera (or if you block it) the game says why and uses the mouse. The hand tracker (about 8 MB) downloads on first use, then your browser caches it.
+
+### Phone racket
+
+Choose **Phone**, then **Practice vs CPU** (or **Connect phone**): the game shows a QR code and a 5-letter code. Scan it with the phone, tap **Start** there, then swing a forehand and a backhand so the phone learns which is which (or tap Skip). The phone must be able to open the page over https: with `play.cmd` it's on the same Wi-Fi as the PC (accept the certificate warning once); on GitHub Pages it works from anywhere and links through PeerJS. Lift the phone (or tap **Toss** on it) to toss when you serve.
+
+### Camera controls
 
 | You do | What happens |
 | --- | --- |
@@ -22,7 +28,7 @@ The browser will ask for the camera the first time you choose **Hand** or **Padd
 | Swing faster | Hits harder, and misses more often |
 | Raise your hand above the dashed toss line | Tosses the ball when you serve. Swing to hit it; your hand's left/right position aims the serve |
 
-No camera? Pick **Mouse**: click (or tap) to swing and flick before clicking for power. Keyboard: Space swings, Shift+Space hits harder, S slices. Press C to switch between the player camera and the TV camera, and Esc to pause.
+No camera? Pick **Mouse** (the default): click (or tap) to swing and flick before clicking for power. Keyboard: Space swings, Shift+Space hits harder, S slices. Press C to switch between the player camera and the TV camera, and Esc to pause.
 
 Use **Camera check** first. It lists every swing it sees (FH or BH, speed, and how far behind the camera it was), dims the wind-ups it ignores, and asks for a forehand, then a backhand, so you can see both register. It lets you adjust:
 
@@ -37,7 +43,7 @@ For **Paddle** mode, hold the paddle's face in the circle and press **Lock paddl
 
 - **Check the numbers.** Press **F** during a match to see the frame rate. Press **Esc** for more detail: fps, render resolution, which graphics chip is drawing, and how fast hand tracking runs.
 - **A red warning on the main menu** means your browser is drawing 3D without your graphics card. In Chrome or Edge, open Settings → System, turn on "Use graphics acceleration when available", then press Relaunch. To confirm, open `chrome://gpu` and look for "WebGL: Hardware accelerated".
-- **Set Graphics to Fast** in the menu. **Auto** already lowers the resolution when frames get slow.
+- **Set Graphics to Low** in the menu. **Auto** already lowers the resolution when frames get slow.
 - **Close heavy apps and tabs**, especially video calls. Only one app can use the webcam at a time.
 - **Laptop with two graphics chips?** In Windows Settings → System → Display → Graphics, add your browser and set it to High performance.
 
@@ -98,18 +104,18 @@ To test without editing the file, add URL parameters: `?portal=poki`, `?edition=
 
 ## How it's built
 
-`index.html` is organised in sections:
+`index.html` holds the page and its screens; the code is plain ES modules in `src/`:
 
-| Section | What's in it |
+| File | What's in it |
 | --- | --- |
-| CORE | Constants, ball physics (`stepBall`), path prediction, and `solveShot`, which finds the launch angle that lands a ball on a target at a given speed and spin |
-| MATCH | Scoring, umpire calls, synthesized sound (no audio files) |
-| WORLD | three.js scene: court textures, lines, net, stadium, crowd, palms |
-| ACTORS | Jointed player figures with forehand, backhand, serve and running animations; ball, shadow, trail; cameras |
-| INPUT | MediaPipe hand tracking (in a background worker thread), paddle color tracking, mouse and keyboard, all turned into swing events |
-| GAME | Players, CPU AI, serve and rally flow, line calls, and latency compensation (a late webcam swing rewinds the ball to when you actually swung) |
-| NET | PeerJS connection, clock sync, messages |
-| UI | Menus, lobby, camera check, HUD, main loop |
+| `core.js` | Constants, ball physics (`stepBall`), path prediction, `solveShot` (the launch that lands a ball on a target at a given speed and spin), `LEVELS`, settings |
+| `match.js` | Scoring, umpire calls, synthesized sound (no audio files) |
+| `render/` | three.js scene: court, stadium, crowd, scenery, sky and lighting, characters and their animation, rackets, ball, cameras |
+| `input.js`, `camswing.js` | Hand tracking (MediaPipe in a worker), paddle color tracking, swing detection, mouse and keyboard, all turned into swing events |
+| `game.js` | Players, CPU AI, serve and rally flow, line calls, latency compensation (a late webcam swing rewinds the ball to when you actually swung) |
+| `phone.js`, `controller.html` | The phone racket: the phone page detects swings itself and sends them over serve.py's Wi-Fi relay or PeerJS |
+| `net.js` | Online play: PeerJS connection, clock sync, messages |
+| `ui.js`, `pros.js` | Menus, pro picker, lobby, camera check, HUD |
 
 Tuning knobs:
 

@@ -357,9 +357,9 @@ const UI = {
     this.go(null);
   },
   rematchFromRemote() { if (Net.role === 'host' && Game.mode === 'online' && Game.state === 'over') this.startOnlineAsHost(); },
-  connectionLost(wasPlaying) {
-    if (this.screen === 'lobby') { this.lobbyStatus('Your friend disconnected.', 'err'); $('btnStartOnline').hidden = true; $('lobbyStart').hidden = false; $('lobbyHost').hidden = true; return; }
-    if (wasPlaying) { Game.startAttract(); this.go('menu'); this.menuNote('The connection to your friend was lost.', 'err'); }
+  connectionLost(wasPlaying, left) {
+    if (this.screen === 'lobby') { this.lobbyStatus(left ? 'Your friend left.' : 'Your friend disconnected.', 'err'); $('btnStartOnline').hidden = true; $('lobbyStart').hidden = false; $('lobbyHost').hidden = true; return; }
+    if (wasPlaying) { Game.startAttract(); this.go('menu'); this.menuNote(left ? 'Your friend left the match.' : 'The connection to your friend was lost.', 'err'); }
   },
   netInfo() {
     const el = $('netInfo');
