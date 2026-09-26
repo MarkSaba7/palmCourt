@@ -82,7 +82,7 @@ async function runVideo() {
       lastPeek = `${s.name}:${c.frame}`;
       const t = c.frame / suite.fps;
       if (/lock$/.test(s.name) && t >= LOCK_WINDOW[0] && t <= LOCK_WINDOW[1] && (s === first ? !red : red && !locks.some((l) => l.clip === s.name))) {
-        const r = await page.evaluate(() => { document.getElementById('btnLockColor').click(); const p = window.PalmCourt.Settings.paddle; return { msg: document.getElementById('swingLog').textContent, col: p && { h: +p.h.toFixed(1), s: +p.s.toFixed(2), v: +p.v.toFixed(2), tol: +p.tol.toFixed(1), css: p.css } }; });
+        const r = await page.evaluate(async () => { (await import('/src/ui.js')).UI.lockColor(true); const p = window.PalmCourt.Settings.paddle; return { msg: document.getElementById('swingLog').textContent, col: p && { h: +p.h.toFixed(1), s: +p.s.toFixed(2), v: +p.v.toFixed(2), tol: +p.tol.toFixed(1), css: p.css } }; });
         locks.push({ clip: s.name, at: +t.toFixed(2), ...r });
         console.log(`locked on ${s.name} @${t.toFixed(2)} s: ${JSON.stringify(r.col)} — "${r.msg}"`);
         if (s === first && r.col) { red = true; await page.evaluate(() => window.__rig.take()); }
@@ -146,7 +146,7 @@ async function runPractice() {
     let p = performance.now() / 1000;
     script.to('shift', p, p + 0.5, { x: 0.5, y: 0.5 });
     await wait(1500);
-    document.getElementById('btnLockColor').click();
+    UI.lockColor(true);   // the button counts down 3 s for a real player
     const pl = P.Settings.paddle, lock = pl && { h: +pl.h.toFixed(1), s: +pl.s.toFixed(2), tol: +pl.tol.toFixed(1) };
     p = performance.now() / 1000;
     script.to('shift', p, p + 0.5, L.REST);
