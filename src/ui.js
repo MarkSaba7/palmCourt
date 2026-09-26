@@ -7,6 +7,7 @@ import { Game } from './game.js';
 import { Net } from './net.js';
 import { Phone, drawQR } from './phone.js';
 import { Bus } from './events.js';
+import { Platform } from './platform.js';
 import { PROS, REAL_PROS, proById, proName, randomPro, proPortrait, randomPortrait } from './pros.js';
 import { Profile } from './profile.js';
 import { isUnlocked, unlockHint } from './economy.js';
@@ -171,6 +172,7 @@ const UI = {
     Sound.init();
     $('btnPractice').disabled = true;
     const ok = await this.ensureControls(() => this.startCpu(opts));
+    if (ok) await Platform.ads.interstitial('next-match');   // between matches only, paced in platform.js; never hangs
     $('btnPractice').disabled = false;
     if (!ok) return;
     const { opponent, oppHanded, tod, ...rest } = opts;

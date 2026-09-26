@@ -260,7 +260,7 @@ async function cloudFromConfig() {
   try {
     const { CONFIG } = await import('./config.js');
     const c = CONFIG && CONFIG.cloud;
-    if (c && c.url && c.anonKey) await Profile.useCloud(supabaseAdapter(c));
+    if (c && c.enabled !== false && c.url && c.anonKey) await Profile.useCloud(supabaseAdapter(c));   // enabled: false = dormant
   } catch (e) { /* no config.js: local only */ }
 }
 

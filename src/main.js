@@ -9,6 +9,7 @@ import { Phone } from './phone.js';
 import { UI } from './ui.js';
 import { Replay } from './replay.js';
 import { BallKids } from './render/ballkids.js';
+import { Platform } from './platform.js';
 import { Profile } from './profile.js';
 import { Progress } from './progress.js';
 import * as Economy from './economy.js';
@@ -56,6 +57,7 @@ setInterval(() => { const now = performance.now(); if (now - lastRaf > 120) tick
 const yieldFrame = () => new Promise((r) => { let done = false; const go = () => { if (!done) { done = true; r(); } }; requestAnimationFrame(go); setTimeout(go, 60); });
 
 async function boot() {
+  Platform.init();   // portal SDK (if any) loads alongside the build; never awaited
   try { await Promise.race([document.fonts.load('900 70px "Big Shoulders Display"'), new Promise((r) => setTimeout(r, 1500))]); } catch (e) { /* fall back to system fonts */ }
   const software = Perf.detectGpu();
   Perf.apply();
@@ -82,7 +84,7 @@ async function boot() {
   UI.go('menu');
   const q = new URLSearchParams(location.search).get('join');
   if (q && /^[A-Za-z0-9]{5}$/.test(q)) UI.openLobby(q.toUpperCase());
-  window.PalmCourt = { Game, Net, Input, Settings, Clock, Perf, Tracker, Phone, Env, Stadium, World, Cam, Crowd, Replay, Effects, renderer, scene, camera, Profile, Progress, Economy };
+  window.PalmCourt = { Game, Net, Input, Settings, Clock, Perf, Tracker, Phone, Env, Stadium, World, Cam, Crowd, Replay, Effects, renderer, scene, camera, Profile, Progress, Economy, Platform };
 }
 boot().catch((e) => {
   console.error(e);
