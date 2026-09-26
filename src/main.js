@@ -114,7 +114,7 @@ function batchStatic(root, owner = {}) {
     if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || o.isBatchedMesh || !mat || Array.isArray(mat) || !mat.isMaterial) return;
     if (mat.isShaderMaterial || mat.transparent || mat.onBeforeCompile !== NOCOMPILE || mat.customProgramCacheKey !== THREE.Material.prototype.customProgramCacheKey) return;
     if (o.customDepthMaterial || o.customDistanceMaterial || o.onBeforeRender !== NOOP || o.onAfterRender !== THREE.Object3D.prototype.onAfterRender || o.morphTargetInfluences || !o.frustumCulled) return;
-    if (!g || !g.isBufferGeometry || Object.keys(g.morphAttributes).length || g.groups.length > 1 || g.drawRange.start !== 0 || g.drawRange.count !== Infinity) return;
+    if (!g || !g.isBufferGeometry || Object.keys(g.morphAttributes).length || g.drawRange.start !== 0 || g.drawRange.count !== Infinity) return;
     if (o.matrixWorld.determinant() <= 0) return;
     const attrs = Object.keys(g.attributes).sort().map((k) => { const a = g.attributes[k]; return a.isInterleavedBufferAttribute ? '!' : `${k}${a.itemSize}${a.normalized ? 'n' : ''}${a.array.constructor.name}`; }).join();
     if (attrs.includes('!')) return;
