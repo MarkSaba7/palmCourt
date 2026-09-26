@@ -776,9 +776,11 @@ const Tracker = {
   previewLock(now) {
     const [W, H] = this.workSize(), c = this.ensureWork(W, H), p = this.lockPrev || (this.lockPrev = { seg: {} });
     c.drawImage(this.video, 0, 0, W, H);
-    p.col = lockColorFromPatch(c.getImageData(Math.round(W / 2 - 10), Math.round(H / 2 - 10), 20, 20).data);
+    const px = c.getImageData(0, 0, W, H).data;
+    p.info = { frameV: frameValue(px) };
+    p.col = lockColorFromPatch(lockPatch(px, W, H), p.info);
     p.w = W; p.h = H; p.at = now;
-    if (p.col) segmentColor(c.getImageData(0, 0, W, H).data, W, H, { h: p.col.h, s: p.col.s, v: p.col.v, tol: p.col.tol || 16 }, { scratch: p.seg });
+    if (p.col) segmentColor(px, W, H, { h: p.col.h, s: p.col.s, v: p.col.v, tol: p.col.tol || 16 }, { scratch: p.seg });
     else p.seg.count = null;
     return p;
   },

@@ -135,23 +135,6 @@ const UI = {
     if (main && from !== screen && !$(main).disabled) $(main).focus({ preventScroll: true });
     else if (screen === null && document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   },
-  placeCam() {
-    const w = Tracker.wrap, on = !!Tracker.stream;
-    if (this.screen === 'setup') { $('camSlot').appendChild(w); w.classList.add('big'); w.hidden = !on; }
-    else {
-      document.body.appendChild(w); w.classList.remove('big');
-      const playing = (Game.mode === 'cpu' || Game.mode === 'online') && (this.screen === null || this.screen === 'pause');
-      w.hidden = !(on && playing);
-    }
-    if (on) Tracker.video.play().catch(() => {});
-  },
-  camMessage(e) {
-    const n = e && e.name;
-    if (n === 'NotAllowedError' || n === 'SecurityError') return 'Camera access is blocked. Allow the camera for this page in your browser’s address bar, then try again.';
-    if (n === 'NotFoundError' || n === 'OverconstrainedError') return 'No camera was found. Plug one in, or switch Controls to Mouse.';
-    if (n === 'NotReadableError') return 'The camera is in use by another app. Close that app and try again.';
-    return (e && e.message) || 'The camera didn’t start.';
-  },
   async ensureControls(then) {
     if (Settings.control === 'mouse') { Tracker.stop(); return true; }
     if (Settings.control === 'phone') {
@@ -472,6 +455,7 @@ const UI = {
   // swings, a forehand / backhand / toss test, and a timing test against balls flying at you on the preview. A step
   // that has what it needs moves on by itself; the stepper jumps to any step, and the sliders stay for fine-tuning.
   async openSetup(from) {
+    if (Settings.control === 'phone') { this.openPhone(from); return; }   // the phone has its own screen
     this.setupReturn = from;
     this.wireSetup();
     if (this.camCheck) this.leaveStep();
@@ -481,6 +465,7 @@ const UI = {
     $('setupEyebrow').textContent = cam ? `Camera check · ${mode === 'hand' ? 'hand' : 'paddle'}` : 'Controls · mouse and keyboard';
     $('setupTitle').textContent = cam ? 'Set up your swing' : 'Test your swing';
     $('setupSteps').innerHTML = STEPS[mode];
+    for (const r of document.getElementsByName('setup-control')) r.checked = r.value === mode;
     $('setupTipsBox').open = !cam;
     for (const id of ['calSteps', 'stepCard', 'tuning', 'camHealth', 'cueCanvas']) $(id).hidden = !cam;
     $('mousePad').hidden = cam;
@@ -517,6 +502,8 @@ const UI = {
     $('btnStepAlt').onclick = () => this.stepAction('alt');
     $('btnCamRetry').onclick = () => this.openSetup(this.setupReturn);
     $('btnCamMouse').onclick = () => { this.setControl('mouse'); this.openSetup(this.setupReturn); };
+    // Switching controls here restarts the check for the new ones (e.g. the paddle when hand tracking won't load).
+    $('setupMode').addEventListener('change', (e) => { this.setControl(e.target.value); this.menuNote(''); this.openSetup(this.setupReturn); });
     const pad = $('mousePad'), flash = () => { pad.classList.add('hit'); clearTimeout(this.padT); this.padT = setTimeout(() => pad.classList.remove('hit'), 160); };
     pad.onpointerdown = () => {
       Sound.init();
@@ -534,6 +521,7 @@ const UI = {
     $('optSens').addEventListener('input', () => { const s = this.camCheck && this.camCheck.sens; if (s && !s.res) s.prev = Settings.sens; });
     document.addEventListener('keydown', (e) => {
       if (this.screen !== 'setup' || e.key !== 'Escape') return;
+      e.stopPropagation();   // handled: the window's Esc (pause / resume) must not act on the screen this opens
       const c = this.camCheck;
       if (c && c.count) this.lockColor();
       else if (c && c.tm && c.tm.run) this.timingStop();
@@ -698,7 +686,7 @@ const UI = {
         go = 'Stop';
       } else if (R && R.to != null) {
         const ms = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(Math.round(v * 1000))} ms`;
-        msg = `Timing offset set to ${ms(R.to)} (was ${ms(R.from)}). Your swings peaked ${Math.abs(Math.round(R.med * 1000))} ms ${R.med >= 0 ? 'after' : 'before'} the ball, give or take ${Math.round(R.spread * 1000)} ms.`;
+        msg = `Timing offset set to ${ms(R.to)} (was ${ms(R.from)}). Your swings peaked ${Math.abs(Math.round(R.med * 1000))} ms ${R.med >= 0 ? 'after' : 'before'} the ball${R.spread < 0.015 ? ', very steadily' : `, give or take ${Math.round(R.spread * 1000)} ms`}.`;
         kind = 'good';
         if (R.spread > 0.08) { msg += ' That varied a lot: try again for a steadier reading.'; kind = 'warn'; }
         go = 'Done'; alt = 'Try again';
@@ -733,13 +721,16 @@ const UI = {
       return false;
     }
     if (c) { c.count = null; $('camCount').hidden = true; }
-    const prev = Tracker.lockPrev, r = Tracker.lockColor();
-    const ok = r === true || (!!r && typeof r === 'object' && r.ok !== false), why = r && typeof r === 'object' ? r.message || r.reason : Tracker.lockInfo && !Tracker.lockInfo.ok ? Tracker.lockInfo.msg : '';
+    const prev = Tracker.lockPrev, r = Tracker.lockColor(), info = Tracker.lockInfo || {};
+    const ok = r === true || (!!r && typeof r === 'object' && r.ok !== false), why = r && typeof r === 'object' ? r.message || r.reason : '';
     let msg;
-    if (!ok) msg = [typeof why === 'string' && why ? why : prev && prev.col ? 'That color won’t track well. Use the red side of the paddle, turn it to the light, and lock again.' : 'That color is too dull or dark to track. Use the red side of the paddle, turn it to the light, and lock again.', 'bad'];
+    if (!ok) msg = [typeof why === 'string' && why ? why : info.msg || 'That color is too dull or dark to track. Use the red side of the paddle, turn it to the light, and lock again.', 'bad'];
     else {
+      // The lock's own verdict (other things of that color, or a huge area) first, then what the preview saw.
       const n = prev && prev.col && prev.seg.count, busy = n && n.other > Math.max(40 * n.k, 0.5 * n.mine);
-      msg = busy ? ['Locked, but that color is also elsewhere in the picture (red). Move those things out of view, or lock the other side.', 'warn'] : ['Locked. The paddle shows yellow; anything red also matches its color.', 'good'];
+      msg = info.reason === 'others' || info.reason === 'big' ? [info.msg, 'warn']
+        : busy ? ['Locked, but that color is also elsewhere in the picture (red). Move those things out of view, or lock the other side.', 'warn']
+        : [`Locked${info.name ? ` on ${info.name}` : ''}. The paddle shows yellow; anything red also matches its color.`, 'good'];
       Tracker.setStatus('Tracking paddle');
       try { Sound.hit(0.5, 4); } catch (e) { /* sound is optional */ }
     }
@@ -846,7 +837,7 @@ const UI = {
     this.renderHealth();
     // Framing / paddle: done once everything that matters has looked right for a moment.
     if ((c.step === 'frame' || c.step === 'paddle') && !c.done[c.step] && !c.count) {
-      const bad = !Input.valid || (!Settings.paddle && c.mode === 'paddle') || this.camChecks().some((k) => k.st === 'bad' || k.st === 'wait');
+      const bad = !Input.valid || (!Settings.paddle && c.mode === 'paddle') || this.camChecks().some((k) => (k.st === 'bad' || k.st === 'wait') && k.k !== 'fps');   // a slow camera is worth a warning, not a wait
       if (bad) c.good = 0;
       else if (!c.good) c.good = now;
       else if (now - c.good > 1500) { c.done[c.step] = true; c.next = now + 1400; }
@@ -1000,7 +991,7 @@ const UI = {
       fps: pick(s.fps, s.rate, T.rate, inInfo(/([\d.]+) fps/)),
       ms: pick(s.procMs, s.ms, s.proc, T.procMs, inInfo(/([\d.]+) ms per frame/)),
       lag: pick(s.lagMs, s.lag, T.lagMs, inInfo(/([\d.]+) ms behind/)),
-      est: (s.stamp || T.stamp) !== 'camera',
+      est: (s.stamp || T.stamp) === 'arrival', failed: s.state === 'failed', error: s.error ? String(s.error.message || s.error) : '',
     };
   },
   renderHealth() {
@@ -1029,7 +1020,8 @@ const UI = {
       else add('light', 'Light', 'good', 'Good');
     }
     if (c.mode === 'hand') {
-      if (!Tracker.handsReady()) add('hand', 'Hand', c.camErr ? 'bad' : 'wait', c.camErr ? 'Tracker didn’t start' : 'Loading the tracker…', c.camErr || 'Loading hand tracking. The first time takes a few seconds…');
+      const err = c.camErr || (st.failed && (st.error || 'Hand tracking didn’t start. Check your internet and reload, or use the paddle or mouse.'));
+      if (!Tracker.handsReady()) add('hand', 'Hand', err ? 'bad' : 'wait', err ? 'Tracker didn’t start' : 'Loading the tracker…', err || 'Loading hand tracking. The first time takes a few seconds…');
       else if (!Input.valid) add('hand', 'Hand', 'bad', 'Not found', 'Can’t see your hand: hold your racket hand up, palm to the camera.');
       else {
         add('hand', 'Hand', 'good', 'Found');
@@ -1044,9 +1036,11 @@ const UI = {
       const P = Tracker.preview && Tracker.lockPrev, n = Tracker.seg && Tracker.seg.count, busy = (q) => q && q.other > Math.max(40 * q.k, 0.5 * q.mine);
       if (Tracker.preview) {
         if (!P) add('circle', 'In circle', 'wait', 'Looking…');
-        else if (!P.col) add('circle', 'In circle', 'bad', 'Nothing bright enough', 'Nothing colorful in the circle: hold the paddle’s face there. Black or dull rubber can’t be tracked.');
-        else {
-          const nm = this.hueName(P.col.h);
+        else if (!P.col) {
+          const why = P.info && P.info.reason, short = { black: 'Black: can’t track', dark: 'Too dark', grey: 'No color', skin: 'Looks like skin', dull: 'Too dull', mixed: 'Mixed colors' }[why];
+          add('circle', 'In circle', 'bad', short || 'Nothing bright enough', (P.info && P.info.msg) || 'Nothing colorful in the circle: hold the paddle’s face there. Black or dull rubber can’t be tracked.');
+        } else {
+          const nm = (P.info && P.info.name) || this.hueName(P.col.h);
           if (busy(P.seg.count)) add('circle', 'In circle', 'warn', `${nm}, but also elsewhere`, `The ${nm} in the circle is also elsewhere in the picture (red): move those things out of view, or use the paddle’s other side.`);
           else add('circle', 'In circle', 'good', `${nm[0].toUpperCase() + nm.slice(1)}: good to lock`, `${nm[0].toUpperCase() + nm.slice(1)} in the circle. Press Lock paddle color.`);
         }
