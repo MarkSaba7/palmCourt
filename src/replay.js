@@ -235,7 +235,7 @@ export const Replay = {
       if (this.buf) this.overlay(false);
       if (this.onBoard) this.onBoard(null, 0);
     }
-    this.n = 0;
+    this.n = 0; this.lastAt = -99;   // (a new match, perhaps on another clock: an online guest's jumps to the host's)
   },
   finish() {
     this.phase = 'idle'; this.active = false; this.foot.visible = false;

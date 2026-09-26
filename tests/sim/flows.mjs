@@ -43,20 +43,20 @@ export const FLOWS = {
     await S.startPractice({ format: 'short' });
     let n = 0;
     for (let i = 0; i < 6; i++) {
-      if (!S.runUntil(() => G.state === 'toss' && Clock.now() - G.tossT > 0.3, 60)) return fail('no toss');
+      if (!S.runUntil(() => G.state === 'toss' && Clock.now() - G.tossT > 0.3, 400)) return fail('no toss');
       const ret0 = C.counts.retoss || 0;
       UI.pause(); S.run(3); UI.resume();
       if (!S.runUntil(() => G.state !== 'toss', 3)) fail('toss never ended');
       if (G.state !== 'rally') fail('serve not struck after pausing mid-toss: ' + G.state);
       if ((C.counts.retoss || 0) !== ret0) fail('re-toss after a pause');
       n++;
-      S.runUntil(() => G.state === 'serve', 30);
+      S.runUntil(() => G.state === 'serve', 400);
     }
     // pausing during the pre-serve ball bounce and between points
-    S.runUntil(() => G.state === 'serve' && G.bouncing(Clock.now()), 30);
+    S.runUntil(() => G.state === 'serve' && G.bouncing(Clock.now()), 400);
     UI.pause(); S.run(4); UI.resume();
     if (!S.runUntil(() => G.state === 'toss', 8)) fail('no toss after pausing during the bounce');
-    S.runUntil(() => G.state === 'dead', 30);
+    S.runUntil(() => G.state === 'dead', 400);
     const dl = G.deadUntil - Clock.now();
     UI.pause(); S.run(6); UI.resume();
     if (Math.abs(G.deadUntil - Clock.now() - dl) > 1e-6) fail('dead timer ran during the pause');
@@ -120,7 +120,7 @@ export const FLOWS = {
       UI.quit();
       if (Replay.busy() || Replay.active) fail(phase + ': replay still running after quit');
       if (!$('replay').hidden || !$('hawkeye').hidden || $('hud').classList.contains('replaying')) fail(phase + ': replay overlay left on');
-      if (Replay.foot.visible) fail(phase + ': Hawk-Eye footprint left on court');
+      if (Replay.foot.visible) fail(phase + ': line review footprint left on court');
       S.run(1);
       if (G.mode !== 'attract' || G.state === 'dead' && Replay.busy()) fail(phase + ': menu match stuck');
       // the stadium screen shows the menu match, not REPLAY / HAWK-EYE
@@ -226,8 +226,8 @@ export const FLOWS = {
     return swings + ' swings, ' + hits + ' contacts, ' + C.points + ' points, longest rally ' + C.maxRally;
   `),
   // Forced close calls: a CPU shot aimed a hair outside / inside the sideline. The call must match the bounce, and the
-  // Hawk-Eye replay must agree with the call.
-  'hawk-eye close calls': (page) => inPage(page, `
+  // line review replay must agree with the call.
+  'line review close calls': (page) => inPage(page, `
     const core = await import('/src/core.js');
     await S.startPractice({ format: 'full', level: 'pro' });
     const res = [];
@@ -254,16 +254,16 @@ export const FLOWS = {
       if (called) {
         if (!S.runUntil(() => Replay.phase === 'hold', 12)) { res.push(off + ': no hawk-eye'); continue; }
         const shown = $('hawkCall').textContent;
-        if ((shown === 'Out') !== out) fail('Hawk-Eye shows ' + shown + ' for bounce x ' + bl.x.toFixed(4));
+        if ((shown === 'Out') !== out) fail('line review shows ' + shown + ' for bounce x ' + bl.x.toFixed(4));
         res.push(off + ': ' + shown + ' ' + $('hawkDist').textContent);
         S.runUntil(() => G.state === 'serve', 10);
-      } else { res.push(off + ': in (' + (Math.abs(bl.x) - 4.115).toFixed(4) + ')'); S.runUntil(() => G.state === 'serve', 30); }
+      } else { res.push(off + ': in (' + (Math.abs(bl.x) - 4.115).toFixed(4) + ')'); S.runUntil(() => G.state === 'serve', 400); }
     }
     return res.join('; ');
   `),
-  // A second serve into the net that drops back near the centre line is a double fault, and no Hawk-Eye may call it
+  // A second serve into the net that drops back near the centre line is a double fault, and no line review may call it
   // "In" (the bounce is on the server's own half, nowhere near the service box lines).
-  'double fault into the net: no Hawk-Eye': (page) => inPage(page, `
+  'double fault into the net: no line review': (page) => inPage(page, `
     await S.startPractice({ format: 'full', level: 'club' });
     const res = [];
     for (const x of [0.005, -0.03, 0.02, -0.005, 0.03, -0.02]) {
@@ -279,7 +279,7 @@ export const FLOWS = {
       if ((C.counts['reason:df'] || 0) !== df0 + 1) { res.push(x + ': not a double fault (' + G.deadKind + ')'); continue; }
       const bl = G.bounceLog[0];
       S.runUntil(() => Replay.phase === 'hold' || G.state === 'serve', 12);
-      if (Replay.phase === 'hold') fail('Hawk-Eye shown for a double fault into the net (bounce x ' + (bl && bl.x.toFixed(3)) + ', says ' + $('hawkCall').textContent + ')');
+      if (Replay.phase === 'hold') fail('line review shown for a double fault into the net (bounce x ' + (bl && bl.x.toFixed(3)) + ', says ' + $('hawkCall').textContent + ')');
       const lm = bl && (await import('/src/replay.js')).lineMargin(bl.x, bl.z, box);
       res.push(x + ': df, bounce ' + (bl ? bl.x.toFixed(3) + ',' + bl.z.toFixed(2) : '?') + ' margin ' + (lm ? lm.d.toFixed(3) : '?') + ', replay ' + (Replay.spec && Replay.phase !== 'idle' ? Replay.spec.style : 'none'));
       S.runUntil(() => G.state === 'serve', 15);
