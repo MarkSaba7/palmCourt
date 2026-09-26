@@ -32,6 +32,7 @@ export async function onlineMatch(A, B, o = {}) {
     t += chunk;
     if (a.mode === 'online' && b.mode === 'online') started = true;
     else if (started || t > 5) { if (!started) fail(`match did not start: host ${a.mode}, guest ${b.mode}`); break; }
+    else continue;   // the guest hasn't had 'start' yet
     // between points both machines must agree on the whole score
     if (a.st === 'serve' && b.st === 'serve' && a.m && b.m) { compared++; if (!same(a.m, b.m)) { fail(`scores differ at ${t.toFixed(1)} s: host ${JSON.stringify(a.m.pts)} ${JSON.stringify(a.m.games)} srv ${a.m.server}/${a.m.serveNo} · guest ${JSON.stringify(b.m.pts)} ${JSON.stringify(b.m.games)} srv ${b.m.server}/${b.m.serveNo}`); break; } }
     if (disconnectAt != null && t >= disconnectAt && !cut) {
@@ -51,7 +52,8 @@ export async function onlineMatch(A, B, o = {}) {
       matches++;
       if (!same(a.m, b.m)) fail('final scores differ');
       if (a.screen !== 'over' || b.screen !== 'over') fail(`over screens: host ${a.screen} guest ${b.screen}`);
-      note = `${a.m.games.join('-')}${a.m.tb ? ` (${a.m.pts.join('-')})` : ''}, winner ${a.m.winner}`;
+      const st = a.m.stats;
+      note = `${a.m.games.join('-')}${a.m.tb ? ` (${a.m.pts.join('-')})` : ''}, winner ${a.m.winner} (points ${st.points.join('-')}, winners ${st.winners.join('-')}, errors ${st.errors.join('-')}, aces ${st.aces.join('-')})`;
       if (rematch && matches === 1) {
         await B.evaluate(async () => { const { UI } = await import('/src/ui.js'); UI.rematch(); });   // the guest asks for a rematch
         continue;
@@ -66,5 +68,5 @@ export async function onlineMatch(A, B, o = {}) {
     if (disconnectAt != null && !/lost/.test(rA.note)) fail('host not told the connection was lost: ' + rA.note);
     note = `after drop: host ${rA.mode} "${rA.note}", guest ${rB.mode}`;
   } else if (matches < (rematch ? 2 : 1)) fail(`match not finished in ${maxT} s (${a.st}/${b.st})`);
-  return { errors: [...errors, ...rA.errors.map((e) => ({ side: 'host', ...e })), ...rB.errors.map((e) => ({ side: 'guest', ...e }))], note: `${note} · ${rA.points}+${rB.points} calls, ${compared} checks, host counts ${JSON.stringify(Object.fromEntries(Object.entries(rA.counts).filter(([k]) => /^(call|reason|fault|let|onRemote)/.test(k))))}` };
+  return { errors: [...errors, ...rA.errors.map((e) => ({ side: 'host', ...e })), ...rB.errors.map((e) => ({ side: 'guest', ...e }))], note: `${note} · ${rA.points}+${rB.points} calls, ${compared} checks, host counts ${JSON.stringify(Object.fromEntries(Object.entries(rA.counts).filter(([k]) => /^(call|reason|fault|let|onRemote|bot|ground|timing)/.test(k))))} · guest counts ${JSON.stringify(Object.fromEntries(Object.entries(rB.counts).filter(([k]) => /^(reason|bot|ground|timing)/.test(k))))}` };
 }

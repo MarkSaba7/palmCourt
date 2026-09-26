@@ -20,7 +20,8 @@ class Match {
   toJSON() {
     return { pts: this.pts, games: this.games, tb: this.tb, server: this.server, tbFirst: this.tbFirst, serveNo: this.serveNo, over: this.over, winner: this.winner, stats: this.stats };
   }
-  load(o) { Object.assign(this, JSON.parse(JSON.stringify(o))); }
+  // The other machine's score (online). Only the score fields: a message from another version can't replace methods or the format.
+  load(o) { const c = JSON.parse(JSON.stringify(o)); for (const k of ['pts', 'games', 'tb', 'server', 'tbFirst', 'serveNo', 'over', 'winner', 'stats']) if (k in c) this[k] = c[k]; }
   get pointsPlayed() { return this.pts[0] + this.pts[1]; }
   get court() { return this.pointsPlayed % 2 === 0 ? 'deuce' : 'ad'; }
   get currentServer() {

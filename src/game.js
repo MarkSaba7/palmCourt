@@ -935,7 +935,7 @@ const Game = {
     const b = this.ball, pl = this.remote();
     b.p = { ...m.p }; b.v = { ...m.v }; b.w = { ...m.w }; b.simT = m.t; b.netDone = false; b.rolling = false; b.active = b.visible = true;
     b.lastHitter = pl.idx; b.bounces = 0; b.netTouched = false; b.serve = m.serve || null; b.rally = m.rally; b.hitT = m.t;
-    this.hist.length = 0; this.pending = null; this.state = 'rally';
+    this.hist.length = 0; this.bounceLog.length = 0; this.pending = null; this.state = 'rally';   // (the call looks at this shot's bounces only)
     if (m.serve) pl.avatar.serveHit(m.t); else pl.avatar.swing(m.stroke === 'bh' ? 'bh' : 'fh', m.t);
     Sound.hit(0.6, this.camDist(b.p), 1, !!m.serve);
     if (m.serve) this.match.stats.fastest[pl.idx] = Math.max(this.match.stats.fastest[pl.idx], m.kmh || 0);
@@ -951,6 +951,9 @@ const Game = {
     else if (m.kind === 'fault') { this.enterDead(1.6, 'fault'); this.announceFault(m.reason); }
     else if (m.kind === 'let') { this.enterDead(1.6, 'let'); this.announceLet(); }
     UI.updateScore();
+    // Both machines report every point and fault, not only the one that made the call.
+    if (m.kind === 'point') Bus.emit('point', { w: m.w, reason: m.reason, rally: m.rally, ev: m.ev, mode: this.mode, localIdx: this.localIdx });
+    else if (m.kind === 'fault') Bus.emit('fault', { reason: m.reason, serveNo: 1, mode: this.mode });
   },
 };
 Game.init = function () {
