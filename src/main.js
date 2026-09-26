@@ -11,6 +11,7 @@ import { Replay } from './replay.js';
 import { BallKids } from './render/ballkids.js';
 import { Profile } from './profile.js';
 import { Progress } from './progress.js';
+import { TourUI } from './tourui.js';
 import * as Economy from './economy.js';
 
 const $ = (id) => document.getElementById(id);
@@ -73,6 +74,7 @@ async function boot() {
   Env.setTimeOfDay(Settings.tod || 'day');
   status('Warming up…', 92); await yieldFrame();
   UI.init();
+  TourUI.init();
   Game.init();
   if (software) UI.gpuWarning();
   Game.startAttract();
