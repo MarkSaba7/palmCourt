@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- 404 pages are served at any depth, so links resolve from the site root (filled in by tools/build-site.mjs). -->
+<base href="https://palmcourt.example/">
+<title>Page not found | Palm Court</title>
+<meta name="description" content="This page does not exist. Play Palm Court or find your way from here.">
+<!-- Addresses use the placeholder palmcourt.example: tools/build-site.mjs swaps in SITE_URL from site/config.mjs. -->
+<meta name="robots" content="noindex">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Palm Court">
+<meta property="og:title" content="Page not found | Palm Court">
+<meta property="og:description" content="This page does not exist. Play Palm Court or find your way from here.">
+<meta property="og:url" content="https://palmcourt.example/404.html">
+<meta property="og:image" content="https://palmcourt.example/site/og.jpg">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A Palm Court match at golden hour on a blue hard court in a packed stadium">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#09131d">
+<link rel="icon" href="site/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="site/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Barlow:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="site/site.css">
+<script src="site/site.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-head">
+  <div class="wrap">
+    <a class="logo" href="./"><img src="site/icon.svg" alt="" width="30" height="30">Palm Court</a>
+    <nav class="nav" aria-label="Main"><a href="how-to-play.html">How to play</a><a href="faq.html">FAQ</a><a href="about.html">About</a></nav>
+    <a class="btn primary" href="play/">Play free</a>
+  </div>
+</header>
+<main id="main">
+<section class="page-head">
+  <div class="wrap">
+    <p class="eyebrow">404</p>
+    <h1>Out!</h1>
+    <p class="lede">That page landed wide. It may have moved, or the link has a typo.</p>
+  </div>
+</section>
+<div class="wrap layout single"><div class="prose">
+    <div class="actions" style="margin-top:0"><a class="btn primary big" href="play/">Play free</a><a class="btn big" href="./">Home</a></div>
+    <p style="margin-top:32px">Looking for something else? Try <a href="how-to-play.html">How to play</a>, the <a href="faq.html">FAQ</a>, the <a href="privacy.html">privacy policy</a> or the <a href="contact.html">contact page</a>.</p>
+  </div></div>
+</main>
+<footer class="site-foot">
+  <div class="wrap">
+    <div>
+      <a class="logo" href="./"><img src="site/icon.svg" alt="" width="30" height="30" loading="lazy">Palm Court</a>
+      <p>Motion-controlled tennis in your browser. Swing your phone, your hand or a paddle, and the player on court does the running.</p>
+    </div>
+    <div>
+      <h2>Game</h2>
+      <ul><li><a href="play/">Play free</a></li><li><a href="how-to-play.html">How to play</a></li><li><a href="faq.html">FAQ</a></li><li><a data-steam href="https://store.steampowered.com/app/YOUR_APP_ID/Palm_Court/"><span>Wishlist on Steam</span></a></li></ul>
+    </div>
+    <div>
+      <h2>Palm Court</h2>
+      <ul><li><a href="about.html">About</a></li><li><a href="contact.html">Contact</a></li><li><a href="privacy.html">Privacy policy</a></li><li><a href="terms.html">Terms of use</a></li></ul>
+    </div>
+    <p class="fine">© <span data-year>2026</span> Palm Court. Every player, tournament and sponsor in the game is fictional. Palm Court is not affiliated with any real player, tour or brand.</p>
+  </div>
+</footer>
+</body>
+</html>

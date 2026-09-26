@@ -1,0 +1,8 @@
+# ads.txt for Palm Court: tells ad buyers which companies may sell ads on this domain.
+# It only counts at the root of a domain (https://yourdomain/ads.txt), which the custom domain gives you.
+#
+# Nothing to do by hand: once site/config.mjs (or the ADSENSE_CLIENT repository variable) has your AdSense
+# publisher id, the deploy step appends the line below with your id. To write it yourself instead, replace
+# pub-0000000000000000 with your id (the ca-pub-… number without "ca-") and remove the leading "# ":
+#
+# google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0

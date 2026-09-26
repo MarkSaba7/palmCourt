@@ -1,4 +1,4 @@
-# Publishes the game to GitHub Pages on every push to main (or by hand from the Actions tab).
+# Publishes the website and the game to GitHub Pages on every push to main (or by hand from the Actions tab).
 # Repository Settings → Pages → Source must be "GitHub Actions".
 name: Deploy to GitHub Pages
 
@@ -30,17 +30,24 @@ jobs:
       # A syntax error in any module leaves the page stuck on the loading screen, so don't publish one.
       - name: Check every module parses
         run: |
-          for f in $(find src -name '*.js'); do
+          for f in $(find src site tools -name '*.js' -o -name '*.mjs'); do
             node --input-type=module --check < "$f" || { echo "::error file=$f::syntax error"; exit 1; }
           done
-      # Only what the browser needs: the game, the phone racket page and the modules (no serve.py, tests or notes).
-      - name: Collect the site
-        run: |
-          mkdir _site
-          cp index.html controller.html _site/
-          cp -r src _site/
-          touch _site/.nojekyll
-      - uses: actions/configure-pages@v5
+      - id: pages
+        uses: actions/configure-pages@v5
+      # Only what the browser needs: the website pages, the game (play/ + src/), the phone racket page and the site
+      # assets (no serve.py, tests, docs or notes). tools/build-site.mjs also fills in the site settings from
+      # site/config.mjs; repository variables with the same names override them (Settings → Secrets and variables →
+      # Actions → Variables). Until there's a domain the site uses its Pages address (PAGES_URL). See docs/PUBLISHING.md.
+      - name: Build the site
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          ADSENSE_CLIENT: ${{ vars.ADSENSE_CLIENT }}
+          AD_SLOT: ${{ vars.AD_SLOT }}
+          CONTACT_EMAIL: ${{ vars.CONTACT_EMAIL }}
+          STEAM_URL: ${{ vars.STEAM_URL }}
+          PAGES_URL: ${{ steps.pages.outputs.base_url }}
+        run: node tools/build-site.mjs _site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
