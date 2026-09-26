@@ -52,7 +52,7 @@ const ADAPTERS = {
       this.sdk = sdk;
       return sdk.environment !== 'disabled';
     },
-    loading(on) { const g = this.sdk && this.sdk.game; if (g) call(on ? g.loadingStart : g.loadingStop); },
+    loading(on) { const g = this.sdk && this.sdk.game; if (!g || (!on && !this.loadingOn)) return; this.loadingOn = on; call(on ? g.loadingStart : g.loadingStop); },   // only a started load is stopped
     start() { call(this.sdk?.game?.gameplayStart); },
     stop() { call(this.sdk?.game?.gameplayStop); },
     happy() { call(this.sdk?.game?.happytime); },
@@ -140,7 +140,7 @@ const Hold = {
     this.clock = !Clock.paused;
     if (this.clock) Clock.pause();
     const c = Sound.ctx;
-    this.audio = !!c && c.state === 'running';
+    this.audio = !!c && c.state !== 'closed';   // also when a resume is still pending from the last ad
     if (this.audio) c.suspend().catch(() => {});
     try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) { /* no voice */ }
     if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();   // Enter can't restart anything
@@ -201,8 +201,7 @@ const Platform = {
     this.ready = settle(this.adapter.init(), T.load + T.init + 1000, false).then((ok) => {
       this.ok = !!ok; this.rewardedOk = this.ok && !!this.adapter.rewarded;
       if (this.name !== 'none') console.info(`[platform] ${this.name} ${this.ok ? 'ready' : 'unavailable: playing without ads'}`);
-      if (this.ok && !this.loaded) call(this.adapter.loading?.bind(this.adapter), true);
-      if (this.ok && this.loaded) call(this.adapter.loading?.bind(this.adapter), false);
+      if (this.ok) call(this.adapter.loading?.bind(this.adapter), !this.loaded);   // SDK ready after the game: just "loaded"
       this.renderLinks();
       return this.ok;
     });
@@ -265,7 +264,7 @@ const Platform = {
         if (started) { Pace.since = 0; Pace.lastAd = performance.now(); }
         this.busy = null;
         Bus.emit('ad', { kind, where, state: 'end', shown: started });
-        resolve(v === true);
+        resolve(v === true && (started || kind === 'rewarded'));   // an interstitial counts only if one really played
       };
       timers = [setTimeout(() => { if (!started) finish(false); }, T.start), setTimeout(() => finish(false), max)];
       let p;
