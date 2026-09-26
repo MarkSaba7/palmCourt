@@ -11,6 +11,8 @@ import { Platform } from './platform.js';
 import { PROS, REAL_PROS, proById, proName, randomPro, proPortrait, randomPortrait } from './pros.js';
 import { Profile } from './profile.js';
 import { isUnlocked, unlockHint } from './economy.js';
+import { Options } from './options.js';
+import { Pad } from './pad.js';
 
 // =====================================================================
 // UI: menus, lobby, camera check, HUD, main loop
@@ -72,6 +74,7 @@ const UI = {
     Input.on((ev) => this.onInputEvent(ev));
     document.addEventListener('visibilitychange', () => { if (document.hidden && Game.mode === 'cpu' && this.screen === null) this.pause(); });
     if (Settings.control === 'phone') Phone.ensure();   // so a phone paired before a reload finds the game again by itself
+    Options.init();   // Settings screen, Esc / controller back, gamepads, focus-loss pause
   },
   buildSettings() {
     const host = $('settings');
@@ -1263,7 +1266,7 @@ const UI = {
     el.dataset.key = key;
     el.replaceChildren(...sets.map((s) => { const c = document.createElement('i'); c.textContent = s[i]; if (s[i] > s[1 - i]) c.className = 'won'; return c; }));
   },
-  calm() { return matchMedia('(prefers-reduced-motion: reduce)').matches; },
+  calm() { return !!Settings.reduceMotion || matchMedia('(prefers-reduced-motion: reduce)').matches; },
   // Broadcast names: a pro's short name, else the surname of a long full name; a country code if the player has one.
   shortName(i) {
     const pl = Game.players[i], full = String(Game.names[i] || '').trim(), parts = full.split(/\s+/);
@@ -1328,7 +1331,7 @@ const UI = {
     let t = '';
     if (me && m && (Game.mode === 'cpu' || Game.mode === 'online') && this.screen === null) {
       const serving = m.currentServer === me.idx;
-      if (Game.state === 'serve' && serving) t = Settings.control === 'mouse' ? (matchMedia('(pointer: coarse)').matches ? 'Tap to toss' : 'Click (or press Space) to toss') : Settings.control === 'phone' ? 'Tap or lift your phone to toss' : 'Raise your hand above the toss line to toss';
+      if (Game.state === 'serve' && serving) t = Pad.active ? `Press ${Pad.glyph('a')} to toss` : Settings.control === 'mouse' ? (matchMedia('(pointer: coarse)').matches ? 'Tap to toss' : 'Click (or press Space) to toss') : Settings.control === 'phone' ? 'Tap or lift your phone to toss' : 'Raise your hand above the toss line to toss';
       else if (Game.state === 'toss' && serving) t = 'Swing!';
       else if (Game.state === 'serve' && Game.mode === 'online') t = `${Game.names[m.currentServer]} to serve`;
     }

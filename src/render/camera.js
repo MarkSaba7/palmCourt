@@ -232,6 +232,6 @@ export const Cam = {
     this.side = Math.random() < 0.5 ? -1 : 1; this.side2 = sign(); this.orbit0 = Math.random() * Math.PI * 2;
   },
   nextShot() { return choose(LIVE, this.shot); },
-  shake(a) { this.shakeAmt = Math.max(this.shakeAmt, a); this.shakeT = 0; },
+  shake(a) { if (Settings.reduceMotion) return; this.shakeAmt = Math.max(this.shakeAmt, a); this.shakeT = 0; },
   snap(me) { this.snapNext = true; this.update(1 / 60, me, this.game); this.fov = camera.fov; },
 };
