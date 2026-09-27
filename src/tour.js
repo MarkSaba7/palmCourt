@@ -186,7 +186,7 @@ export function fakeScore(R, format, close) {
   return `${G + 1}–${G} (${Math.floor(R() * 6)})`;
 }
 // Slot indexes of match m in round r: the draw pairs for r = 0, then the winners of the two feeder matches.
-export function pairOf(run, r, m) { return r === 0 ? [2 * m, 2 * m + 1] : [run.wins[r - 1][2 * m], run.wins[r - 1][2 * m + 1]]; }
+export function pairOf(run, r, m) { const w = r === 0 ? null : run.wins[r - 1] || []; return w ? [w[2 * m] ?? null, w[2 * m + 1] ?? null] : [2 * m, 2 * m + 1]; }
 export const myMatch = (run, r = run.round) => Math.floor(run.me / 2 ** (r + 1));
 function simRound(run, r, R) {
   const T = TIERS[eventById(run.ev).tier], count = run.n / 2 ** (r + 1);
