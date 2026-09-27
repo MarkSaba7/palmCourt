@@ -577,7 +577,7 @@ export const ProgressUI = {
     const P = await platform();
     const ads = P && P.ads;
     let ok = false;
-    try { ok = !!ads && typeof ads.rewarded === 'function' && typeof ads.available === 'function' && !!ads.available('rewarded'); } catch (e) { ok = false; }
+    try { ok = !!ads && typeof ads.rewarded === 'function' && typeof ads.available === 'function' && !!ads.available('doubleFuzz'); } catch (e) { ok = false; }
     if (!ok || this.anim !== A || UI.screen !== 'over') return;
     btn.innerHTML = `${FUZZ()} Watch an ad: double your Fuzz <b>+${nf(A.res.fuzz)}</b>`;
     btn.disabled = false; btn.hidden = false;
@@ -587,7 +587,7 @@ export const ProgressUI = {
     if (!A || A.doubled || btn.disabled) return;
     btn.disabled = true; btn.textContent = 'Loading the ad…';
     let ok = false;
-    try { const P = await platform(); ok = !!(await P.ads.rewarded('double-fuzz')); } catch (e) { ok = false; }
+    try { const P = await platform(); ok = !!(await P.ads.rewarded('doubleFuzz')); } catch (e) { ok = false; }
     if (!ok) { btn.textContent = 'No ad right now. Maybe next time.'; setTimeout(() => { if (this.anim === A) btn.hidden = true; }, 2500); return; }
     A.doubled = true;
     Profile.addFuzz(A.res.fuzz, 'ad: double match Fuzz');
