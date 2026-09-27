@@ -30,6 +30,8 @@ const CSS = `
 .tour-slab { width: min(920px, 100%); gap: 16px; }
 .tour-head { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: flex-end; justify-content: space-between; }
 .tour-rank { display: grid; justify-items: end; gap: 2px; }
+.tour-head > div:first-child { flex: 1 1 320px; min-width: 0; }
+#tourEvent .tour-rank b { font-size: 40px; }
 .tour-rank .tr-label { font: 700 11px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--mist); }
 .tour-rank b { font: 900 52px/.9 var(--display); color: var(--optic); }
 .tour-rank .tr-sub { font-size: 13px; color: var(--mist); }
