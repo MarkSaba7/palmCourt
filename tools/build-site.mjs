@@ -23,8 +23,11 @@ if (!url || url === PH.url) url = (process.env.PAGES_URL || PH.url).trim().repla
 if (!/^https?:\/\/[a-z0-9.-]+(:\d+)?(\/[\w./-]*)?$/i.test(url)) fail(`SITE_URL "${url}" is not an address like https://palmcourt.com`);
 const host = new URL(url).hostname, custom = url !== PH.url && !/\.github\.io$/i.test(host);   // PAGES_URL is the custom domain once one is set in Settings → Pages
 
-const client = setting('ADSENSE_CLIENT'), ads = /^ca-pub-\d{16}$/.test(client) && client !== PH.client;
-if (client && client !== PH.client && !ads) fail(`ADSENSE_CLIENT "${client}" should look like ca-pub-1234567890123456`);
+// AdSense: ADSENSE_CLIENT, else the game's own id (src/config.js). Written only on a real domain, never on github.io.
+let client = setting('ADSENSE_CLIENT');
+if (!client) { try { client = String((await import('../src/config.js')).CONFIG.adsense?.client || ''); } catch (e) { client = ''; } }
+const realClient = /^ca-pub-\d{16}$/.test(client) && client !== PH.client, ads = realClient && custom;
+if (client && client !== PH.client && !realClient) fail(`ADSENSE_CLIENT "${client}" should look like ca-pub-1234567890123456`);
 const slot = setting('AD_SLOT'), slotOk = ads && /^\d{6,}$/.test(slot);
 const email = setting('CONTACT_EMAIL') || PH.email;
 const steam = setting('STEAM_URL');
@@ -58,14 +61,14 @@ for (const f of texts) {
   if (s !== before) fs.writeFileSync(f, s);
 }
 
-// ads.txt: the template stays commented until there's a publisher id; then Google is authorised as a direct seller.
-const adsTxt = path.join(OUT, 'ads.txt');
-if (ads) fs.appendFileSync(adsTxt, `google.com, ${client.replace(/^ca-/, '')}, DIRECT, f08c47fec0942fa0\n`);
+// ads.txt: authorise Google as a direct seller for the publisher id (unless the repo's ads.txt already lists it).
+const adsTxt = path.join(OUT, 'ads.txt'), pub = client.replace(/^ca-/, '');
+if (realClient) { const cur = fs.existsSync(adsTxt) ? fs.readFileSync(adsTxt, 'utf8') : ''; if (!new RegExp(`^google\\.com,\\s*${pub},`, 'm').test(cur)) fs.writeFileSync(adsTxt, cur + (cur && !cur.endsWith('\n') ? '\n' : '') + `google.com, ${pub}, DIRECT, f08c47fec0942fa0\n`); }
 
 // Custom domain: GitHub reads it from Settings → Pages (a CNAME file is ignored by Actions deployments, but it
 // documents the domain in the published site and other hosts or a branch deployment can use it).
 if (custom) fs.writeFileSync(path.join(OUT, 'CNAME'), host + '\n');
 
 const left = texts.filter((f) => /https:\/\/palmcourt\.example|@palmcourt\.example/.test(fs.readFileSync(f, 'utf8'))).map((f) => path.relative(OUT, f));
-console.log(`build-site: ${OUT}\n  site ${url}${custom ? ' (custom domain)' : ' (no domain yet)'}\n  ads ${ads ? `on, ${client}, ${adPages} pages, ${slotOk ? 'slot ' + slot : 'no fixed slot'}` : 'off'}\n  contact ${email}${email === PH.email ? ' (placeholder)' : ''}\n  steam ${steam || 'coming soon'}\n  CNAME ${fs.existsSync(path.join(OUT, 'CNAME')) ? host : 'none'}`);
+console.log(`build-site: ${OUT}\n  site ${url}${custom ? ' (custom domain)' : ' (no domain yet)'}\n  ads ${ads ? `on, ${client}, ${adPages} pages, ${slotOk ? 'slot ' + slot : 'no fixed slot'}` : realClient ? 'off until the site has its own domain (' + client + ')' : 'off'}\n  contact ${email}${email === PH.email ? ' (placeholder)' : ''}\n  steam ${steam || 'coming soon'}\n  CNAME ${fs.existsSync(path.join(OUT, 'CNAME')) ? host : 'none'}`);
 if (left.length && url !== PH.url) console.log('  note: still mentions palmcourt.example: ' + left.join(', '));

@@ -87,17 +87,17 @@ const Net = {
       case 'sw': Game.onRemoteSwing(m); break;
       case 'call': Game.onRemoteCall(m); break;
       case 'rematch': UI.rematchFromRemote(); break;
-      case 'bye': this.onClose(); break;
+      case 'bye': this.onClose(true); break;
       case 'full': UI.lobbyStatus('That match already has two players. Ask your friend for a new link.', 'err'); break;
     }
   },
-  onClose() {
+  onClose(left) {
     if (!this.conn && !this.remote) return;
     const wasPlaying = Game.mode === 'online', conn = this.conn;
     this.conn = null; this.remote = null; this.remoteReady = false;
     clearInterval(this.pingTimer);
     try { if (conn && conn.open) conn.close(); } catch (e) { /* already closed */ }
-    UI.connectionLost(wasPlaying);
+    UI.connectionLost(wasPlaying, left === true);
   },
   onError(e) {
     const t = e && e.type;

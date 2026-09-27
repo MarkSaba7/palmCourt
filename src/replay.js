@@ -216,7 +216,7 @@ export const Replay = {
     F.position.set(b1.x, 0.009, b1.z);
     F.rotation.set(0, Math.atan2(b1.vx / v, b1.vz / v), 0);
     F.scale.set(0.065, 1, 0.11);
-    F.userData.fill.material.color.set(out ? 0xff5a44 : 0x5fe08f);
+    F.userData.fill.material.color.set(Settings.cbSafe ? (out ? 0xff9f40 : 0x4ea3ff) : out ? 0xff5a44 : 0x5fe08f);   // blue / orange for colour-blind players
     F.visible = true;
     const cm = Math.abs(S.line.d) * 100;
     $('hawkCall').textContent = out ? 'Out' : 'In';
