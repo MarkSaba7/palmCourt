@@ -159,7 +159,7 @@ export function makeField(ev, season, me, key = '') {
     const [lo, hi] = T.ranks;
     for (let guard = 0; slots.size < n - 1 && guard < 5000; guard++) {
       const k = Math.round(Math.exp(Math.log(lo) + R() * (Math.log(hi) - Math.log(lo))));   // log-uniform: fewer strong players
-      if (k > 5 && k <= FIELD_SIZE) slots.add(k);
+      if (k > 5 && k <= FIELD_SIZE && ![...slots].some((j) => fieldPlayer(j).short === fieldPlayer(k).short)) slots.add(k);   // one of each surname: the bracket shows surnames
     }
   }
   const out = [...slots].map((k) => { const f = fieldPlayer(k), rank = slotRank(k, mine); return { ...f, rank, skill: skillFor(rank), you: false }; });
@@ -226,13 +226,13 @@ export const defending = (t) => t.entries.filter((e) => e.i === absWeek(t) - WEE
 export const rankOf = (t) => rankFor(totalPoints(t));
 
 // ---- editions: the web build plays the Challenger tier; ?edition=steam or ?unlockAll=1 opens the rest ----
-let CONFIG = null;
-import('./config.js').then((m) => { CONFIG = m.CONFIG || null; }, () => {});
+let CONFIG = null, CFG = null;
+import('./config.js').then((m) => { CFG = m; CONFIG = m.CONFIG || null; }, () => {});
 const param = (k) => { try { return new URLSearchParams(globalThis.location?.search || '').get(k); } catch (e) { return null; } };
 export const unlockAll = () => param('unlockAll') === '1';
 export const edition = () => param('edition') || (CONFIG && CONFIG.edition) || 'full';
 export const fullTour = () => unlockAll() || edition() !== 'web';
-export const steamUrl = () => (CONFIG && CONFIG.steamUrl) || '';
+export const steamUrl = () => { try { return CONFIG && CONFIG.steamUrl && (!CFG.wishlistVisible || CFG.wishlistVisible()) ? CONFIG.steamUrl : ''; } catch (e) { return ''; } };   // only a real store page
 
 // Can you enter this event now? { ok, why, steam } (steam: only the Steam edition has it).
 export function eligibility(t, ev, level, { week = true } = {}) {
