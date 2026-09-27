@@ -63,7 +63,7 @@ const Pad = {
     const down = gp.buttons.map((b) => !!(b && (b.pressed || b.value > 0.5))), was = this.prev || down;   // held at first sight: not a press
     this.prev = down;
     const hit = (i) => down[i] && !was[i], ax = gp.axes, lx = ax[0] || 0, ly = ax[1] || 0, rx = ax[2] || 0, ry = ax[3] || 0;
-    if (!this.active && (down.some((d, i) => d && !was[i]) || Math.hypot(lx, ly) > 0.5 || Math.hypot(rx, ry) > 0.5)) this.setActive(true);
+    if (!this.active && (down.some((d, i) => d && (!was[i] || was === down)) || Math.hypot(lx, ly) > 0.5 || Math.hypot(rx, ry) > 0.5)) this.setActive(true);
     const now = tMs / 1000, inMatch = Game.mode === 'cpu' || Game.mode === 'online';
     if (hit(BTN.START) && inMatch && (UI.screen === null || UI.screen === 'pause')) { UI.togglePause(); return; }
     if (UI.screen === null && Game.inPlay()) this.play(gp, down, hit, lx, rx, ry, now);

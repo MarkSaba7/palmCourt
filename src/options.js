@@ -313,6 +313,10 @@ const Nav = {
     if (cur.getAttribute('role') === 'tab') {
       const list = cur.parentElement, tabs = [...list.children], vertical = tabs.length > 1 && tabs[1].getBoundingClientRect().top > tabs[0].getBoundingClientRect().top + 4;
       if (vertical !== side) { Options.stepTab(k); return; }
+      if (k > 0) {   // into the pane: its first control
+        const pane = $(cur.getAttribute('aria-controls')), first = pane && this.focusables(pane)[0];
+        if (first) { this.focus(first); return; }
+      }
     }
     if (side && cur.type === 'radio') {
       const group = [...root.querySelectorAll(`input[type=radio][name="${CSS.escape(cur.name)}"]`)].filter((r) => !r.disabled), i = group.indexOf(cur), next = group[i + k];
