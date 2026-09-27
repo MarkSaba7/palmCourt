@@ -126,7 +126,7 @@ const STYLE = `
 .pg-tabs{display:flex;gap:2px;border-bottom:1px solid var(--edge);overflow-x:auto;scrollbar-width:none}
 .pg-tab{appearance:none;background:none;border:0;border-bottom:3px solid transparent;margin-bottom:-1px;padding:9px 14px 8px;font:800 18px/1 var(--display);letter-spacing:.05em;text-transform:uppercase;color:var(--mist);cursor:pointer;white-space:nowrap;display:flex;gap:7px;align-items:center}
 .pg-tab:hover{color:var(--chalk)}
-.pg-tab[aria-selected=true]{color:var(--chalk);border-bottom-color:var(--optic)}
+.pg-tab[aria-pressed=true]{color:var(--chalk);border-bottom-color:var(--optic)}
 .pg-tab:focus-visible,.pg-chip:focus-visible,.pg-slot:focus-visible{outline:2px solid var(--optic);outline-offset:-2px}
 .pg-body{height:min(56vh,540px);min-height:220px;overflow-y:auto;overscroll-behavior:contain;padding:2px 4px 2px 0}
 .pg-foot{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
@@ -148,6 +148,7 @@ const STYLE = `
 .pg-iname{font:800 16px/1.05 var(--display);text-transform:uppercase;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pg-imeta{font-size:11.5px;line-height:1.3;color:var(--mist);min-height:1.3em;display:flex;align-items:center;gap:4px}
 .pg-item .btn{align-self:end;display:flex;justify-content:center;align-items:center;gap:6px;text-align:center;padding:7px 8px}
+.pg-item .btn[aria-disabled=true]{opacity:.45;cursor:default;background:rgba(242,245,238,.06)}
 .pg-item .btn.confirm{background:var(--coral);border-color:var(--coral);color:var(--ink)}
 .pg-locker{display:grid;grid-template-columns:220px minmax(0,1fr);gap:16px;align-items:start}
 .pg-man{display:grid;gap:8px}
@@ -186,6 +187,7 @@ const STYLE = `
 .pg-ach{display:grid;grid-template-columns:34px minmax(0,1fr) auto;column-gap:10px;row-gap:3px;align-items:center;padding:8px 10px;border:1px solid var(--edge);background:rgba(242,245,238,.03)}
 .pg-ach .pg-medal{grid-row:span 3;width:34px;height:34px}
 .pg-ach:not(.got) .pg-medal{opacity:.4}
+.pg-ach:focus-visible{outline:2px solid var(--optic);outline-offset:1px}
 .pg-ach.got{background:linear-gradient(100deg,rgba(214,240,74,.12),transparent 70%);border-color:rgba(214,240,74,.35)}
 .pg-ach>b{font:800 16px/1 var(--display);text-transform:uppercase;letter-spacing:.03em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pg-ach>span{font:700 11.5px/1 var(--body);color:var(--optic);white-space:nowrap;display:inline-flex;align-items:center;gap:3px}
@@ -302,12 +304,14 @@ export const ProgressUI = {
       <section class="slab wide pg-slab" aria-labelledby="pgHubTitle">
         <header class="pg-head"><div><p class="eyebrow">Your career</p><h2 id="pgHubTitle">Pro Shop</h2></div>
           <div class="pg-wallet"><span class="pg-lv" id="pgHubLv">1</span><span class="pg-wxp"><span class="pg-xp"><i id="pgHubBar"></i></span><small id="pgHubXp"></small></span><span class="pg-fuzz" title="Fuzz: earned by playing, never sold">${FUZZ()}<b id="pgHubFuzz">0</b></span></div></header>
-        <div class="pg-tabs" role="tablist" aria-label="Sections">${TABS.map(([id, name]) => `<button class="pg-tab" role="tab" type="button" id="pgTab-${id}" data-tab="${id}" aria-controls="pgBody">${name}</button>`).join('')}</div>
+        <div class="pg-tabs" role="group" aria-label="Sections">${TABS.map(([id, name]) => `<button class="pg-tab" type="button" id="pgTab-${id}" data-tab="${id}" aria-controls="pgBody">${name}</button>`).join('')}</div>
         <div class="pg-body" id="pgBody" role="tabpanel" tabindex="-1"></div>
-        <footer class="pg-foot"><button class="btn ghost" id="pgBack" type="button">Back <kbd>Esc</kbd></button><p class="status" id="pgMsg" role="status"></p><p class="fine">Fuzz is earned by playing. <kbd>Q</kbd> <kbd>E</kbd> switch tabs</p></footer>
+        <footer class="pg-foot"><button class="btn ghost" id="pgBack" type="button" data-back>Back <kbd>Esc</kbd></button><p class="status" id="pgMsg" role="status"></p><p class="fine">Fuzz is earned by playing. <kbd>Q</kbd> <kbd>E</kbd> switch tabs</p></footer>
       </section></main>`);
     $('pgBack').onclick = () => this.close();
-    for (const b of document.querySelectorAll('.pg-tab')) b.onclick = () => this.show(b.dataset.tab, true);
+    // Plain buttons, not role=tab (the gamepad's Nav steps Settings' tabs on those): a tab opens when it gets focus, so
+    // the D-pad or arrow keys along the row switch sections.
+    for (const b of document.querySelectorAll('.pg-tab')) { b.onclick = () => this.show(b.dataset.tab, true); b.onfocus = () => { if (this.tab !== b.dataset.tab) this.show(b.dataset.tab); }; }
     $('pgBody').addEventListener('click', (e) => this.act(e));
   },
   open(tab) {
@@ -322,7 +326,7 @@ export const ProgressUI = {
   },
   show(tab, focusTab) {
     this.tab = tab;
-    for (const b of document.querySelectorAll('.pg-tab')) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
+    for (const b of document.querySelectorAll('.pg-tab')) b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
     $('pgHubTitle').textContent = (TABS.find((t) => t[0] === tab) || TABS[0])[1];
     $('pgMsg').textContent = '';
     this.render();
@@ -352,13 +356,13 @@ export const ProgressUI = {
     const k = (a) => `data-key="${a}:${item.id}" data-id="${item.id}"`;
     if (open) {
       meta = item.how === 'free' ? 'Free' : P.owns(item.id) ? 'Owned' : item.how === 'earn' ? 'Earned' : `Unlocked at level ${item.level}`;
-      if (cosmetic) btn = on ? `<button class="btn small" disabled ${k('eq')}>Equipped</button>` : `<button class="btn small" data-act="equip" ${k('eq')}>Equip</button>`;
-      else if (item.kind === 'pro') btn = Settings.playAs === item.key ? `<button class="btn small" disabled ${k('eq')}>Playing as</button>` : `<button class="btn small" data-act="playas" ${k('eq')}>Play as</button>`;
+      if (cosmetic) btn = on ? `<button class="btn small" aria-disabled="true" ${k('eq')}>Equipped</button>` : `<button class="btn small" data-act="equip" ${k('eq')}>Equip</button>`;
+      else if (item.kind === 'pro') btn = Settings.playAs === item.key ? `<button class="btn small" aria-disabled="true" ${k('eq')}>Playing as</button>` : `<button class="btn small" data-act="playas" ${k('eq')}>Play as</button>`;
     } else {
       meta = item.how === 'earn' ? `Achievement: ${esc(titleFor(item.id) || '')}` : esc(unlockHint(item.id));
       if (mode === 'shop' && c.ok) btn = `<button class="btn small primary" data-act="buy" ${k('buy')}>Buy · ${FUZZ()} ${nf(item.price)}</button>`;
-      else if (mode === 'shop' && c.reason === 'fuzz') btn = `<button class="btn small" disabled ${k('buy')}>Need ${nf(item.price - P.fuzz)} more</button>`;
-      else if (mode === 'shop' && c.reason === 'level') btn = `<button class="btn small" disabled ${k('buy')}>Reach level ${item.level}</button>`;
+      else if (mode === 'shop' && c.reason === 'fuzz') btn = `<button class="btn small" aria-disabled="true" ${k('buy')}>Need ${nf(item.price - P.fuzz)} more</button>`;
+      else if (mode === 'shop' && c.reason === 'level') btn = `<button class="btn small" aria-disabled="true" ${k('buy')}>Reach level ${item.level}</button>`;
       else if (mode === 'locker' && (item.how === 'buy' || item.how === 'level-or-buy')) btn = `<button class="btn small" data-act="toshop" ${k('shop')}>In the Pro Shop</button>`;
     }
     return `<article class="pg-item${dim ? ' locked' : ''}${on ? ' equipped' : ''}"><div class="pg-prev">${preview(item)}${dim ? LOCK : ''}${on ? '<span class="pg-tag">On</span>' : ''}</div><b class="pg-iname" title="${esc(item.name)}">${esc(item.name)}</b><small class="pg-imeta">${meta}</small>${btn}</article>`;
@@ -399,7 +403,7 @@ export const ProgressUI = {
       const t = Profile.data.achievements[a.id], pr = achievementProgress(a, st);
       const foot = t ? `<div class="pg-ch-row"><small style="text-align:left">Earned ${new Date(t).toLocaleDateString()}</small></div>` : pr ? `<div class="pg-ch-row"><div class="pg-bar"><i style="--p:${(100 * pr.value) / pr.goal}%"></i></div><small>${nf(pr.value)} / ${nf(pr.goal)}</small></div>` : '<div class="pg-ch-row"><small style="text-align:left">In one match</small></div>';
       const title = a.title ? ` Title: ${esc((itemById(a.title) || {}).name || '')}.` : '';
-      return `<article class="pg-ach${t ? ' got' : ''}">${MEDAL(!!t)}<b>${esc(a.name)}</b><span>${FUZZ()}${nf(a.fuzz)}</span><p>${esc(a.desc)}.${title}</p>${foot}</article>`;
+      return `<article class="pg-ach${t ? ' got' : ''}" tabindex="0">${MEDAL(!!t)}<b>${esc(a.name)}</b><span>${FUZZ()}${nf(a.fuzz)}</span><p>${esc(a.desc)}.${title}</p>${foot}</article>`;
     }).join('');
     return `<div class="pg-achsum"><b>${got} / ${ACHIEVEMENTS.length}</b><div class="pg-bar"><i style="--p:${(100 * got) / ACHIEVEMENTS.length}%"></i></div><span class="fine">achievements earned</span></div><div class="pg-achs">${rows}</div>`;
   },
@@ -449,7 +453,7 @@ export const ProgressUI = {
     const root = $('hub'), cur = document.activeElement;
     e.preventDefault();
     if (cur && cur.classList.contains('pg-tab') && dir[1] === 0) { this.show(TABS[(t + dir[0] + TABS.length) % TABS.length][0], true); return; }
-    const els = [...root.querySelectorAll('button:not([disabled])')].filter((el) => el !== cur && el.offsetParent);
+    const els = [...root.querySelectorAll('button:not([disabled]), [tabindex="0"]')].filter((el) => el !== cur && el.offsetParent);
     if (!cur || !root.contains(cur) || cur === $('pgBody')) { (els[0] || $('pgBack')).focus(); return; }
     const r = cur.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     let best = null, bs = Infinity;
@@ -577,7 +581,7 @@ export const ProgressUI = {
     const P = await platform();
     const ads = P && P.ads;
     let ok = false;
-    try { ok = !!ads && typeof ads.rewarded === 'function' && typeof ads.available === 'function' && !!ads.available('rewarded'); } catch (e) { ok = false; }
+    try { ok = !!ads && typeof ads.rewarded === 'function' && typeof ads.available === 'function' && !!ads.available('doubleFuzz'); } catch (e) { ok = false; }
     if (!ok || this.anim !== A || UI.screen !== 'over') return;
     btn.innerHTML = `${FUZZ()} Watch an ad: double your Fuzz <b>+${nf(A.res.fuzz)}</b>`;
     btn.disabled = false; btn.hidden = false;
@@ -587,7 +591,7 @@ export const ProgressUI = {
     if (!A || A.doubled || btn.disabled) return;
     btn.disabled = true; btn.textContent = 'Loading the ad…';
     let ok = false;
-    try { const P = await platform(); ok = !!(await P.ads.rewarded('double-fuzz')); } catch (e) { ok = false; }
+    try { const P = await platform(); ok = !!(await P.ads.rewarded('doubleFuzz')); } catch (e) { ok = false; }
     if (!ok) { btn.textContent = 'No ad right now. Maybe next time.'; setTimeout(() => { if (this.anim === A) btn.hidden = true; }, 2500); return; }
     A.doubled = true;
     Profile.addFuzz(A.res.fuzz, 'ad: double match Fuzz');
