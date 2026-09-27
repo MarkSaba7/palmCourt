@@ -178,7 +178,9 @@ const Phone = {
   async lan(fresh) {
     if (this.info !== undefined && !fresh) return this.info;
     let info = null;
-    if (location.protocol === 'http:' || location.protocol === 'https:') {
+    // Only play.cmd (a local or LAN address) serves lan.json; asking a public host just logs a 404.
+    const local = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[::1\]$|.*\.local$)/.test(location.hostname);
+    if (local && (location.protocol === 'http:' || location.protocol === 'https:')) {
       try { const r = await fetch(new URL('../lan.json', import.meta.url), { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch (e) { /* not served by play.cmd */ }
     }
     this.info = info && typeof info === 'object' ? info : null;
