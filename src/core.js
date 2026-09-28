@@ -241,6 +241,7 @@ const Settings = {
   voice: true, assist: true, replays: true, sens: 1, latency: 0.09, paddle: null, cam: 'player', gfx: 'auto', showFps: false, phoneCode: '', tod: 'day',
   playAs: 'custom', opponent: 'random',   // pros.js ids: who you play as, and the CPU ('random' pro, or 'custom' for the club player)
   sfxVol: 1, crowdVol: 1, voiceVol: 1, timingMeter: true, reduceMotion: false, bigHud: false, cbSafe: false,   // Settings screen (options.js)
+  onlineGear: false,   // G1: gear stats in online matches too (off: online is even, see stats.js)
   load() { try { Object.assign(this, JSON.parse(localStorage.getItem('palmcourt.v1') || '{}')); } catch (e) { /* storage blocked */ } },
   save() {
     try {

@@ -25,6 +25,7 @@ const TABS = [
     tog('assist', 'Bounce spot', 'Marks where the ball will land, to help your timing.'),
     tog('timingMeter', 'Timing meter', 'The early / late bar after each shot.'),
     tog('replays', 'Instant replays', 'Replays of aces, winners and close line calls.'),
+    tog('onlineGear', 'Gear stats online', 'Your gear’s stats count in online matches too. Off keeps online matches even.'),
   ]],
   ['controls', 'Controls', [
     seg('control', 'Swing with', [['mouse', 'Mouse / keys'], ['phone', 'Phone'], ['hand', 'Hand cam'], ['paddle', 'Paddle cam']], 'A controller works with any of these.'),
@@ -56,7 +57,7 @@ const TABS = [
 ];
 const DEFAULTS = {
   level: 'club', format: 'short', surface: 'hard', handed: 'R', assist: true, timingMeter: true, replays: true, control: 'mouse', sens: 1, latency: 0.09,
-  volume: 0.8, sfxVol: 1, crowdVol: 1, voiceVol: 1, voice: true, gfx: 'auto', cam: 'player', showFps: false, reduceMotion: false, bigHud: false, cbSafe: false,
+  volume: 0.8, sfxVol: 1, crowdVol: 1, voiceVol: 1, voice: true, gfx: 'auto', cam: 'player', showFps: false, reduceMotion: false, bigHud: false, cbSafe: false, onlineGear: false,
 };
 // Screens' own way back, for Esc and controller B.
 const BACK = { lobby: 'btnLobbyBack', phone: 'btnPhoneDone', setup: 'btnSetupDone', over: 'btnOverMenu' };

@@ -42,7 +42,8 @@ await test('fresh profile on first run, IndexedDB + localStorage', async () => {
   assert.equal(Profile.xpForLevel(1), E.xpForLevel(1));
   assert.equal(Profile.data.v, SCHEMA);
   assert.ok(IDB.store.get(KEY) && LS.getItem(KEY), 'a first save is written to both');
-  assert.deepEqual(Object.keys(Profile.equipped).sort(), ['band', 'celebration', 'headwear', 'outfit', 'racket', 'title']);
+  assert.deepEqual(Object.keys(Profile.equipped).sort(), ['band', 'celebration', 'dampener', 'frame', 'grip', 'headwear', 'outfit', 'racket', 'shoes', 'strings', 'title']);   // cosmetics + gear (G1)
+  assert.deepEqual(Object.fromEntries(E.GEAR_SLOTS.map((s) => [s, Profile.equipped[s]])), E.STARTER_GEAR, 'everyone starts with the starter gear');
 });
 await test('xp / fuzz / spend / grant / equip, with events', async () => {
   const ev = [];
