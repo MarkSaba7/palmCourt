@@ -33,10 +33,10 @@ async function phone({ fhSign = 1 } = {}) {
     id, hidden: false, textContent: '', className: '', value: '', style: {}, offsetWidth: 0, disabled: false, listeners: {},
     classList: { add() {}, remove() {}, toggle() {} }, addEventListener(ev, fn) { this.listeners[ev] = fn; }, append() {}, setAttribute() {}, click() {},
   });
-  const sockets = [], listeners = {};
+  const sockets = [], listeners = {}, hooks = {};
   class WebSocket {
     constructor(url) { this.url = url; this.readyState = 1; sockets.push(this); }
-    send(d) { out.push({ at: now, ...JSON.parse(d) }); }
+    send(d) { const m = { at: now, ...JSON.parse(d) }; out.push(m); if (hooks.onSend) hooks.onSend(m); }
     close() { this.readyState = 3; }
   }
   const out = [];
@@ -85,7 +85,9 @@ async function phone({ fhSign = 1 } = {}) {
     }
     return tBest;
   };
-  return { ctx, out, game, advance, still, swing, sample, pong, get now() { return now; }, els };
+  // Any hold: w = rotation (deg/s, phone axes), up = which way is up in phone axes.
+  const raw = (w, up) => listeners.devicemotion({ rotationRate: { alpha: w.z, beta: w.x, gamma: w.y }, accelerationIncludingGravity: { x: up.x * G, y: up.y * G, z: up.z * G }, acceleration: { x: 0, y: 0, z: 0 } });
+  return { ctx, out, game, advance, still, swing, sample, raw, pong, hooks, later: setTimeout, get now() { return now; }, els };
 }
 const sent = (p, type) => p.out.filter((m) => m.type === type);
 
@@ -185,6 +187,77 @@ await test('clock offset: the fastest round trip wins, however slow the others w
   p.game({ type: 'resync' });   // start the samples over
   for (const [up, down] of [[4, 160], [80, 6], [5, 5], [30, 90], [3, 220]]) { p.advance(1); p.pong(up, down); p.advance(400); }
   assert.ok(Math.abs(p.ctx.PalmRacket.offset - OFFSET) < 0.6, `offset ${p.ctx.PalmRacket.offset}`);
+});
+
+await test('clock offset after a new match: pings the busy game answers late are outvoted within ~2 s', async () => {
+  const p = await phone();
+  const busyUntil = p.now + 700;   // the game is setting up the match: pings wait in its queue
+  p.hooks.onSend = (m) => {
+    if (m.type !== 'ping') return;
+    const at = p.now, seen = Math.max(at + 4, busyUntil);
+    p.later(() => p.game({ type: 'pong', t: m.t, g: seen + OFFSET }), seen + 4 - at);
+  };
+  p.game({ type: 'resync' });
+  p.advance(720);
+  assert.ok(p.ctx.PalmRacket.offset - OFFSET > 20, `skewed by the late answers: ${p.ctx.PalmRacket.offset - OFFSET}`);
+  p.advance(1700);
+  assert.ok(Math.abs(p.ctx.PalmRacket.offset - OFFSET) < 0.6, `offset ${p.ctx.PalmRacket.offset}`);
+});
+
+await test('an unset phone learns forehand from backhand from the hits, which now come back before the swing ends', async () => {
+  const p = await phone({ fhSign: 0 });
+  p.els.btnCalibSkip.listeners.click();
+  p.game({ type: 'state', inMatch: true, serving: false, tossed: false, stroke: 'fh' });
+  let hits = 0;
+  p.hooks.onSend = (m) => { if (m.type === 'swing') p.later(() => { hits++; p.game({ type: 'hit', power: 0.6, stroke: 'fh' }); }, 20); };
+  for (let i = 0; i < 3; i++) {
+    p.still(300);
+    const tPeak = p.swing({ sign: -1 });
+    assert.equal(hits, i + 1);
+    assert.ok(sent(p, 'swing')[i].at - tPeak < 40 && sent(p, 'swing')[i].dir === null);
+    p.still(700);
+  }
+  assert.equal(p.ctx.PalmRacket.cal.fhSign, -1);
+});
+
+await test('aim fields: yawPre and yawShare at the peak, yawPost in a swingEnd after it', async () => {
+  const one = async ({ lead = 0, roll = 0 } = {}) => {
+    const p = await phone();
+    p.game({ type: 'state', inMatch: true, serving: false, tossed: false, stroke: 'fh' });
+    p.still(300);
+    // A slow turn before the swing (below the 240 deg/s start), then the swing itself; roll turns it about another axis.
+    for (let t = 0; t < 200; t += 1000 / HZ) { p.advance(1000 / HZ); p.raw({ x: 0, y: lead, z: 0 }, { x: 0, y: 1, z: 0 }); }
+    for (let i = 0, t = 0; t <= 430; i++, t = (i * 1000) / HZ) {
+      p.advance(1000 / HZ);
+      const w = 950 * (t < 150 ? Math.sin((Math.PI * t) / 300) ** 2 : t < 370 ? Math.cos((Math.PI * (t - 150)) / 440) ** 2 : 0);
+      p.raw({ x: roll * w, y: w, z: 0 }, { x: 0, y: 1, z: 0 });
+    }
+    p.still(200);
+    const sw = sent(p, 'swing'), end = sent(p, 'swingEnd');
+    assert.equal(sw.length, 1); assert.equal(end.length, 1);
+    assert.equal(end[0].id, sw[0].id);
+    assert.ok(end[0].at > sw[0].at + 50, 'swingEnd comes once the swing has slowed');
+    assert.ok(!('yawPost' in sw[0]), 'the swing itself goes before its follow-through');
+    return { ...sw[0], yawPost: end[0].yawPost };
+  };
+  const plain = await one();
+  assert.ok(plain.yawPre > 65 && plain.yawPre < 95, `yawPre ${plain.yawPre}`);   // about 950 deg/s x 75 ms, plus the 60 Hz steps
+  assert.ok(plain.yawShare >= 0.99, `yawShare ${plain.yawShare}`);
+  assert.ok(plain.yawPost > 70 && plain.yawPost < 100, `yawPost ${plain.yawPost}`);
+  const led = await one({ lead: 150 }), against = await one({ lead: -150 });
+  assert.ok(led.yawPre > plain.yawPre + 8, `a slow start the same way counts: ${led.yawPre} vs ${plain.yawPre}`);
+  assert.ok(against.yawPre <= plain.yawPre && against.yawPre > plain.yawPre - 15, `one the other way isn't taken off: ${against.yawPre} vs ${plain.yawPre}`);
+  const rolled = await one({ roll: 0.75 });
+  assert.ok(Math.abs(rolled.yawShare - 0.8) < 0.02, `rolling: yawShare ${rolled.yawShare}`);
+});
+
+await test('lifting the phone still tosses on your serve', async () => {
+  const p = await phone();
+  p.game({ type: 'state', inMatch: true, serving: true, tossed: false, stroke: null });
+  p.still(300);
+  for (let t = 0; t < 260; t += 1000 / HZ) { p.advance(1000 / HZ); p.sample(0, 12 * Math.sin((Math.PI * t) / 260)); }
+  p.still(100);
+  assert.equal(sent(p, 'toss').length, 1);
 });
 
 await test('grip setup still learns forehand and backhand, and sends nothing to the game', async () => {
