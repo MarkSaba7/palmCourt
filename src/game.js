@@ -1,4 +1,4 @@
-import { clamp, lerp, sstep, damp, rand, pick, gauss, RPM, DT, BALL_R, SURFACES, LEVELS, inCourt, inServiceBox, newBall, stepBall, predictPath, simLanding, solveShot, travelTime, Clock, Settings } from './core.js';
+import { clamp, lerp, sstep, damp, rand, pick, gauss, RPM, DT, BALL_R, SURFACES, LEVELS, inCourt, inServiceBox, newBall, stepBall, flight, predictPath, simLanding, solveShot, travelTime, Clock, Settings } from './core.js';
 import { PT_SHOW, Match, Sound } from './match.js';
 import { camera, Crowd, World } from './render/world.js';
 import { KITS, OUTFITS, Avatar, BallView, Cam } from './render/actors.js';
@@ -17,6 +17,9 @@ import * as Shot from './shot.js';
 // GAME: players, CPU, serve and rally flow, line calls
 // =====================================================================
 const BOUNCE_T = 0.62;   // one pre-serve bounce, hand to court and back
+// V4: the toss goes up at TOSS_V and is usually met 0.66 s later (cpuThink; a person's on-time swing), TOSS_RISE above
+// the hand. It leaves the hand that far below the server's own contact height, so the racket meets it at full stretch.
+const TOSS_V = 5.45, TOSS_RISE = (() => { const s = { p: { x: 0, y: 0, z: 0 }, v: { x: 0, y: TOSS_V, z: 0 }, w: { x: 0, y: 0, z: 0 } }; for (let t = 0; t < 0.66; t += DT) flight(s); return s.p.y; })();
 
 function rotateElevation(v, dth) {
   const h = Math.hypot(v.x, v.z), s = Math.hypot(h, v.y);
@@ -66,7 +69,7 @@ const Game = {
   mode: 'idle', state: 'idle', match: null, localIdx: -1, names: ['', ''], cfg: null,
   players: [],
   ball: Object.assign(newBall(), { simT: 0, active: false, visible: false, lastHitter: -1, bounces: 0, serve: null, netTouched: false, hitT: 0, rally: 0 }),
-  hist: [], bounceLog: [], pending: null, ev: [], deadUntil: 0, deadKind: '', tossT: 0, serveReadyAt: 0, stTimer: 0, markerA: 0,
+  hist: [], bounceLog: [], pending: null, ev: [], deadUntil: 0, deadKind: '', tossT: 0, tossY: 1.5, serveReadyAt: 0, stTimer: 0, markerA: 0,
   // Training (src/training.js): a drill, when cfg.drill sets one, runs its own balls on this machinery. It is told
   // about each new point (point), ticks with the game (update) and takes over the rulings (ruling returns true), so
   // nothing is scored and the match never ends. A player with ctl 'drill' (the ball machine's stand-in) stands still.
@@ -409,11 +412,11 @@ const Game = {
       return;
     }
     const b = this.ball, hs = pl.handed === 'R' ? 1 : -1;
-    b.p = { x: pl.x + pl.side * 0.14 * hs, y: 1.5, z: pl.z - pl.side * 0.42 };
-    b.v = { x: 0, y: 5.45, z: 0 }; b.w = { x: 0, y: 0, z: 0 }; b.netDone = false; b.rolling = false;
+    b.p = { x: pl.x + pl.side * 0.14 * hs, y: (pl.avatar.serveHeight ? pl.avatar.serveHeight() : 2.9) - TOSS_RISE, z: pl.z - pl.side * 0.42 };   // V4
+    b.v = { x: 0, y: TOSS_V, z: 0 }; b.w = { x: 0, y: 0, z: 0 }; b.netDone = false; b.rolling = false;
     b.simT = now; b.active = true; b.visible = true;
     this.hist.length = 0; this.bounceLog.length = 0;
-    this.state = 'toss'; this.tossT = now; pl.hitFor = -1;
+    this.state = 'toss'; this.tossT = now; this.tossY = b.p.y; pl.hitFor = -1;
     pl.avatar.serveToss(now, b.p, b.v);   // V2: (where the toss goes, so the racket meets it)
     Crowd.flashBurst(3 + (Math.random() * 4 | 0), 0.9);   // photographers catch the serve
     if (pl.ctl === 'human') { Input.swing = null; Input.lastEnd = -9; }
@@ -430,7 +433,7 @@ const Game = {
   },
   updateState(now) {
     const b = this.ball;
-    if (this.state === 'toss' && this.isServerLocal() && !this.pending && b.v.y < 0 && b.p.y < 1.3) this.retoss();
+    if (this.state === 'toss' && this.isServerLocal() && !this.pending && b.v.y < 0 && b.p.y < this.tossY - 0.2) this.retoss();   // V4: (heights from the release)
     else if (this.state === 'rally' && this.isReferee() && b.simT - b.hitT > 8) this.pointOver(b.lastHitter, 'winner');
     else if (this.state === 'dead' && now >= this.deadUntil && !Replay.busy()) { if (this.match.over) this.finish(); else this.startPoint(); }
   },
@@ -571,7 +574,7 @@ const Game = {
   contact(pc) {
     const pl = pc.pl, b = this.ball, m = this.match;
     if (pc.kind === 'serve') {
-      if (this.state !== 'toss' || m.currentServer !== pl.idx || b.p.y < 1.9) return;
+      if (this.state !== 'toss' || m.currentServer !== pl.idx || b.p.y < this.tossY + 0.4) return;   // V4: (from the release)
       const shot = this.serveShot(pl, pc.serve || this.cpuServeParams(pl));
       this.applyHit(pl, shot, { serve: { no: m.serveNo, court: m.court } });
       return;
@@ -1062,7 +1065,7 @@ const Game = {
     if (pl.ctl !== 'remote' || this.state !== 'serve') return;
     const b = this.ball;
     b.p = { ...m.p }; b.v = { ...m.v }; b.w = { x: 0, y: 0, z: 0 }; b.simT = m.t; b.active = b.visible = true; b.netDone = false; b.rolling = false;
-    this.state = 'toss'; this.tossT = m.t;
+    this.state = 'toss'; this.tossT = m.t; this.tossY = m.p.y;
     pl.avatar.serveToss(m.t, m.p, m.v);
     UI.prompt();
   },
