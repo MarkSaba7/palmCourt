@@ -299,7 +299,7 @@ const STYLE = `
 .pg-sb li>b{text-align:right;font:800 12px/1 var(--display);font-variant-numeric:tabular-nums;color:var(--good)}
 .pg-sb li.dn>b{color:var(--coral)}
 .pg-sb li.flat{grid-template-columns:1fr}
-.pg-cmp{margin:0;display:flex;flex-wrap:wrap;gap:2px 6px;align-items:center;font-size:10.5px;line-height:1.25}
+.pg-cmp{margin:0;align-self:start;display:flex;flex-wrap:wrap;align-content:flex-start;gap:2px 6px;align-items:center;font-size:10.5px;line-height:1.25}
 .pg-cmp small{font:700 9.5px/1 var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--mist)}
 .pg-cmp em{font-style:normal;font-weight:700;color:var(--mist);white-space:nowrap}
 .pg-cmp em.up{color:var(--good)}.pg-cmp em.dn{color:var(--coral)}
@@ -318,11 +318,12 @@ const STYLE = `
 .pg-sbar::after{content:'';position:absolute;top:-2px;bottom:-2px;left:var(--z);width:1px;background:var(--chalk);opacity:.55}
 .pg-sgh{grid-column:1/-1;font:700 10px/1 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--optic);margin:5px 0 1px}
 .pg-sgh:first-child{margin-top:0}
+.pg-slot b{white-space:normal;overflow-wrap:anywhere;line-height:1.15}
 .pg-ps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px}
-.pg-ps>span{display:grid;gap:2px;min-width:0;font:700 9.5px/1.1 var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--mist)}
-.pg-ps>span b{display:flex;justify-content:space-between;gap:4px;white-space:nowrap;overflow:hidden;font-weight:700}
-.pg-ps>span b em{font-style:normal;color:var(--good)}
-.pg-ps>span.dn b em{color:var(--coral)}
+.pg-ps>span{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:1px 6px;min-width:0;font:700 9.5px/1.15 var(--body);letter-spacing:.05em;text-transform:uppercase;color:var(--mist)}
+.pg-ps>span s{grid-column:1/-1;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg-ps>span em{font-style:normal;color:var(--good);font-variant-numeric:tabular-nums}
+.pg-ps>span.dn em{color:var(--coral)}
 .pg-ps>span i{position:relative;height:3px;background:rgba(242,245,238,.12)}
 .pg-ps>span i::after{content:'';position:absolute;inset:0 auto 0 0;width:var(--w);background:var(--good)}
 .pg-ps>span.dn i::after{background:var(--coral)}
@@ -365,7 +366,7 @@ export const ProgressUI = {
       if (!el) { el = document.createElement('div'); el.className = 'pg-ps'; el.setAttribute('aria-label', 'Strengths'); blurb.after(el); }
       const id = side === 'you' ? Settings.playAs : Settings.opponent, list = proById(id) ? Stats.strengths(id) : [];
       el.innerHTML = list.length
-        ? list.map((s) => `<span class="${s.v < 0 ? 'dn' : 'up'}" title="${esc(s.label)} ${pct(s.v)}"><b>${esc(s.label)}<em>${pct(s.v)}</em></b><i style="--w:${Math.min(100, (100 * Math.abs(s.v)) / 0.12).toFixed(0)}%"></i></span>`).join('')
+        ? list.map((s) => `<span class="${s.v < 0 ? 'dn' : 'up'}" title="${esc(s.label)} ${pct(s.v)}"><s>${esc(s.label.replace('Forehand', 'FH').replace('Backhand', 'BH'))}</s><i style="--w:${Math.min(100, (100 * Math.abs(s.v)) / 0.12).toFixed(0)}%"></i><em>${pct(s.v)}</em></span>`).join('')
         : `<p>${id === 'random' ? 'Every pro has their own strengths.' : side === 'you' ? 'An all-rounder: your gear makes your strengths.' : 'An all-rounder. CPU gear matches its level.'}</p>`;
     }
   },
