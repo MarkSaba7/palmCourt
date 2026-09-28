@@ -604,6 +604,7 @@ const Game = {
     // ==== S1 aiming: what the swing asked for (power, spin, direction, drop shot; Input.read → src/shot.js) ====
     const r = Input.read(sw, plan.stroke, pl.handed);
     if (cam || sw.src === 'phone') Input.learn(sw);   // this player's usual swing speed, for the next swings' power
+    if (sw.src === 'phone') Input.learnAim(sw, plan.stroke);   // ...and, on the phone, their usual turn by the contact
     const b = this.ball, o = {
       from: { ...b.p }, side: pl.side, mx: pl.x * pl.side, stroke: plan.stroke, handed: pl.handed, volley: b.bounces === 0,
       pow: r.pow * (1 - 0.35 * stretch), spin: r.spin, drop: r.drop, dirX: r.dirX, tau, q, diff, S: this.gearFor(pl),

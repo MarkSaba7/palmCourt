@@ -17,18 +17,25 @@ The browser will ask for the camera the first time you choose **Hand cam** or **
 
 Choose **Phone**, then **Practice vs CPU** (or **Connect phone**): the game shows a QR code and a 5-letter code. Scan it with the phone, tap **Start** there, then swing a forehand and a backhand so the phone learns which is which (or tap Skip). The phone must be able to open the page over https: with `play.cmd` it's on the same Wi-Fi as the PC (accept the certificate warning once); on GitHub Pages it works from anywhere and links through PeerJS. Lift the phone (or tap **Toss** on it) to toss when you serve.
 
+Swing the phone like a racket. Power is relative to your own usual swing (it learns it from your first few hits): swing harder than usual for pace, softer for a rally ball. Low to high adds topspin, high to low slices, and a soft swing coming down is a drop shot. Direction is read at the moment of contact, so nothing waits for your follow-through: sweep across your body for cross-court, a shorter push toward the screen for straight. Timing nudges it too (early pulls the ball across, late pushes it the other way). With an older phone page that doesn't send the turn of the phone, timing alone aims.
+
 ### Camera controls
 
 | You do | What happens |
 | --- | --- |
 | Swing your hand across your body | Forehand or backhand, whichever side the ball is on |
-| Swing early / on time / late | Pulls the ball / hits it through the middle / pushes it the other way |
-| Swing low to high | Topspin: dips, kicks up, safer |
-| Swing high to low | Slice: stays low. A slow slice is a drop shot |
-| Swing faster | Hits harder, and misses more often |
+| Keep sweeping across your body after the hit | Cross-court: a right-hander's forehand goes left, the backhand right. Sweep on further and harder for a sharper angle, near the line (riskier) |
+| Stop the sideways sweep after the hit and finish toward the screen | Straight ahead: through the middle, or down the line from a corner |
+| Swing early / late | Pulls the ball a little across / pushes it a little the other way |
+| Swing low to high | Topspin, more the steeper you swing. A level swing is flat |
+| Swing high to low | Slice: stays low |
+| Swing softly, coming down (or stop a soft swing short) | Drop shot. A soft level or rising swing is just a soft ball |
+| Swing faster | Hits harder. Your usual swing is a solid rally ball; about 40% faster is flat out, which misses more often |
 | Raise your hand above the dashed toss line | Tosses the ball when you serve. Swing to hit it; your hand's left/right position aims the serve |
 
-No camera? Pick **Mouse** (the default): click (or tap) to swing and flick before clicking for power. Keyboard: Space swings, Shift+Space hits harder, S slices. Press C to switch between the player camera and the TV camera, and Esc to pause.
+After every shot the bar under the court says what the game read, for example **On time · ← Cross · topspin · 118 km/h**, so you can see what your swing did. On time with a normal swing lands in nearly every time; misses come from mistiming, hard pressure, flat-out swings and going for the lines.
+
+No camera? Pick **Mouse** (the default): click (or tap) to swing. Flick the mouse just before clicking: a faster flick hits harder, up adds topspin, down slices, left or right aims that way, and a gentle downward flick plays a drop shot. Keyboard: Space swings (Shift+Space harder), hold ← or → to aim, ↑ for topspin, S slices, D plays a drop shot. Press C to switch between the player camera and the TV camera, and Esc to pause.
 
 Use **Camera check** first. It lists every swing it sees (FH or BH, speed, and how far behind the camera it was), dims the wind-ups it ignores, and asks for a forehand, then a backhand, so you can see both register. It lets you adjust:
 

@@ -94,12 +94,24 @@ const Input = {
   read(sw, stroke, handed) {
     const k = sw.src + (sw.serve ? 'Serve' : ''), typ = this.typical(k);
     if ((sw.src === 'hand' || sw.src === 'paddle') && sw.peak > 0) return readCamera(sw, { typ, sens: Settings.sens, stroke, handed, prior: this.across[sw.src] });
-    if (sw.src === 'phone') return readPhone(sw, { typ, stroke, handed });
+    if (sw.src === 'phone') {
+      const A = this.phoneAim[stroke === 'bh' ? 'bh' : 'fh'], med = (a) => (a.length >= 3 ? a.slice().sort((p, q) => p - q)[a.length >> 1] : 0);
+      return readPhone(sw, { typ, typYaw: med(A.yaw), typShare: med(A.share), stroke, handed });
+    }
     return readPointer(sw);
   },
   // This player's usual follow-through on the camera (how far across), the best guess for a swing that isn't over yet.
   across: { hand: 0.35, paddle: 0.35 },
   noteAcross(src, a) { if (src in this.across && Number.isFinite(a)) this.across[src] = clamp(this.across[src] * 0.8 + a * 0.2, -0.3, 1); },
+  // The phone's usual turn by the contact, per stroke (its direction is read against these; see shot.js phoneAcross).
+  phoneAim: { fh: { yaw: [], share: [] }, bh: { yaw: [], share: [] } },
+  learnAim(sw, stroke) {
+    const A = this.phoneAim[stroke === 'bh' ? 'bh' : 'fh'];
+    if (sw.src !== 'phone' || sw.aimLearned || !(sw.yawPre > 0)) return;
+    sw.aimLearned = true;
+    A.yaw.push(sw.yawPre); if (A.yaw.length > 15) A.yaw.shift();
+    if (sw.yawShare > 0) { A.share.push(sw.yawShare); if (A.share.length > 15) A.share.shift(); }
+  },
   keyAim: 0, keys: new Set(),
   // Phone racket: the phone detected the swing itself and sends the moment of peak racket speed in game time.
   phoneTime(tg, fallback) {
@@ -112,8 +124,8 @@ const Input = {
       spin: clamp(Number.isFinite(+m.spin) ? +m.spin : 0.3, -1, 1), dir: m.dir === 'fh' || m.dir === 'bh' ? m.dir : null,
       vx: 0, vy: 0, src: 'phone', x: 0.5, y: 0.5,
     };
-    // Newer phone pages also say how far the phone turned before and after the peak (the follow-through: aiming).
-    for (const k of ['yawFrac', 'yawPre', 'yawPost']) if (Number.isFinite(+m[k])) s[k] = +m[k];
+    // Newer phone pages also say how far the phone had turned by the peak and how flat that turn was (aiming).
+    for (const k of ['yawFrac', 'yawPre', 'yawShare']) if (m[k] != null && Number.isFinite(+m[k])) s[k] = +m[k];
     this.emit({ type: 'swing', swing: s });
   },
   phoneSwingStart(m) { this.emit({ type: 'swingStart', t0: this.phoneTime(m.tg, 0), dir: m.dir === 'fh' || m.dir === 'bh' ? m.dir : null, src: 'phone' }); },

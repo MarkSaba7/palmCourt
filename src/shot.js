@@ -65,12 +65,13 @@ export function phonePower(peak, typ, fallback = 0.5) {
 // full topspin, 10-25° down a slice.
 export const spinFromRise = (ang) => clamp(0.15 + 2.1 * ang, -1, 1);
 
-// How far across the body a stroke goes (-1 pushed the other way, 0 straight through, +1 hard across, up to 1.3 for
-// the lines) from its follow-through: how far the racket carries on sideways after the contact compared with how far
-// it came in to it. A swing that stops short sideways (because it went on toward the camera or the net) is straight.
+// How far across the body a stroke goes (0 straight through, +1 hard across, up to 1.3 for
+// the lines) from its follow-through: how far the racket sweeps on sideways after the contact compared with how far it
+// came in to it. A swing that keeps sweeping sideways goes across; one that stops short sideways (because it goes on
+// toward the camera or the net) goes straight.
 export function acrossFromPath(pre, post) {
   if (!(pre > 1e-3)) return null;
-  return clamp((post / Math.max(pre, 0.04) - 0.5) / 0.6, -1, 1.3);
+  return clamp((post / Math.max(pre, 0.02) - 0.4) / 0.6, 0, 1.3);   // (pushing it the other way is late timing's job)
 }
 
 // Camera swing (the detector's swing: vx vy at the peak, path {x0 y0 xp yp x1 y1 s0 sp s1 done} in frame widths,
@@ -83,22 +84,35 @@ export function readCamera(sw, o = {}) {
   const spin = spinFromRise(ang);
   let across = null, final = !!(P && P.done);
   if (P && P.done) {
-    const lat = Math.sign(P.xp - P.x0) || -ballSide(o.stroke, o.handed);
-    across = acrossFromPath(Math.abs(P.xp - P.x0), (P.x1 - P.xp) * lat);
+    const lat = Math.sign(P.xp - P.x0) || -ballSide(o.stroke, o.handed), z = P.sp > 0 && P.s1 > 0 ? P.sp / P.s1 : 1;
+    // (A hand coming toward the camera also drifts outward in the picture: judge the finish at the contact's distance.)
+    across = acrossFromPath((P.xa - P.x0) * lat, (0.5 + (P.x1 - 0.5) * z - P.xb) * lat);
     // Hand growing in the picture after the contact: the racket went on toward the camera, so straighter.
-    if (across != null && P.s0 > 0 && P.sp > 0 && P.s1 > 0) across -= 0.8 * clamp(Math.log(P.s1 / P.sp) / 0.25, 0, 1);
+    if (across != null && P.sp > 0 && P.s1 > 0) across *= 1 - 0.6 * clamp(Math.log(P.s1 / P.sp) / 0.15, 0, 1);
   }
   if (across == null) { across = o.prior ?? 0.35; final = !!(P && P.done); }
-  const post = P && P.done ? (P.x1 - P.xp) * (Math.sign(P.xp - P.x0) || 1) / Math.max(Math.abs(P.xp - P.x0), 0.04) : 1;
+  const post = P && P.done ? ((P.x1 - P.xb) * Math.sign(P.xp - P.x0)) / Math.max(Math.abs(P.xa - P.x0), 0.04) : 1;
   // A drop shot: a soft swing coming down, or a soft check swing that stops short (decelerating). A normal soft swing
   // (level or rising) stays a soft rally ball.
   const drop = (pow < 0.3 && spin < -0.2) || (pow < 0.22 && spin < 0.2 && !!(P && P.done) && post < 0.3);
   return { pow, spin, across, dirX: -ballSide(o.stroke, o.handed) * across, drop, final };
 }
-// Phone swing ({ peak °/s, power, spin, yawPre, yawPost (° turned before / after the peak, newer phone pages) }).
+// Phone direction, decided at the contact (the phone sends its swing at the peak, so nothing waits for the finish):
+// yawPre = degrees the phone has turned about the vertical from the start of the forward swing to the peak (about half
+// the stroke's arc: a big sweep across the body has turned further by the contact than a short push toward the screen),
+// yawShare = how much of its turning at the peak is about the vertical (1 a flat sideways sweep, lower a forward or
+// upward push). Both against this player's own usual values for the stroke (typYaw, typShare), so no calibration step.
+export function phoneAcross(yawPre, yawShare, typYaw = 0, typShare = 0) {
+  if (!(yawPre > 0)) return null;
+  const ty = typYaw > 0 ? typYaw : 90, ts = typShare > 0 ? typShare : 0.8;
+  let a = 0.35 + 0.65 * (yawPre - ty) / Math.max(25, 0.35 * ty);
+  if (yawShare > 0) a += 0.6 * (yawShare - ts) / 0.2;
+  return clamp(a, -1, 1.3);
+}
+// Phone swing ({ peak °/s, power, spin, yawPre, yawShare }). o: { typ (usual peak), typYaw, typShare, stroke, handed }.
 export function readPhone(sw, o = {}) {
   const pow = phonePower(sw.peak, o.typ || 0, sw.power), spin = clamp((Number.isFinite(sw.spin) ? sw.spin : 0.3) - 0.05, -1, 1);
-  const across = sw.yawPre > 20 && Number.isFinite(sw.yawPost) ? acrossFromPath(sw.yawPre, sw.yawPost) : null;
+  const across = phoneAcross(sw.yawPre, sw.yawShare, o.typYaw, o.typShare);
   return { pow, spin, across, dirX: across == null ? null : -ballSide(o.stroke, o.handed) * across, drop: pow < 0.3 && spin < -0.15, final: true };
 }
 // Mouse / keyboard: the flick before the click (or the arrow keys) aims; see input.js.
