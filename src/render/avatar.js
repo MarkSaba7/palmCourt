@@ -392,9 +392,11 @@ export class Avatar {
       // Reaching for the ball (fully at the contact, half at the take-back and finish).
       const e = i === 0 || i === 4 ? 0.5 : 1, oR = bh ? kp.hipL : kp.hipR, iR = bh ? kp.hipR : kp.hipL;
       const oLe = e * L, lw = e * low;
-      oR[0] += 0.25 * oLe; oR[2] += s * 0.45 * oLe; iR[2] += s * 0.3 * oLe;
+      if (!vo) { kp.hipR[2] += 0.08; kp.hipL[2] -= 0.08; if (i < 3) { kp.knR -= 0.15; kp.knL -= 0.15; } }   // an athletic, wide base
+      oR[0] += 0.25 * oLe; oR[2] += s * 0.45 * oLe; iR[2] -= s * 0.3 * oLe;
       if (bh) { kp.knL -= 0.75 * oLe; kp.knR = lerp(kp.knR, -0.1, oLe); } else { kp.knR -= 0.75 * oLe; kp.knL = lerp(kp.knL, -0.1, oLe); }
-      kp.px += s * 0.2 * oLe; kp.sp[2] -= s * 0.2 * oLe;
+      // The body goes to the ball: a step out to a wide one, in toward a jamming one, forward to a short one.
+      kp.px += s * clamp(ex - 0.1, -0.35, 0.7) * 0.75 * e; kp.pz -= clamp(-c.z - 0.4, -0.5, 0.6) * 0.6 * e; kp.sp[2] -= s * 0.2 * oLe;
       kp.knR -= 0.65 * lw; kp.knL -= 0.65 * lw; kp.hipR[0] += 0.4 * lw; kp.hipL[0] += 0.4 * lw; kp.sp[0] -= 0.18 * lw;
       kp.sp[0] -= 0.2 * fw * e;
       kp.knR = Math.min(-0.05, kp.knR + 0.2 * high * e); kp.knL = Math.min(-0.05, kp.knL + 0.2 * high * e);
@@ -430,10 +432,11 @@ export class Avatar {
     this.root.rotation.y = (pl.side > 0 ? 0 : Math.PI) + this.yaw;
     let k = 14, ik = 0;
     if (this.mode === 'swing') {
-      const tau = now + LEAD - this.contactT;
+      const tau = now - this.contactT;
       if (tau < 0) this.guess(pl);
       this.buildKeys(tau < 0 ? this.contactPoint(pl) : this.c);
-      arrToPose(spline(this.K, this.kt, this.ks, tau, this.kv), T);
+      arrToPose(spline(this.K, this.kt, this.ks, tau + LEAD, this.kv), T);   // the body (smoothed below, so a little ahead)
+      spline(this.K, this.kt, this.ks, tau, this.kv);                         // the racket, exactly now
       ik = 1; k = 40;
       if (tau > this.kt[4] + 0.12) { this.mode = 'ready'; this.cFor = -1; this.sh.known = false; }
     } else if (this.mode === 'serve') {
@@ -473,8 +476,9 @@ export class Avatar {
       if (h >= 0 && h < 0.38) { const u = h / 0.38; T.py += Math.sin(u * Math.PI) * 0.07 - Math.sin(u * Math.PI * 2) * 0.03 * (u > 0.5 ? 1 : 0); T.hipR[2] += 0.12 * Math.sin(u * Math.PI); T.hipL[2] -= 0.12 * Math.sin(u * Math.PI); }
       T.shR[0] += this.armLift;
     }
-    if (ik > 0.01) this.aim(T, ik); else this.ikQ = this.ikL = null;
     lerpPose(this.pose, T, 1 - Math.exp(-k * dt), this.pose);
+    // The racket arm is solved on the smoothed body, so the head is where the path says (and on the ball at contact).
+    if (ik > 0.01) this.aim(this.pose, ik, dt); else this.ikQ = this.ikL = null;
     this.applyPose(this.pose, dt, pl);
   }
   // Racket arm FK for angles q = [shoulder xyz, elbow, wrist xyz]: world racket-head centre, axis and (for the string
@@ -491,15 +495,16 @@ export class Avatar {
     _w.set(0, 0, 1).transformDirection(_M).cross(_tN); f[6] = _w.x; f[7] = _w.y; f[8] = _w.z;
   }
   leftFK(q, f) {
-    const B = this.B, p = this.target;
+    const B = this.B, p = this.pose;
     _M.copy(B.clavL.matrixWorld);
     _M.multiply(_L.makeRotationFromEuler(_E.set(q[0], q[1], q[2])).setPosition(B.armL.position));
     _M.multiply(_L.makeRotationFromEuler(_E.set(q[3], 0, 0)).setPosition(B.foreL.position));
     _M.multiply(_L.makeRotationFromEuler(_E.set(p.wrL[0], p.wrL[1], p.wrL[2])).setPosition(B.handL.position));
     _w.copy(PALM).applyMatrix4(_M); f[0] = _w.x; f[1] = _w.y; f[2] = _w.z;
   }
-  // Solve the racket arm (and a two-hander's other hand) for this frame's racket target; blend it in by w.
-  aim(T, w) {
+  // Solve the racket arm (and a two-hander's other hand) for this frame's racket target; blend it in by w. T is the
+  // smoothed pose about to be shown: its arm angles seed the solve and are replaced.
+  aim(T, w, dt) {
     const B = this.B, kv = this.kv, P0 = PLEN;
     // The body the arms hang from.
     B.hips.position.set(this.rest.hips.x + T.px, this.rest.hips.y + T.py, this.rest.hips.z + T.pz);
@@ -515,11 +520,14 @@ export class Avatar {
     _t[0] = _tH.x; _t[1] = _tH.y; _t[2] = _tH.z; _t[3] = _tA.x; _t[4] = _tA.y; _t[5] = _tA.z; _t[6] = _t[7] = _t[8] = 0;
     W_R[6] = W_R[7] = W_R[8] = 0.25 * kv[P0 + 9];
     _sd[0] = T.shR[0]; _sd[1] = T.shR[1]; _sd[2] = T.shR[2]; _sd[3] = T.elR; _sd[4] = T.wrR[0]; _sd[5] = T.wrR[1]; _sd[6] = T.wrR[2];
-    const fresh = !this.ikQ, q = this.ikQ || (this.ikQ = Float64Array.from(_sd));
+    const fresh = !this.ikQ, q = this.ikQ || (this.ikQ = Float64Array.from(_sd)), A = this.armPrev || (this.armPrev = new Float64Array(11));
+    if (fresh) A.set(_sd);
     solveIK(q, _sd, LO_R, HI_R, 7, this.fkR, _t, W_R, 9, fresh ? 10 : 3);
-    T.shR[0] = lerp(T.shR[0], q[0], w); T.shR[1] = lerp(T.shR[1], q[1], w); T.shR[2] = lerp(T.shR[2], q[2], w); T.elR = lerp(T.elR, q[3], w);
-    T.wrR[0] = lerp(T.wrR[0], q[4], w); T.wrR[1] = lerp(T.wrR[1], q[5], w); T.wrR[2] = lerp(T.wrR[2], q[6], w);
-    // The other hand on the racket: where the grip will be with the arm as blended.
+    // No jumps when a stroke starts late: a joint turns at most ~45 rad/s.
+    const cap = 45 * Math.max(dt || 0.016, 0.004), put = (j, v) => (A[j] = clamp(v, A[j] - cap, A[j] + cap));
+    T.shR[0] = put(0, lerp(T.shR[0], q[0], w)); T.shR[1] = put(1, lerp(T.shR[1], q[1], w)); T.shR[2] = put(2, lerp(T.shR[2], q[2], w)); T.elR = put(3, lerp(T.elR, q[3], w));
+    T.wrR[0] = put(4, lerp(T.wrR[0], q[4], w)); T.wrR[1] = put(5, lerp(T.wrR[1], q[5], w)); T.wrR[2] = put(6, lerp(T.wrR[2], q[6], w));
+    // The other hand on the racket: where the grip is with the arm as shown.
     const wl = w * kv[P0 + 10];
     if (wl < 0.01) { this.ikL = null; return; }
     _sd[0] = T.shR[0]; _sd[1] = T.shR[1]; _sd[2] = T.shR[2]; _sd[3] = T.elR; _sd[4] = T.wrR[0]; _sd[5] = T.wrR[1]; _sd[6] = T.wrR[2];
@@ -528,8 +536,10 @@ export class Avatar {
     _t[0] = _w.x; _t[1] = _w.y; _t[2] = _w.z;
     _sd[0] = T.shL[0]; _sd[1] = T.shL[1]; _sd[2] = T.shL[2]; _sd[3] = T.elL;
     const freshL = !this.ikL, qL = this.ikL || (this.ikL = Float64Array.from(_sd.subarray(0, 4)));
+    if (freshL) A.set(_sd.subarray(0, 4), 7);
     solveIK(qL, _sd, LO_L, HI_L, 4, this.fkL, _t, W_L, 3, freshL ? 10 : 3);
-    T.shL[0] = lerp(T.shL[0], qL[0], wl); T.shL[1] = lerp(T.shL[1], qL[1], wl); T.shL[2] = lerp(T.shL[2], qL[2], wl); T.elL = lerp(T.elL, qL[3], wl);
+    const putL = (j, v) => (A[7 + j] = clamp(v, A[7 + j] - cap, A[7 + j] + cap));
+    T.shL[0] = putL(0, lerp(T.shL[0], qL[0], wl)); T.shL[1] = putL(1, lerp(T.shL[1], qL[1], wl)); T.shL[2] = putL(2, lerp(T.shL[2], qL[2], wl)); T.elL = putL(3, lerp(T.elL, qL[3], wl));
   }
   applyPose(p, dt, pl) {
     const B = this.B;
