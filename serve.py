@@ -525,6 +525,8 @@ class Relay:
             if p.role == 'game' and m['relay'] == 'kick' and room['phone']:
                 self.drop(room['phone'])
             return
+        if m.get('type') == 'k':
+            return                                          # a phone's keep-alive: it did its job getting here
         other = room['phone' if p.role == 'game' else 'game']
         if other:
             self.write(other, ws_frame(data))
@@ -619,6 +621,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if role == 'phone':
             note_contact(self.client_address[0], 'link')
         self.connection.settimeout(None)
+        # Send each tiny frame at once. Without this, Nagle's algorithm holds a frame back while the one before is
+        # still waiting for its ACK, and Windows delays ACKs by up to 200 ms: a swing right after a swingStart (or a
+        # ping) could sit here that long.
+        try:
+            self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            pass
         relay().adopt(self.connection, role, code).wait()   # the relay thread owns the socket until it closes
         self.close_connection = True
 
