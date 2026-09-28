@@ -165,7 +165,7 @@ function setNet(on, text) { $('net').classList.toggle('on', on); $('netText').te
 // from a backhand however the phone sits in your hand. Rising vs falling hand speed gives topspin vs slice.
 // A swing is sent to the game as soon as the racket has clearly passed its fastest point (the contact): a sample
 // PAST_FRAC below the peak, or two falling samples in a row. Waiting for the end (half speed) cost 60-120 ms.
-const DET = { START: 240, MIN_PEAK: 380, END_FRAC: 0.5, PAST_FRAC: 0.9, MAX_MS: 450, GAP_MS: 320, REVERSE_MS: 60, RECOVER_MS: 650, SERVE_HOLD_MS: 120, KEEPALIVE_MS: 80 };
+const DET = { START: 240, MIN_PEAK: 380, END_FRAC: 0.5, PAST_FRAC: 0.9, MAX_MS: 450, GAP_MS: 320, REVERSE_MS: 60, RECOVER_MS: 650, SERVE_HOLD_MS: 120, SERVE_SURE_MS: 450, SERVE_SURE_PEAK: 650, KEEPALIVE_MS: 80 };
 const S = { events: 0, g: null, state: 'idle', t0: 0, tPeak: 0, peak: 0, w: 0, wPrev: 0, yaw: 0, absInt: 0, vUp: 0, vIdle: 0, vUpPeak: 0, aMax: 0, lastT: 0, lastEnd: 0, lastSign: 0, meter: 0, prev: null, id: 0, sent: false };
 
 function onMotion(e) {
@@ -594,9 +594,16 @@ function pointNote(m) {
 function onSwingStart(t, sign) {
   if (screen === 'play') send({ type: 'swingStart', id: S.id, tg: t + offset, dir: strokeDir(sign, 1) }, 'fast');
 }
-// Just past the peak: send the swing now. Not a serve (see holdServe), nor the racket coming back after a stroke.
+// Just past the peak: send the swing now, unless it's the racket coming back after a stroke. A serve waits for the
+// strongest swing (see holdServe), unless this one is surely the hit: late enough after the toss to meet the ball,
+// and hard, or clearly harder than the wind-up already held.
 function onPeak(sw) {
-  if (screen !== 'play' || sw.recovery || (lastState && lastState.serving && lastState.tossed)) return false;
+  if (screen !== 'play' || sw.recovery) return false;
+  if (lastState && lastState.serving && lastState.tossed) {
+    const ts = lastState.tossT ? sw.tPeak + offset - lastState.tossT : 0;
+    if (!(ts > DET.SERVE_SURE_MS && (sw.peak >= DET.SERVE_SURE_PEAK || (held && sw.peak > 1.3 * held.peak)))) return false;
+    held = null; clearTimeout(holdTimer);
+  }
   sendSwing(sw);
   return true;
 }

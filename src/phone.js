@@ -200,6 +200,7 @@ const Phone = {
       const serving = m.currentServer === me.idx && (Game.state === 'serve' || Game.state === 'toss');
       const incoming = Game.state === 'rally' && me.plan && b.lastHitter >= 0 && b.lastHitter !== me.idx && me.hitFor !== b.rally;
       s = { inMatch: true, serving, tossed: serving && Game.state === 'toss', stroke: incoming ? me.plan.stroke : null };
+      if (s.tossed) s.tossT = Math.round(Game.tossT * 1000);   // game time of the toss: a hard swing well after it is the serve
     }
     const key = JSON.stringify(s);
     if (key === this.lastStateKey) return;
