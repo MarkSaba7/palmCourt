@@ -205,33 +205,35 @@ await test('an unset phone learns forehand from backhand from the hits, which no
   assert.equal(p.ctx.PalmRacket.cal.fhSign, -1);
 });
 
-await test('each swing says how the racket moved: head path, face, tilt, sweep', async () => {
-  // Held like a handle, screen facing sideways: the phone's +x is up, its top (+y) points to the racket head.
-  const go = (up, axis, sign = 1) => {
-    const p = await0(up);
-    p.game({ type: 'state', inMatch: true, serving: false, tossed: false, stroke: null });
+await test('aim fields: yawPre and yawShare at the peak, yawPost in a swingEnd after it', async () => {
+  const one = async ({ lead = 0, roll = 0 } = {}) => {
+    const p = await phone();
+    p.game({ type: 'state', inMatch: true, serving: false, tossed: false, stroke: 'fh' });
+    p.still(300);
+    // A slow turn before the swing (below the 240 deg/s start), then the swing itself; roll turns it about another axis.
+    for (let t = 0; t < 200; t += 1000 / HZ) { p.advance(1000 / HZ); p.raw({ x: 0, y: lead, z: 0 }, { x: 0, y: 1, z: 0 }); }
     for (let i = 0, t = 0; t <= 430; i++, t = (i * 1000) / HZ) {
       p.advance(1000 / HZ);
-      const w = sign * 950 * (t < 150 ? Math.sin((Math.PI * t) / 300) ** 2 : t < 370 ? Math.cos((Math.PI * (t - 150)) / 440) ** 2 : 0);
-      p.raw({ x: axis.x * w, y: axis.y * w, z: axis.z * w }, up);
+      const w = 950 * (t < 150 ? Math.sin((Math.PI * t) / 300) ** 2 : t < 370 ? Math.cos((Math.PI * (t - 150)) / 440) ** 2 : 0);
+      p.raw({ x: roll * w, y: w, z: 0 }, { x: 0, y: 1, z: 0 });
     }
-    return sent(p, 'swing')[0];
+    p.still(200);
+    const sw = sent(p, 'swing'), end = sent(p, 'swingEnd');
+    assert.equal(sw.length, 1); assert.equal(end.length, 1);
+    assert.equal(end[0].id, sw[0].id);
+    assert.ok(end[0].at > sw[0].at + 50, 'swingEnd comes once the swing has slowed');
+    assert.ok(!('yawPost' in sw[0]), 'the swing itself goes before its follow-through');
+    return { ...sw[0], yawPost: end[0].yawPost };
   };
-  let base;
-  const await0 = (up) => { base.still(0); for (let i = 0; i < 90; i++) { base.advance(1000 / HZ); base.raw({ x: 0, y: 0, z: 0 }, up); } return base; };
-  const sideways = { x: 1, y: 0, z: 0 }, r = 20 * Math.PI / 180, open = { x: Math.cos(r), y: 0, z: Math.sin(r) };
-  base = await phone(); const flat = go(sideways, sideways);
-  assert.ok(Math.abs(flat.path) <= 2 && Math.abs(flat.face) <= 2 && Math.abs(flat.tilt) <= 2, JSON.stringify(flat));
-  assert.ok(flat.sweep > 50 && flat.pitch <= 2 && flat.yawFrac > 0.95);
-  // A swing plane tilted 31 degrees: the head rises (or falls) through the swing, most at the bottom of the arc.
-  base = await phone(); const n = Math.hypot(1, 0.6), up = go(sideways, { x: 1 / n, y: 0, z: -0.6 / n });
-  assert.ok(up.path >= 5 && up.tilt > 10 && up.pitch > 20, JSON.stringify(up));
-  base = await phone(); const down = go(sideways, { x: 1 / n, y: 0, z: 0.6 / n });
-  assert.ok(down.path <= -5 && down.tilt < -10, JSON.stringify(down));
-  base = await phone(); const fo = go(open, open);
-  assert.ok(Math.abs(fo.face - 20) <= 2 && Math.abs(fo.path) <= 2, JSON.stringify(fo));
-  base = await phone(); const bo = go(open, open, -1);   // the other way leads with the other side of the phone
-  assert.ok(Math.abs(bo.face + 20) <= 2, JSON.stringify(bo));
+  const plain = await one();
+  assert.ok(plain.yawPre > 65 && plain.yawPre < 95, `yawPre ${plain.yawPre}`);   // about 950 deg/s x 75 ms, plus the 60 Hz steps
+  assert.ok(plain.yawShare >= 0.99, `yawShare ${plain.yawShare}`);
+  assert.ok(plain.yawPost > 70 && plain.yawPost < 100, `yawPost ${plain.yawPost}`);
+  const led = await one({ lead: 150 }), against = await one({ lead: -150 });
+  assert.ok(led.yawPre > plain.yawPre + 8, `a slow start the same way counts: ${led.yawPre} vs ${plain.yawPre}`);
+  assert.ok(against.yawPre <= plain.yawPre && against.yawPre > plain.yawPre - 15, `one the other way isn't taken off: ${against.yawPre} vs ${plain.yawPre}`);
+  const rolled = await one({ roll: 0.75 });
+  assert.ok(Math.abs(rolled.yawShare - 0.8) < 0.02, `rolling: yawShare ${rolled.yawShare}`);
 });
 
 await test('lifting the phone still tosses on your serve', async () => {

@@ -99,8 +99,6 @@ const Input = {
       spin: clamp(Number.isFinite(+m.spin) ? +m.spin : 0.3, -1, 1), dir: m.dir === 'fh' || m.dir === 'bh' ? m.dir : null,
       vx: 0, vy: 0, src: 'phone', x: 0.5, y: 0.5,
     };
-    // How the racket moved at the peak (controller.html racketFeat), for the shot model; absent from older phone pages.
-    if (Number.isFinite(+m.path)) s.racket = { path: +m.path, face: +m.face || 0, tilt: +m.tilt || 0, vUp: +m.vUp || 0, sweep: +m.sweep || 0, pitch: +m.pitch || 0 };
     this.emit({ type: 'swing', swing: s });
   },
   phoneSwingStart(m) { this.emit({ type: 'swingStart', t0: this.phoneTime(m.tg, 0), dir: m.dir === 'fh' || m.dir === 'bh' ? m.dir : null, src: 'phone' }); },

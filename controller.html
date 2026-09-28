@@ -166,7 +166,7 @@ function setNet(on, text) { $('net').classList.toggle('on', on); $('netText').te
 // A swing is sent to the game as soon as the racket has clearly passed its fastest point (the contact): a sample
 // PAST_FRAC below the peak, or two falling samples in a row. Waiting for the end (half speed) cost 60-120 ms.
 const DET = { START: 240, MIN_PEAK: 380, END_FRAC: 0.5, PAST_FRAC: 0.9, MAX_MS: 450, GAP_MS: 320, REVERSE_MS: 60, RECOVER_MS: 650, SERVE_HOLD_MS: 120, SERVE_SURE_MS: 450, SERVE_SURE_PEAK: 650, KEEPALIVE_MS: 80 };
-const S = { events: 0, g: null, state: 'idle', t0: 0, tPeak: 0, peak: 0, w: 0, wPrev: 0, yaw: 0, absInt: 0, vUp: 0, vIdle: 0, vUpPeak: 0, aMax: 0, lastT: 0, lastEnd: 0, lastSign: 0, meter: 0, prev: null, id: 0, sent: false, u: null, pitch: 0, feat: null };
+const S = { events: 0, g: null, state: 'idle', t0: 0, tPeak: 0, peak: 0, w: 0, wPrev: 0, yaw: 0, absInt: 0, vUp: 0, vIdle: 0, vUpPeak: 0, aMax: 0, lastT: 0, lastEnd: 0, lastSign: 0, meter: 0, prev: null, id: 0, sent: false, yawPk: 0, yawLead: 0, yawIdle: 0, yawShare: 0 };
 
 function onMotion(e) {
   const r = e.rotationRate;
@@ -191,22 +191,19 @@ function onMotion(e) {
   if (S.state === 'idle') {
     // Leaky vertical speed, so the lift that starts before the swing is fast enough to detect still counts.
     S.vIdle = S.vIdle * Math.exp(-dt / 0.25) + aUp * dt;
+    S.yawIdle = S.yawIdle * Math.exp(-dt / 0.25) + wUp * dt;   // likewise the slow start of a turn (for yawPre)
     checkLiftToss(t, w);
     const sign = Math.abs(wUp) > 0.5 * w ? Math.sign(wUp) : 0;
     // Just after a swing only a turn the other way may start a new one: the swing straight after a wind-up.
     if (w > DET.START && t - S.lastEnd > (sign && sign === -S.lastSign ? DET.REVERSE_MS : DET.GAP_MS)) {
       const v0 = S.vIdle + aUp * dt;
-      Object.assign(S, { state: 'swing', t0: t, tPeak: t, peak: w, wPrev: w, yaw: wUp * dt, absInt: w * dt, vUp: v0, vUpPeak: v0, aMax: aMag, id: S.id + 1, sent: false, u: { x: ux, y: uy, z: uz }, pitch: 0 });
-      S.feat = racketFeat(wx, wy, wz, v0);
+      Object.assign(S, { state: 'swing', t0: t, tPeak: t, peak: w, wPrev: w, yaw: wUp * dt, absInt: w * dt, vUp: v0, vUpPeak: v0, aMax: aMag, id: S.id + 1, sent: false, yawPk: wUp * dt, yawLead: S.yawIdle, yawShare: w ? Math.abs(wUp) / w : 0 });
       onSwingStart(t, sign);
     }
     return;
   }
   S.yaw += wUp * dt; S.absInt += w * dt; S.vUp += aUp * dt;
-  S.u = turnUp(S.u, wx, wy, wz, dt);
-  const wUpNow = wx * S.u.x + wy * S.u.y + wz * S.u.z;
-  S.pitch += Math.sqrt(Math.max(0, w * w - wUpNow * wUpNow)) * dt;
-  if (w > S.peak) { S.peak = w; S.tPeak = t; S.vUpPeak = S.vUp; S.feat = racketFeat(wx, wy, wz, S.vUp); }
+  if (w > S.peak) { S.peak = w; S.tPeak = t; S.vUpPeak = S.vUp; S.yawPk = S.yaw; S.yawShare = Math.abs(wUp) / w; }
   S.aMax = Math.max(S.aMax, aMag);
   // Past the peak: the racket met the ball there, so the game hears about it now (it rewinds to tPeak anyway).
   if (!S.sent && S.peak >= DET.MIN_PEAK && t > S.tPeak && (w < S.peak * DET.PAST_FRAC || (w < S.wPrev && S.wPrev < S.peak && w < S.peak * 0.97))) S.sent = onPeak(describeSwing(t));
@@ -233,36 +230,17 @@ function describeSwing(t) {
   // Bringing the racket back after a stroke turns the other way, more slowly: that isn't a new swing.
   const p = S.prev, expect = lastState && lastState.stroke;
   const recovery = !!p && t - p.t < DET.RECOVER_MS && sign === -p.sign && yawFrac > 0.3 && p.yawFrac > 0.3 && S.peak < p.peak * 0.7 && !(dir && dir === expect);
-  return { id: S.id, tPeak: S.tPeak, tEnd: t, peak: Math.round(S.peak), power, spin, dir, yawFrac, sign, recovery, sent: S.sent, feat: S.feat };
-}
-
-// The racket at the peak, for the game's shot model. "Up" in the phone's own axes is turned by the gyroscope through
-// the swing (once it's moving, the accelerometer can't tell gravity from the swing's own pull). Held like a racket
-// handle, the phone's top (+y) points to the racket head and its screen is the strings. Sent with each swing:
-//   path  racket-head path at the peak, degrees above level: + low-to-high (topspin), - high-to-low (slice)
-//   face  the leading face's tilt, degrees: + open (strings facing up), - closed (facing down)
-//   tilt  racket head above (+) or below (-) the hand, degrees
-//   vUp   the hand's vertical speed at the peak, m/s (+ rising)
-//   sweep degrees turned about the vertical (side to side) from the swing's start to the peak
-//   pitch degrees turned about horizontal axes (up and down) over the same stretch
-function racketFeat(wx, wy, wz, vUp) {
-  const u = S.u, deg = 180 / Math.PI, vx = -wz, vz = wx;   // racket head velocity: rotation x top (its y part is 0)
-  const up = vx * u.x + vz * u.z, flat = Math.sqrt(Math.max(0, vx * vx + vz * vz - up * up));
-  return {
-    path: Math.round(Math.atan2(up, flat) * deg), face: Math.round(Math.asin(clamp((wx >= 0 ? 1 : -1) * u.z, -1, 1)) * deg),
-    tilt: Math.round(Math.asin(clamp(u.y, -1, 1)) * deg), vUp: +vUp.toFixed(2), sweep: Math.round(Math.abs(S.yaw)), pitch: Math.round(S.pitch),
-  };
-}
-// A direction fixed in the room, in the phone's axes after it turned at (wx, wy, wz) deg/s for dt s.
-function turnUp(u, wx, wy, wz, dt) {
-  const k = (Math.PI / 180) * dt, ax = wx * k, ay = wy * k, az = wz * k, th = Math.hypot(ax, ay, az);
-  if (th < 1e-9) return u;
-  const nx = ax / th, ny = ay / th, nz = az / th, c = Math.cos(th), s = -Math.sin(th), d = (nx * u.x + ny * u.y + nz * u.z) * (1 - c);
-  return { x: u.x * c + (ny * u.z - nz * u.y) * s + nx * d, y: u.y * c + (nz * u.x - nx * u.z) * s + ny * d, z: u.z * c + (nx * u.y - ny * u.x) * s + nz * d };
+  // For the shot model's aim (decided at the peak): yawPre, degrees turned about the vertical from the start of the
+  // forward swing (its slow start before the swing counted as one included) to the peak; yawShare, how much of the
+  // turn at the peak was about the vertical (1: a flat sweep; less: rolling or pitching). yawPost (whole swings only):
+  // degrees turned after the peak, + still turning the same way.
+  const k = Math.sign(S.yawPk), lead = Math.sign(S.yawLead) === k ? S.yawLead : 0;
+  const yawPre = +Math.abs(S.yawPk + lead).toFixed(1), yawPost = S.state === 'idle' ? +((S.yaw - S.yawPk) * k).toFixed(1) : null;
+  return { id: S.id, tPeak: S.tPeak, tEnd: t, peak: Math.round(S.peak), power, spin, dir, yawFrac, sign, recovery, sent: S.sent, yawPre, yawShare: +S.yawShare.toFixed(2), yawPost };
 }
 
 function finishSwing(t) {
-  S.state = 'idle'; S.lastEnd = t; S.vIdle = 0; S.lastSign = Math.sign(S.yaw);
+  S.state = 'idle'; S.lastEnd = t; S.vIdle = 0; S.yawIdle = 0; S.lastSign = Math.sign(S.yaw);
   if (S.peak < DET.MIN_PEAK) return;
   const sw = describeSwing(t);
   if (!sw.recovery) S.prev = { t, sign: sw.sign, peak: S.peak, yawFrac: sw.yawFrac };
@@ -657,7 +635,11 @@ function onSwing(sw) {
   if (screen === 'calib') { calibSwing(sw); return; }
   if (screen !== 'play' || sw.recovery) return;
   if (!sw.sent) { if (lastState && lastState.serving && lastState.tossed) holdServe(sw); else sendSwing(sw); }
-  else if (lastSent && lastSent.id === sw.id && !lastSent.used) Object.assign(lastSent, { tEnd: sw.tEnd, yawFrac: sw.yawFrac, sign: sw.sign });   // the whole swing says more about forehand/backhand
+  else {
+    // It went at its peak: now say how it finished (the follow-through aims the shot).
+    sendEnd(sw);
+    if (lastSent && lastSent.id === sw.id && !lastSent.used) Object.assign(lastSent, { tEnd: sw.tEnd, yawFrac: sw.yawFrac, sign: sw.sign });   // the whole swing says more about forehand/backhand
+  }
   showSwing(sw);
 }
 function showSwing(sw) {
@@ -673,8 +655,10 @@ function showSwing(sw) {
 }
 function sendSwing(sw) {
   lastSent = sw;
-  send({ type: 'swing', id: sw.id, tg: sw.tPeak + offset, peak: sw.peak, power: +sw.power.toFixed(3), spin: +sw.spin.toFixed(3), dir: sw.dir, yawFrac: +sw.yawFrac.toFixed(2), ...(sw.feat || {}) }, 'fast');
+  send({ type: 'swing', id: sw.id, tg: sw.tPeak + offset, peak: sw.peak, power: +sw.power.toFixed(3), spin: +sw.spin.toFixed(3), dir: sw.dir, yawFrac: +sw.yawFrac.toFixed(2), yawPre: sw.yawPre, yawShare: sw.yawShare }, 'fast');
+  if (sw.yawPost != null) sendEnd(sw);   // a serve sent after it ended
 }
+function sendEnd(sw) { send({ type: 'swingEnd', id: sw.id, yawPost: sw.yawPost, yawFrac: +sw.yawFrac.toFixed(2) }, 'fast'); }
 
 // ---------- grip setup ----------
 // A swing comes with a wind-up before it and a recovery after, both turning the other way. So each step

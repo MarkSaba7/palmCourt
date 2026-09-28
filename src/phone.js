@@ -157,7 +157,7 @@ const Phone = {
     if (m.type === 'ping') { try { c.send({ type: 'pong', t: m.t, g: Clock.now() * 1000 }); } catch (e) { /* link dropped */ } return; }
     if (m.type === 'hello') this.adopt(c, m);
     else if (c !== this.conn) return;
-    if ((m.type === 'swing' || m.type === 'swingStart') && m.id != null) {
+    if ((m.type === 'swing' || m.type === 'swingStart' || m.type === 'swingEnd') && m.id != null) {
       // The first copy of a swing counts; the others (see openFast) are dropped.
       const k = m.type + m.id, seen = (c.seen = c.seen || []);
       if (seen.includes(k)) return;
@@ -171,7 +171,8 @@ const Phone = {
       case 'status': this.calibrated = !!m.calibrated; this.armed = !!m.armed; break;
       case 'rtt': this.rtt = Math.round(+m.rtt || 0); this.checkRoute(c); break;
       case 'calib': this.calibrated = !!m.done; break;
-      case 'swing': this.lastSwing = m; Input.phoneSwing(m); UI.phoneSwing(m); break;
+      case 'swing': this.lastSwing = m; this.hookSwings(); Input.phoneSwing(m); UI.phoneSwing(m); break;
+      case 'swingEnd': this.swingEnd(m); return;
       default: return;
     }
     UI.renderPhone(); UI.phoneChip();
@@ -186,6 +187,20 @@ const Phone = {
   },
   // For the HUD chip and the pause screen: "Wi-Fi direct, 18 ms".
   linkText() { return [this.route, this.rtt ? `${this.rtt} ms` : ''].filter(Boolean).join(', '); },
+  // A swing goes at its peak; once it has ended the phone says how far it turned after the peak (yawPost, for the shot
+  // model's learning). It lands on the same swing object the game got, as a 'swingEnd' input event.
+  hookSwings() {
+    if (this.hooked) return;
+    this.hooked = true;
+    Input.on((ev) => { if (ev.type === 'swing' && ev.swing && ev.swing.src === 'phone') this.swingObj = ev.swing; });
+  },
+  swingEnd(m) {
+    const s = this.swingObj;
+    if (!s || !this.lastSwing || this.lastSwing.id !== m.id || s.ended) return;
+    s.ended = true;
+    for (const k of ['yawPost', 'yawFrac']) if (Number.isFinite(+m[k])) s[k] = +m[k];
+    Input.emit({ type: 'swingEnd', swing: s });
+  },
   send(m) {
     // A hit also says which stroke it was, so an uncalibrated phone can learn forehand from backhand as you play.
     if (m && m.type === 'hit' && !m.stroke) { const me = Game.me(); if (me && me.plan) m = { ...m, stroke: me.plan.stroke }; }
