@@ -85,7 +85,9 @@ async function phone({ fhSign = 1 } = {}) {
     }
     return tBest;
   };
-  return { ctx, out, game, advance, still, swing, sample, pong, hooks, later: setTimeout, get now() { return now; }, els };
+  // Any hold: w = rotation (deg/s, phone axes), up = which way is up in phone axes.
+  const raw = (w, up) => listeners.devicemotion({ rotationRate: { alpha: w.z, beta: w.x, gamma: w.y }, accelerationIncludingGravity: { x: up.x * G, y: up.y * G, z: up.z * G }, acceleration: { x: 0, y: 0, z: 0 } });
+  return { ctx, out, game, advance, still, swing, sample, raw, pong, hooks, later: setTimeout, get now() { return now; }, els };
 }
 const sent = (p, type) => p.out.filter((m) => m.type === type);
 
@@ -201,6 +203,35 @@ await test('an unset phone learns forehand from backhand from the hits, which no
     p.still(700);
   }
   assert.equal(p.ctx.PalmRacket.cal.fhSign, -1);
+});
+
+await test('each swing says how the racket moved: head path, face, tilt, sweep', async () => {
+  // Held like a handle, screen facing sideways: the phone's +x is up, its top (+y) points to the racket head.
+  const go = (up, axis, sign = 1) => {
+    const p = await0(up);
+    p.game({ type: 'state', inMatch: true, serving: false, tossed: false, stroke: null });
+    for (let i = 0, t = 0; t <= 430; i++, t = (i * 1000) / HZ) {
+      p.advance(1000 / HZ);
+      const w = sign * 950 * (t < 150 ? Math.sin((Math.PI * t) / 300) ** 2 : t < 370 ? Math.cos((Math.PI * (t - 150)) / 440) ** 2 : 0);
+      p.raw({ x: axis.x * w, y: axis.y * w, z: axis.z * w }, up);
+    }
+    return sent(p, 'swing')[0];
+  };
+  let base;
+  const await0 = (up) => { base.still(0); for (let i = 0; i < 90; i++) { base.advance(1000 / HZ); base.raw({ x: 0, y: 0, z: 0 }, up); } return base; };
+  const sideways = { x: 1, y: 0, z: 0 }, r = 20 * Math.PI / 180, open = { x: Math.cos(r), y: 0, z: Math.sin(r) };
+  base = await phone(); const flat = go(sideways, sideways);
+  assert.ok(Math.abs(flat.path) <= 2 && Math.abs(flat.face) <= 2 && Math.abs(flat.tilt) <= 2, JSON.stringify(flat));
+  assert.ok(flat.sweep > 50 && flat.pitch <= 2 && flat.yawFrac > 0.95);
+  // A swing plane tilted 31 degrees: the head rises (or falls) through the swing, most at the bottom of the arc.
+  base = await phone(); const n = Math.hypot(1, 0.6), up = go(sideways, { x: 1 / n, y: 0, z: -0.6 / n });
+  assert.ok(up.path >= 5 && up.tilt > 10 && up.pitch > 20, JSON.stringify(up));
+  base = await phone(); const down = go(sideways, { x: 1 / n, y: 0, z: 0.6 / n });
+  assert.ok(down.path <= -5 && down.tilt < -10, JSON.stringify(down));
+  base = await phone(); const fo = go(open, open);
+  assert.ok(Math.abs(fo.face - 20) <= 2 && Math.abs(fo.path) <= 2, JSON.stringify(fo));
+  base = await phone(); const bo = go(open, open, -1);   // the other way leads with the other side of the phone
+  assert.ok(Math.abs(bo.face + 20) <= 2, JSON.stringify(bo));
 });
 
 await test('lifting the phone still tosses on your serve', async () => {
