@@ -325,6 +325,19 @@ class RelayOverHttp(unittest.TestCase):
         self.assertIsNone(phone.recv())
         self.assertEqual(game.recv(), {'relay': 'close'})
 
+    def test_frames_go_out_at_once_and_keepalives_stop_here(self):
+        game = self.ws('game', 'FASTR')
+        phone = self.ws('phone', 'FASTR')
+        phone.recv(), game.recv()
+        # Nagle off on the relay's sockets: a swing right after a swingStart isn't held for the last frame's ACK.
+        socks = [p.sock for p in serve.relay().peers.values() if p.code == 'FASTR']
+        self.assertEqual(len(socks), 2)
+        for s in socks:
+            self.assertNotEqual(s.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY), 0)
+        phone.send({'type': 'k'})                           # the phone's keep-alive: only there to keep its Wi-Fi awake
+        phone.send({'type': 'swing', 'id': 3})
+        self.assertEqual(game.recv(), {'type': 'swing', 'id': 3})
+
     def test_bad_requests_refused(self):
         for path in ('/link?role=phone&code=TOOLONG', '/link?role=admin&code=ABCDE', '/link?role=phone'):
             c = WsClient(self.port, path)

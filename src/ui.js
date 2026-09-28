@@ -129,6 +129,8 @@ const UI = {
 
   go(screen) {
     const from = this.screen;
+    // The menu button that led away (Training, World Tour…): coming back to the menu lands on it again.
+    if (from === 'menu' && screen !== 'menu') { const a = document.activeElement; this.menuFrom = a && $('menu').contains(a) ? a : null; }
     this.screen = screen;
     Bus.emit('screen', { screen });
     for (const el of document.querySelectorAll('.screen')) el.hidden = el.id !== screen;   // modules add their own .screen elements
@@ -141,7 +143,9 @@ const UI = {
     this.netInfo();
     // Keyboard players land on the screen's main button; back in play nothing keeps focus, so Space always swings.
     const main = { menu: 'btnPractice', pause: 'btnResume', over: 'btnRematch' }[screen];
-    if (main && from !== screen && !$(main).disabled) $(main).focus({ preventScroll: true });
+    const back = screen === 'menu' && this.menuFrom;
+    if (back && from !== screen && back.isConnected && !back.disabled && back.getClientRects().length) { back.focus({ preventScroll: true }); back.scrollIntoView({ block: 'nearest' }); }
+    else if (main && from !== screen && !$(main).disabled) $(main).focus({ preventScroll: true });
     else if (screen === null && document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   },
   async ensureControls(then) {
@@ -440,7 +444,7 @@ const UI = {
   phoneStatusText(info) {
     const st = Phone.status();
     if (st === 'connected') {
-      const how = Phone.via === 'wifi' ? 'over Wi-Fi' : 'over the internet';
+      const how = Phone.via === 'wifi' ? 'over Wi-Fi' : Phone.route === 'Wi-Fi direct' ? 'over Wi-Fi, direct' : Phone.route === 'TURN relay' ? 'through an internet relay (slower: put the phone on the same Wi-Fi as this PC)' : 'over the internet';
       const next = !Phone.armed ? 'Tap Start on your phone.' : Phone.calibrated ? 'Ready to play.' : 'Swing a forehand, then a backhand on your phone to finish setup (or tap Skip there).';
       return [`Connected: ${Phone.device || 'phone'} ${how}${Phone.rtt ? ` · ${Phone.rtt} ms` : ''}. ${next}`, 'ok'];
     }
@@ -484,7 +488,7 @@ const UI = {
   phoneChip() {
     const el = $('phoneInfo');
     if (Settings.control !== 'phone' || !(Game.mode === 'cpu' || Game.mode === 'online')) { el.textContent = ''; return; }
-    el.textContent = Phone.connected() ? `Phone${Phone.rtt ? ` ${Phone.rtt} ms` : ''}` : 'Phone disconnected';
+    el.textContent = Phone.connected() ? `Phone${Phone.linkText() ? `: ${Phone.linkText()}` : ''}` : 'Phone disconnected';
     el.classList.toggle('warn', !Phone.connected());
   },
 
@@ -1120,7 +1124,7 @@ const UI = {
   pause() {
     if (Game.mode === 'cpu') Clock.pause();
     $('pauseEyebrow').textContent = Game.mode === 'online' ? 'Match still running' : 'Paused';
-    $('perfInfo').textContent = `Running at ${Math.round(Perf.fps)} fps · ${Math.round(Perf.scale * 100)}% resolution · ${Perf.gpuName()}${Tracker.stream ? ` · tracking ${Tracker.info()}` : ''}`;
+    $('perfInfo').textContent = `Running at ${Math.round(Perf.fps)} fps · ${Math.round(Perf.scale * 100)}% resolution · ${Perf.gpuName()}${Tracker.stream ? ` · tracking ${Tracker.info()}` : ''}${Settings.control === 'phone' && Phone.connected() ? ` · Phone: ${Phone.linkText() || 'connected'}` : ''}`;
     this.scoreTable($('pauseScore'), false);
     this.go('pause');
   },
