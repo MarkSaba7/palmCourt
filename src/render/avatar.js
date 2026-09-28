@@ -362,7 +362,7 @@ export class Avatar {
   // The toss (p, v: where the ball leaves the hand, world) lets the racket meet the ball at the top.
   serveToss(t, p, v) { this.mode = 'serve'; this.tossT = t; this.contactT = 0; this.toss = p && v ? { p: { ...p }, v: { ...v } } : null; this.svPow = 0.7; }
   // The serve's keys: timed from the toss, and around the contact once it's known (the trophy is held until then).
-  buildServe() {
+  buildServe(pl) {
     const pow = clamp(this.svPow ?? 0.7, 0, 1), st = this.style.serve || 'classic', known = this.contactT > 0;
     const cT = known ? Math.max(0.25, this.contactT - this.tossT) : 9, Td = lerp(0.3, 0.17, pow), kt = this.skt;
     kt[4] = cT; kt[3] = cT - 0.45 * Td; kt[5] = cT + 0.1; kt[6] = cT + lerp(0.52, 0.4, pow);
@@ -372,8 +372,7 @@ export class Avatar {
     const c = this.c;
     if (known && this.toss) {
       const { p, v } = this.toss;
-      this.body.updateWorldMatrix(true, false);
-      this.body.worldToLocal(c.set(p.x + v.x * cT, p.y + v.y * cT - 4.905 * cT * cT, p.z + v.z * cT));
+      this.toBody(p.x + v.x * cT, p.y + v.y * cT - 4.905 * cT * cT, p.z + v.z * cT, pl, c);
     } else c.set(0.14, 2.8, -0.42);
     c.y -= 0.12;   // (met on the upper strings: a high toss is still hit at full stretch)
     const kp = this.kp;
@@ -456,12 +455,16 @@ export class Avatar {
     s.spin = per && Number.isFinite(per.topspin) ? lerp(0.1, 0.8, per.topspin) : 0.4;
     if (plan && plan.y < 0.55 && per && per.slice > 0.62) s.spin = -0.5;
   }
+  // A world point in the body frame of the player's own spot (without a lunge's step, which is chosen from it).
+  toBody(x, y, z, pl, out) {
+    const th = this.root.rotation.y, dx = x - pl.x, dz = z - pl.z;
+    return out.set((Math.cos(th) * dx - Math.sin(th) * dz) * this.body.scale.x, y, Math.sin(th) * dx + Math.cos(th) * dz);
+  }
   // Where the ball will be met, in the body frame (from the plan while there is one).
   contactPoint(pl) {
     const plan = pl && pl.plan;
     if (plan && Number.isFinite(plan.y) && Number.isFinite(plan.x)) {
-      this.body.updateWorldMatrix(true, false);
-      this.body.worldToLocal(this.c.set(plan.x, plan.y, plan.z));
+      this.toBody(plan.x, plan.y, plan.z, pl, this.c);
       this.cFor = plan.t;
     } else if (this.cFor < 0) this.c.set(this.stroke === 'bh' ? -0.8 : 0.8, 0.95, -0.3);
     return this.c;
@@ -521,7 +524,7 @@ export class Avatar {
       if (i === 2) { [nx, nz] = [ca * nx + sa * nz, -sa * nx + ca * nz]; }
       const al2 = Math.hypot(ax, ay, az) || 1, nl = Math.hypot(nx, ny, nz) || 1;
       ax /= al2; ay /= al2; az /= al2;
-      if (i === 2) { K[PLEN] = c.x; K[PLEN + 1] = c.y; K[PLEN + 2] = c.z; } else { K[PLEN] = Wx + RH * ax; K[PLEN + 1] = Wy + RH * ay; K[PLEN + 2] = Wz + RH * az; }
+      if (i === 2) { K[PLEN] = c.x - kp.px; K[PLEN + 1] = c.y; K[PLEN + 2] = c.z - kp.pz; }   // (the ball, from where the step takes the body) else { K[PLEN] = Wx + RH * ax; K[PLEN + 1] = Wy + RH * ay; K[PLEN + 2] = Wz + RH * az; }
       K[PLEN + 3] = ax; K[PLEN + 4] = ay; K[PLEN + 5] = az; K[PLEN + 6] = nx / nl; K[PLEN + 7] = ny / nl; K[PLEN + 8] = nz / nl; K[PLEN + 9] = r(9);
       // The free hand: a two-hander's on the grip through the stroke, a one-hander's on the throat at the take-back.
       K[PLEN + 10] = bh ? (one ? [0.9, 0.5, 0, 0, 0][i] : [1, 1, 1, 1, 0.85][i]) : 0;
@@ -550,7 +553,7 @@ export class Avatar {
       ik = 1; k = 40;
       if (tau > this.kt[4] + 0.12) { this.mode = 'ready'; this.cFor = -1; this.sh.known = false; }
     } else if (this.mode === 'serve') {
-      const ts = now - this.tossT, K = this.buildServe(), kt = K === this.SK ? this.skt : this.skt3;
+      const ts = now - this.tossT, K = this.buildServe(pl), kt = K === this.SK ? this.skt : this.skt3;
       if (K === this.SK3) this.skt3.set(this.skt.subarray(0, 3));
       arrToPose(spline(K, kt, this.sks, ts + LEAD, this.kv), T);
       spline(K, kt, this.sks, ts, this.kv);
@@ -600,6 +603,9 @@ export class Avatar {
       T.shR[0] += this.armLift;
     }
     lerpPose(this.pose, T, 1 - Math.exp(-k * dt), this.pose);
+    // A lunge's step moves the whole figure (body frame px / pz; the root, so replays keep it too).
+    const th = this.root.rotation.y, ox = this.pose.px * this.body.scale.x, oz = this.pose.pz;
+    this.root.position.set(pl.x + Math.cos(th) * ox + Math.sin(th) * oz, 0, pl.z - Math.sin(th) * ox + Math.cos(th) * oz);
     // The racket arm is solved on the smoothed body, so the head is where the path says (and on the ball at contact).
     if (ik > 0.01) this.aim(this.pose, ik, dt); else this.ikQ = this.ikL = null;
     this.applyPose(this.pose, dt, pl);
@@ -631,7 +637,7 @@ export class Avatar {
   aim(T, w, dt) {
     const B = this.B, kv = this.kv, P0 = PLEN;
     // The body the arms hang from.
-    B.hips.position.set(this.rest.hips.x + T.px, this.rest.hips.y + T.py, this.rest.hips.z + T.pz);
+    B.hips.position.set(this.rest.hips.x, this.rest.hips.y + T.py, this.rest.hips.z);
     B.spine.rotation.set(T.sp[0] * 0.45, T.sp[1] * 0.45, T.sp[2] * 0.5);
     B.chest.rotation.set(T.sp[0] * 0.55, T.sp[1] * 0.55, T.sp[2] * 0.5);
     B.clavR.rotation.set(0, 0, 0.22 * Math.max(0, T.shR[2] - 1.0) + 0.1 * Math.max(0, T.shR[0] - 2.0));
@@ -667,7 +673,7 @@ export class Avatar {
   }
   applyPose(p, dt, pl) {
     const B = this.B;
-    B.hips.position.set(this.rest.hips.x + (p.px || 0), this.rest.hips.y + p.py, this.rest.hips.z + (p.pz || 0));
+    B.hips.position.set(this.rest.hips.x, this.rest.hips.y + p.py, this.rest.hips.z);
     B.spine.rotation.set(p.sp[0] * 0.45, p.sp[1] * 0.45, p.sp[2] * 0.5);
     B.chest.rotation.set(p.sp[0] * 0.55, p.sp[1] * 0.55, p.sp[2] * 0.5);
     // Head: pose plus a glance toward the ball.
