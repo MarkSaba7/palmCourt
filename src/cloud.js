@@ -107,6 +107,8 @@ export function mergeSaves(local, remote) {
   out.owned = earliest(A.owned, B.owned);
   out.achievements = earliest(A.achievements, B.achievements);
   out.equipped = { ...(other.equipped || {}), ...(base.equipped || {}) };
+  out.upgrades = { ...(isObj(A.upgrades) ? A.upgrades : {}) };   // G1: gear upgrades were paid for, so they only go up
+  if (isObj(B.upgrades)) for (const [k, n] of Object.entries(B.upgrades)) out.upgrades[k] = Math.max(num(out.upgrades[k]), num(n));
   out.history = mergeList(A.history, B.history, (h) => `${h.t}|${h.score}|${h.opponent}`, HISTORY);
   out.ledger = mergeList(A.ledger, B.ledger, (l) => `${l.t}|${l.kind}|${l.n}|${l.why}`, LEDGER);
   out.daily = mergeDaily(A.daily || {}, B.daily || {}, base.daily || {});

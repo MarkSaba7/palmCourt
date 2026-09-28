@@ -55,6 +55,17 @@ function shape(flat) {
 }
 export const NEUTRAL = shape({});
 export const get = (S, path) => path.split('.').reduce((o, k) => o[k], S);
+// S in the gear words (both wings averaged), for the shop's compare: { pow, ctl, spin, serve, volley, touch, speed, react, reach }.
+export const summary = (S) => ({
+  pow: (S.fh.pow + S.bh.pow) / 2, ctl: (S.fh.ctl + S.bh.ctl) / 2, spin: (S.fh.spin + S.bh.spin) / 2, serve: (S.serve.pow + S.serve.ctl) / 2,
+  volley: S.volley.ctl, touch: S.touch, speed: S.move.speed, react: S.move.react, reach: S.reach,
+});
+// Names for every stat path and profile key (the Locker's "Your stats" and the pro picker's strengths).
+export const LABELS = {
+  'fh.pow': 'Forehand power', 'fh.ctl': 'Forehand control', 'fh.spin': 'Forehand spin', 'bh.pow': 'Backhand power', 'bh.ctl': 'Backhand control', 'bh.spin': 'Backhand spin',
+  'serve.pow': 'Serve pace', 'serve.ctl': 'Serve accuracy', 'volley.ctl': 'Volleys', touch: 'Touch', 'move.speed': 'Speed', 'move.react': 'Reactions', reach: 'Reach',
+  pow: 'Power', ctl: 'Control', spin: 'Spin', serve: 'Serve', volley: 'Volleys', speed: 'Speed', react: 'Reactions', fh: 'Forehand', bh: 'Backhand',
+};
 const cache = new Map();
 // S for a pro id and a gear list [{ id, up }] (ids that aren't gear are skipped).
 export function build(pro = 'custom', gear = []) {
@@ -98,7 +109,7 @@ export function cpuGear(level, persona) {
 let match = { mode: 'idle' }, profile = Profile;
 
 export const Stats = {
-  STAT_MIN, STAT_MAX, PATHS, NEUTRAL, PRO_BASE, WORDS, build, loadout, cpuGear, get,
+  STAT_MIN, STAT_MAX, PATHS, NEUTRAL, PRO_BASE, WORDS, LABELS, build, loadout, cpuGear, get, summary,
   begin(cfg) { match = { mode: (cfg && cfg.mode) || 'idle' }; },
   // S for a game.js player ({ pro, ctl, level, persona }). o: { mode, onlineGear, gear: [{ id, up }] } overrides (tests).
   forPlayer(p, o = {}) {
@@ -116,6 +127,11 @@ export const Stats = {
   // What you'd have as `pro` with `over` ({ slot: id }) equipped instead (the Pro Shop's compare).
   preview(pro = 'custom', over = {}) { return build(pro, this.mine(over)); },
   forPro(pro) { return build(pro, []); },
+  // A pro's signature strengths (the top n) and their weak spot, for the pro picker: [{ key, label, v }].
+  strengths(pro, n = 3) {
+    const e = Object.entries(PRO_BASE[pro] || {}), pos = e.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, n), neg = e.filter(([, v]) => v < 0).sort((a, b) => a[1] - b[1]).slice(0, 1);
+    return [...pos, ...neg].map(([key, v]) => ({ key, label: LABELS[key] || key, v }));
+  },
   tierOf: (i) => GEAR_TIERS.find((t) => t.key === (typeof i === 'string' ? itemById(i) : i)?.tier) || GEAR_TIERS[0],
   // For tests: read gear from a stand-in profile ({ equipped, upgrades }).
   useProfile(p) { profile = p; },
