@@ -597,8 +597,10 @@ export const Training = {
     const cam = Settings.control === 'hand' || Settings.control === 'paddle';
     $('btnTrCheck').hidden = Settings.control === 'mouse';
     $('btnTrCheck').textContent = Settings.control === 'phone' ? 'Connect phone' : 'Camera check';
-    const left = [Math.max(0, TRAINING.daily[0] - (T.day.xp || 0)), Math.max(0, TRAINING.daily[1] - (T.day.fuzz || 0))];
-    $('trCap').textContent = `Drills pay a little XP and Fuzz, up to ${fmtXP(TRAINING.daily[0])} and ${fmtFuzz(TRAINING.daily[1])} a day (${left[0] ? `${fmtXP(left[0])} left today` : 'done for today: matches still pay in full'}).${cam ? ' Hint: run the camera check first for smoother swings.' : ''}`;
+    // Both caps: Fuzz usually runs out before XP does.
+    const [capX, capF] = TRAINING.daily, xp = Math.min(capX, T.day.xp || 0), fuzz = Math.min(capF, T.day.fuzz || 0);
+    const full = xp >= capX && fuzz >= capF ? ' (done for today: matches still pay in full)' : fuzz >= capF ? ' (Fuzz done for today: drills still pay XP, matches pay in full)' : xp >= capX ? ' (XP done for today: drills still pay Fuzz, matches pay in full)' : '';
+    $('trCap').textContent = `Drills pay a little XP and Fuzz, capped each day. Today: ${nf(xp)}/${fmtXP(capX)} · ${nf(fuzz)}/${fmtFuzz(capF)}${full}.${cam ? ' Hint: run the camera check first for smoother swings.' : ''}`;
   },
   renderOver() {
     const L = this.last, r = L.run, s = L.s, res = L.res, def = r.def, tut = r.tut;

@@ -146,6 +146,14 @@ function swingSpin(s) {
   return s.spin;
 }
 
+// TFLite announces its CPU delegate on stderr, which MediaPipe's runtime prints with console.error: it's not an error,
+// so drop that one known line (everything else still goes through). Self-contained: the worker gets it via toString.
+function quietTfliteInfo(con) {
+  if (!con || !con.error || con.error.quietTflite) return;
+  const err = con.error;
+  con.error = Object.assign(function (...a) { if (!/^INFO: Created TensorFlow Lite XNNPACK delegate/.test(String(a[0]))) err.apply(this, a); }, { quietTflite: true });
+}
+
 // Runs inside a Web Worker (serialised with toString), so hand tracking never blocks the frame that draws the court.
 // Where the browser allows it the camera's frames come straight here (a MediaStreamTrackProcessor stream), so a frame
 // never waits for the page to draw one; otherwise the page posts ImageBitmaps. Only the newest frame is ever tracked.
@@ -373,7 +381,7 @@ const Tracker = {
     return new Promise((resolve, reject) => {
       let w, url, timer = 0, done = false;
       const t0 = performance.now();
-      try { url = URL.createObjectURL(new Blob([`(${handWorkerMain.toString()})();`], { type: 'text/javascript' })); w = new Worker(url); }
+      try { url = URL.createObjectURL(new Blob([`(${quietTfliteInfo.toString()})(self.console);(${handWorkerMain.toString()})();`], { type: 'text/javascript' })); w = new Worker(url); }
       catch (e) { reject(e); return; }
       this.workerState = 'loading';
       const fail = (err) => {
@@ -493,6 +501,7 @@ const Tracker = {
   },
   async loadHands() {
     const vision = await timeLimit(import(`${MP_BASE}/vision_bundle.mjs`), HAND_WAIT.download * 2, 'Loading the hand tracker');
+    quietTfliteInfo(console);   // before the runtime starts: it binds console.error when it does
     const fileset = await vision.FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
     const make = (delegate) => timeLimit(vision.HandLandmarker.createFromOptions(fileset, { ...HAND_OPTS, baseOptions: { modelAssetPath: MP_MODEL, delegate } }), HAND_WAIT[delegate] + HAND_WAIT.download, `Starting the hand tracker on the ${delegate}`);
     if (this.delegates()[0] === 'GPU') {
