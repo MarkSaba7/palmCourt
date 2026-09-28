@@ -119,20 +119,21 @@ export function readText(shot, kmh) {
 // pow, spin, drop, dirX, tau, q (timing quality 0..1), diff (pressure 0..1), volley, S (gear stats) }.
 export function humanGround(o) {
   const st = strokeStats(o.S, o.stroke, o.volley), pow = clamp(o.pow, 0.03, 1), spin = clamp(o.spin, -1, 1), q = clamp(o.q ?? 1, 0.2, 1);
-  const drop = !!o.drop, kind = shotKind(spin, drop);
-  const aim = aimGround({ ...o, pow, spin, drop, side: ballSide(o.stroke, o.handed) });
+  const drop = !!o.drop, kind = shotKind(spin, drop), bs = ballSide(o.stroke, o.handed);
+  const aim = aimGround({ ...o, pow, spin, drop, side: bs });
   // Scatter: timing costs most, then how hard the incoming ball was, then swinging flat out. Better control, less.
   const errK = (1 + 3 * (1 - q)) * (1 + 0.9 * clamp(o.diff || 0, 0, 1)) / st.ctl;
   let sx = (0.3 + 0.6 * pow * pow) * errK, sz = (0.35 + 0.6 * pow * pow + 0.7 * sstep(0.8, 1, pow)) * errK;
   if (drop) { sx = 0.45 * errK / st.touch; sz = 0.5 * errK / st.touch; }
   else if (spin < -0.2) { sx /= Math.sqrt(st.touch); sz /= Math.sqrt(st.touch); }
-  const xl = aim.x + gauss() * sx, dl = Math.max(1.3, aim.depth + gauss() * sz);
+  // (The random draws come back with the shot, so a steer after the follow-through keeps the same scatter.)
+  const ex = o.ex ?? gauss(), ez = o.ez ?? gauss(), xl = aim.x + ex * sx, dl = Math.max(1.3, aim.depth + ez * sz);
   const vk = drop ? lerp(10.5, 13, pow / 0.3) : lerp(15, 33.5, Math.pow(pow, 0.9)) * (1 - 0.12 * Math.max(0, -spin));
   const speed = vk * st.pow * (0.6 + 0.4 * q);
   // Topspin grows with the swing's rise and a little with pace (a flat drive still turns over ~1000 rpm).
   const rpm = (drop ? -2100 : spin >= 0 ? lerp(900, 3300, spin) + 400 * pow * (1 - spin) : -lerp(600, 2400, -spin)) * st.spin;
   const sol = solveShot(o.from, o.side * xl, -o.side * dl, speed, rpm * RPM, { minNet: drop ? 0.1 : 0.3 });
-  return { sol, rpm, kind, tau: o.tau, q, power: pow, aim: aim.x, target: aim };
+  return { sol, rpm, kind, tau: o.tau, q, power: pow, aim: aim.x, land: { x: xl, z: dl }, ex, ez, ballSide: bs, mx: o.mx || 0 };
 }
 
 // A person's serve. o: { from, side, court, second, power, a (as serveShot: 0..1 across the box, left to right as the

@@ -135,7 +135,7 @@ class SwingDetector {
     this.lastFrame = t;
     if (last && t - last.t > O.maxGap) { this.breakTrack(out); last = null; }
     this.thr = this.threshold(o.sens);
-    const p = { t, x, yw, sc, asp }, a = this.alt, al = a[a.length - 1];
+    const p = { t, x, yw, sc, asp, sz: o.size > 0 ? o.size : 0 }, a = this.alt, al = a[a.length - 1];
     const gAlt = al ? this.gate(t - al.t, sc) : 0, dAlt = al ? Math.hypot(x - al.x, yw - al.yw) : Infinity, off = last ? this.offTrack(p, last) : 0;
     if (last && (off > 1 || (dAlt < gAlt && dAlt < off * this.gate(t - last.t, sc)))) {
       // Off the track (or next to the last point that was): the tracker jumped to something else (skip it), unless it
@@ -275,7 +275,7 @@ class SwingDetector {
     const m = {
       t0: v.t, x0: v.x0, y0: v.y0, ux, uy, n: 0, vmax: 0, pk: null, prev: pv, pprev: null, tOn: null, v0: 0, cls: null, sw: null,
       hist: this.vh.filter((q) => q.t > v.t - 0.2 && !q.gap),   // (the samples just before it: where its speed took off)
-      turn: turned, from: turned && lm && lm.t > t - 0.12 ? lm.m : null,
+      turn: turned, from: turned && lm && lm.t > t - 0.12 ? lm.m : null, sz0: p.sz, sz1: p.sz,
       still: !turned && this.stillEnd > t - 0.2 && this.stillFor >= 0.12,
     };
     // Setting off back the other way (or sharply turned) soon after a held-back movement from rest: if this one is about
@@ -296,10 +296,12 @@ class SwingDetector {
     }
     // A sample more than 3× the one before (and above the start speed) mid-swing is a glitch, not the racket.
     if (!(m.sw && m.prev && v.s > 3 * m.prev.s && m.prev.s > this.thr)) {
-      if (v.s > m.vmax) { m.v2 = m.vmax; m.vmax = v.s; m.pk = [m.prev, v, null]; m.gapPk = v.gap; if (m.sw) { m.sw.vx = v.vx; m.sw.vy = v.vy; } }
+      if (v.s > m.vmax) { m.v2 = m.vmax; m.vmax = v.s; m.pk = [m.prev, v, null]; m.gapPk = v.gap; m.pkAt = { x: p.x, y: p.yw, sz: m.sz1 || p.sz }; if (m.sw) { m.sw.vx = v.vx; m.sw.vy = v.vy; } }
       else { if (v.s > (m.v2 || 0)) m.v2 = v.s; if (m.pk && !m.pk[2]) m.pk[2] = v; }
     }
     m.pprev = m.prev; m.prev = v; m.n++; m.last = { x: p.x, y: p.yw, t: p.t };
+    if (p.sz > 0) m.sz1 = m.sz1 ? 0.5 * (m.sz1 + p.sz) : p.sz;   // (palm size, lightly steadied: how near the camera the hand is)
+    if (m.sw && m.sw.path) Object.assign(m.sw.path, this.pathOf(m));
     if (!v.gap && m.hist.length < 40) m.hist.push(v);
     const H = this.held;
     if (H && H.next === m && !m.sw && this.heldVerdict(H, m, false)) this.resolveHeld(p.t, this.out);
@@ -370,7 +372,7 @@ class SwingDetector {
     const dir = strokeDir(m.ux, m.uy, o.handed);
     const sw = {
       t0, tOn: m.tOn ?? v.t, peak: 0, vx: m.pk ? m.pk[1].vx : v.vx, vy: m.pk ? m.pk[1].vy : v.vy, x: p.x, y: p.yw * p.asp, src: o.src || 'hand',
-      dir, side: Math.abs(m.ux), gap, tPeak: t0, lead: t0 - t,
+      dir, side: Math.abs(m.ux), gap, tPeak: t0, lead: t0 - t, path: this.pathOf(m),
     };
     const e = this.ended;
     if (e && t - e.t < 0.45 && m.ux * e.ux + m.uy * e.uy < 0) sw.follows = e.sw;
@@ -403,6 +405,7 @@ class SwingDetector {
       sw.peak = this.top(m);
       if (m.pk) sw.tPeak = this.peakAt(m);
       sw.end = t;
+      sw.path = { ...this.pathOf(m), done: true };
       if (!sw.role) sw.role = 'stroke';
       this.ended = { t, ux: m.ux, uy: m.uy, sw, m };
       this.rec = this.recovery(m, sw, t);
@@ -473,11 +476,18 @@ class SwingDetector {
     const sw = {
       t0: tp, tOn: hm.tOn ?? tp, peak: this.top(hm), vx: hm.pk ? hm.pk[1].vx : hm.ux, vy: hm.pk ? hm.pk[1].vy : hm.uy,
       x: hm.last.x, y: hm.last.y * (this.pts.length ? this.pts[this.pts.length - 1].asp : 4 / 3), src: this.src, dir: strokeDir(hm.ux, hm.uy, this.handed),
-      side: Math.abs(hm.ux), gap: !!hm.gapPk, tPeak: tp, lead: tp - t, late: true, end: h.t, role: 'stroke',
+      side: Math.abs(hm.ux), gap: !!hm.gapPk, tPeak: tp, lead: tp - t, late: true, end: h.t, role: 'stroke', path: { ...this.pathOf(hm), done: true },
     };
     this.ended = { t: h.t, ux: hm.ux, uy: hm.uy, sw, m: hm };
     this.rec = this.recovery(hm, sw, h.t);
     out.push({ type: 'swing', swing: sw }, { type: 'swingEnd', swing: sw });
+  }
+  // The stroke's path for aiming (see shot.js readCamera): where it set off (x0 y0), where its speed peaked (the contact),
+  // where it has got to (x1 y1; the finish once it's over), in frame widths, and the palm's size at those points (0 when
+  // unknown, e.g. a paddle). done: the movement is over, so x1 y1 is the follow-through's end.
+  pathOf(m) {
+    const k = m.pkAt || { x: m.x0, y: m.y0, sz: m.sz0 }, e = m.last || k;
+    return { x0: m.x0, y0: m.y0, xp: k.x, yp: k.y, x1: e.x, y1: e.y, s0: m.sz0 || 0, sp: k.sz || 0, s1: m.sz1 || 0, done: false };
   }
   // When a movement's speed peaked: the middle of its fast part (the samples within 20% of the top, weighted by how far
   // above that they are), which is steadier than the single fastest sample when the top is broad or noisy.
