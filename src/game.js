@@ -985,7 +985,7 @@ const Game = {
     Crowd.cheer(amp);
     Crowd.flashBurst(Math.round(4 + amp * 10), 1.4);
     const now = Clock.now();
-    this.players[w].avatar.react('win', now + 0.35);
+    this.players[w].avatar.react('win', now + 0.35, amp);   // V2: a big point gets the player's own celebration
     this.players[1 - w].avatar.react('lose', now + 0.35);
     if (this.mode === 'attract') return;
     UI.callout(big, small);

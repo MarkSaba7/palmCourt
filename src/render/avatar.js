@@ -397,7 +397,56 @@ export class Avatar {
   idle(standing) { this.mode = standing ? 'stand' : 'ready'; this.sh.known = false; this.cFor = -1; }
   // A split step: a small hop timed to land as the opponent strikes. A second call for the same stroke is ignored.
   splitStep(t) { if (Math.abs(t - this.hop) > 0.6) this.hop = t; }
-  react(kind, now) { this.reactKind = kind; this.reactUntil = now + 1.6; this.mode = 'react'; }
+  // amp: how big the point was (game.js announcePoint: 0.3 an ordinary point, 0.5+ an ace or a winner, 1 the match).
+  react(kind, now, amp = 0.5) { this.reactKind = kind; this.reactUntil = now + 1.6; this.mode = 'react'; this.reactAmp = amp; }
+  // Winning a point: a small fist on an ordinary one; on a big one this player's own celebration (style.celebrate).
+  // All generic gestures (these pros are fictional): a fist, a two-fisted pump, a hand on the chest then pointing up,
+  // both arms up to the crowd, or a calm raise of the racket. t = seconds since the point ended.
+  celebrate(T, t, now) {
+    const st = this.reactAmp >= 0.45 ? this.style.celebrate || 'default' : 'small';
+    const h = sstep(0, 0.18, t) * (1 - sstep(1.25, 1.6, t)), pump = (t0, d) => { const u = (t - t0) / d; return u > 0 && u < 1 ? Math.sin(u * Math.PI) : 0; };
+    const to = (a, i, v) => { a[i] = lerp(a[i], v, h); };
+    if (st === 'default') { const p = Math.sin(now * 14) * 0.18 * clamp(1 - t / 1.9, 0, 1); T.shR[0] += p; T.elR += p * 0.6; return; }
+    lerpPose(POSE.stand, POSE.stand, 0, T);
+    if (st === 'small') {
+      if (this.style.celebrate === 'calm') return;
+      const p = pump(0.2, 0.3);
+      to(T.shL, 0, 0.35 - 0.3 * p); T.elL = lerp(T.elL, 1.7 + 0.3 * p, h); to(T.hd, 0, -0.15);
+    } else if (st === 'fist') {
+      const p = pump(0.2, 0.24) + pump(0.5, 0.24);
+      to(T.shL, 0, 0.6 - 0.45 * p); to(T.shL, 2, -0.25); T.elL = lerp(T.elL, 2.2 + 0.25 * p, h);
+      to(T.sp, 0, -0.15); T.knR -= 0.2 * h; T.knL -= 0.2 * h; T.py -= 0.03 * h; to(T.hd, 0, -0.2);
+    } else if (st === 'vamos') {
+      const p = pump(0.15, 0.26) + pump(0.45, 0.26);
+      to(T.shR, 0, 0.65 - 0.5 * p); to(T.shR, 2, 0.35); T.elR = lerp(T.elR, 1.9, h);
+      to(T.shL, 0, 0.65 - 0.5 * p); to(T.shL, 2, -0.35); T.elL = lerp(T.elL, 2.1, h);
+      to(T.sp, 0, -0.25); T.py -= (0.04 + 0.06 * p) * h; T.knR -= (0.25 + 0.3 * p) * h; T.knL -= (0.25 + 0.3 * p) * h; T.hipR[0] += 0.2 * h; T.hipL[0] += 0.2 * h;
+    } else if (st === 'heart') {
+      const up = sstep(0.7, 0.95, t), p = pump(0.2, 0.18) + pump(0.42, 0.18);
+      to(T.shL, 0, lerp(0.35 + 0.15 * p, 2.75, up)); to(T.shL, 2, lerp(0.5, -0.25, up)); T.elL = lerp(T.elL, lerp(2.35, 0.15, up), h);
+      to(T.hd, 0, lerp(-0.1, 0.25, up));
+    } else if (st === 'arms') {
+      to(T.shR, 0, 2.5); to(T.shR, 2, 0.9); T.elR = lerp(T.elR, 0.5, h); to(T.shL, 0, 2.5); to(T.shL, 2, -0.9); T.elL = lerp(T.elL, 0.5, h);
+      T.py += 0.09 * pump(0.05, 0.3); to(T.hd, 0, 0.3); to(T.sp, 0, 0.12);
+    } else if (st === 'calm') {
+      to(T.shR, 0, 1.25); to(T.shR, 2, 0.35); T.elR = lerp(T.elR, 1.0, h); to(T.wrR, 0, 0.3); T.hd[0] -= 0.2 * pump(0.35, 0.4);
+    }
+  }
+  // Between points (after the reaction): a short ritual of this player's own (style.ritual): a few quick bounces on the
+  // toes, a wipe of the brow with the wristband then fixing the strings, or a twirl of the racket in the hand.
+  ritual(T, t) {
+    const r = this.style.ritual, h = sstep(0, 0.15, t) * (1 - sstep(0.95, 1.1, t));
+    if (r === 'bounces') {
+      for (const t0 of [0.05, 0.35, 0.65]) { const u = (t - t0) / 0.24; if (u > 0 && u < 1) { const p = Math.sin(u * Math.PI); T.py += 0.045 * p; T.knR += 0.2 * p; T.knL += 0.2 * p; } }
+    } else if (r === 'tugs') {
+      const w = sstep(0.1, 0.5, t), s = sstep(0.5, 0.65, t);
+      T.shL[0] = lerp(T.shL[0], lerp(1.95, 0.8, s), h); T.shL[2] = lerp(T.shL[2], lerp(0.25 - 0.55 * w, 0.4, s), h); T.elL = lerp(T.elL, lerp(2.3, 1.25, s), h);
+      T.hd[0] = lerp(T.hd[0], lerp(-0.1, -0.25, s), h);
+      T.shR[0] = lerp(T.shR[0], 0.75, h * s); T.elR = lerp(T.elR, 1.3, h * s);
+    } else if (r === 'quick') {
+      T.shR[0] = lerp(T.shR[0], 0.6, h); T.elR = lerp(T.elR, 1.2, h); this.twirl = Math.PI * 2 * sstep(0.15, 0.7, t);   // (added after the smoothing: a full turn, not unwound)
+    }
+  }
 
   // Guess the stroke before the shot is known (the CPU decides at the contact): its usual spin, a volley at the net.
   guess(pl) {
@@ -509,9 +558,9 @@ export class Avatar {
       if (this.contactT && now > this.contactT + 0.7) this.mode = 'ready';
     } else if (this.mode === 'react') {
       lerpPose(POSE.stand, POSE[this.reactKind] || POSE.stand, 1, T);
-      if (this.reactKind === 'win') { const pump = Math.sin(now * 14) * 0.18 * clamp((this.reactUntil - now) / 1.6, 0, 1); T.shR[0] += pump; T.elR += pump * 0.6; }
-      k = 9;
-      if (now > this.reactUntil) this.mode = 'stand';
+      if (this.reactKind === 'win') this.celebrate(T, now - (this.reactUntil - 1.95), now);
+      k = this.reactKind === 'win' ? 16 : 9;
+      if (now > this.reactUntil) { this.mode = 'stand'; this.ritualT = now; }
     } else {
       lerpPose(POSE.ready, POSE.stand, this.mode === 'stand' ? 1 : 0, T);
       if (this.prep > 0) {
@@ -547,12 +596,14 @@ export class Avatar {
         T.py += 0.07 * up - 0.07 * land; T.knR += 0.2 * up - 0.4 * land; T.knL += 0.2 * up - 0.4 * land;
         T.hipR[0] += 0.18 * land; T.hipL[0] += 0.18 * land; T.hipR[2] += wd; T.hipL[2] -= wd;
       }
+      if (now - (this.ritualT ?? -9) < 1.1 && r < 0.3) this.ritual(T, now - this.ritualT);
       T.shR[0] += this.armLift;
     }
     lerpPose(this.pose, T, 1 - Math.exp(-k * dt), this.pose);
     // The racket arm is solved on the smoothed body, so the head is where the path says (and on the ball at contact).
     if (ik > 0.01) this.aim(this.pose, ik, dt); else this.ikQ = this.ikL = null;
     this.applyPose(this.pose, dt, pl);
+    if (this.twirl) { this.B.handR.rotation.y += this.twirl; this.twirl = 0; }
   }
   // Racket arm FK for angles q = [shoulder xyz, elbow, wrist xyz]: world racket-head centre, axis and (for the string
   // face) the face normal crossed with the wanted one, so either side of the strings will do.
