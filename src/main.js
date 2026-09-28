@@ -88,7 +88,7 @@ setInterval(() => { const now = performance.now(); if (now - lastRaf > 120) tick
 // Static batching. The stadium's props (chairs, benches, bags, trunks, roof parts…) never move after it's built, yet
 // each mesh costs a draw call in every pass, the sun's shadow map (redrawn every frame) included. Meshes that share a
 // plain built-in material and the same shadow settings are merged, in place, into one: the same picture with far
-// fewer draw calls. Anything special (custom shaders, depth materials, transparency, instancing, skinning,
+// fewer draw calls. Anything special (custom shaders or depth materials, transparency, instancing, skinning,
 // mirrored transforms, per-object callbacks) is left alone.
 const NOOP = THREE.Object3D.prototype.onBeforeRender, NOCOMPILE = THREE.Material.prototype.onBeforeCompile;
 // Plain coloured materials (no textures, no glow) that are equal in every setting are interchangeable: the props make
@@ -116,12 +116,13 @@ function batchStatic(root, owner = {}) {
     const mat = o.material, g = o.geometry;
     if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || o.isBatchedMesh || !mat || Array.isArray(mat) || !mat.isMaterial) return;
     if (mat.isShaderMaterial || mat.transparent || mat.onBeforeCompile !== NOCOMPILE || mat.customProgramCacheKey !== THREE.Material.prototype.customProgramCacheKey) return;
-    if (o.customDepthMaterial || o.customDistanceMaterial || o.onBeforeRender !== NOOP || o.onAfterRender !== THREE.Object3D.prototype.onAfterRender || o.morphTargetInfluences || !o.frustumCulled) return;
+    const depth = o.customDepthMaterial;   // alpha-tested leaves: fine to share if it's a plain depth material
+    if ((depth && (depth.onBeforeCompile !== NOCOMPILE || depth.isShaderMaterial)) || o.customDistanceMaterial || o.onBeforeRender !== NOOP || o.onAfterRender !== THREE.Object3D.prototype.onAfterRender || o.morphTargetInfluences || !o.frustumCulled) return;
     if (!g || !g.isBufferGeometry || Object.keys(g.morphAttributes).length || g.drawRange.start !== 0 || g.drawRange.count !== Infinity) return;
     if (o.matrixWorld.determinant() <= 0) return;
     const attrs = Object.keys(g.attributes).sort().map((k) => { const a = g.attributes[k]; return a.isInterleavedBufferAttribute ? '!' : `${k}${a.itemSize}${a.normalized ? 'n' : ''}${a.array.constructor.name}`; }).join();
     if (attrs.includes('!')) return;
-    const key = [materialKey(mat, keep), o.castShadow, o.receiveShadow, o.renderOrder, o.layers.mask, !!o.userData.noAO, !!g.index, attrs].join('|');
+    const key = [materialKey(mat, keep), depth ? depth.uuid : '', o.castShadow, o.receiveShadow, o.renderOrder, o.layers.mask, !!o.userData.noAO, !!g.index, attrs].join('|');
     if (!bins.has(key)) bins.set(key, []);
     bins.get(key).push(o);
   });
@@ -134,7 +135,7 @@ function batchStatic(root, owner = {}) {
     if (!geo) continue;
     const a = list[0], mesh = new THREE.Mesh(geo, a.material);
     mesh.name = 'batched'; mesh.castShadow = a.castShadow; mesh.receiveShadow = a.receiveShadow; mesh.renderOrder = a.renderOrder;
-    mesh.layers.mask = a.layers.mask; mesh.userData.noAO = a.userData.noAO;
+    mesh.layers.mask = a.layers.mask; mesh.userData.noAO = a.userData.noAO; if (a.customDepthMaterial) mesh.customDepthMaterial = a.customDepthMaterial;
     for (const o of list) o.removeFromParent();
     root.add(mesh);
     merged++; removed += list.length;
