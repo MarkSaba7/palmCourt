@@ -30,6 +30,8 @@ const CSS = `
 .tour-slab { width: min(920px, 100%); gap: 16px; }
 .tour-head { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: flex-end; justify-content: space-between; }
 .tour-rank { display: grid; justify-items: end; gap: 2px; }
+.tour-head > div:first-child { flex: 1 1 320px; min-width: 0; }
+#tourEvent .tour-rank b { font-size: 40px; }
 .tour-rank .tr-label { font: 700 11px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--mist); }
 .tour-rank b { font: 900 52px/.9 var(--display); color: var(--optic); }
 .tour-rank .tr-sub { font-size: 13px; color: var(--mist); }
@@ -95,7 +97,7 @@ const CSS = `
 .bp .sc { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 11px; color: var(--chalk); }
 .bp.tbd { font-style: italic; opacity: .6; }
 #btnTour .tour-menu-rank { margin-left: auto; font-weight: 600; opacity: .7; }
-#tourOverNote { margin: 0; font-weight: 600; color: var(--optic); }
+#tourOverNote { margin: 10px 0 0; font-weight: 600; color: var(--optic); }
 #tourOverNote.out { color: var(--chalk); }
 @media (max-width: 720px) {
   .tour-cols, .te-top { grid-template-columns: 1fr; }
@@ -157,7 +159,8 @@ export const TourUI = {
     next.onclick = () => this.leaveMatch();
     const note = document.createElement('p');
     note.id = 'tourOverNote'; note.hidden = true; note.setAttribute('role', 'status');
-    if ($('btnRematch')) { $('btnRematch').before(next); $('btnRematch').closest('.actions').before(note); }
+    if ($('btnRematch')) $('btnRematch').before(next);
+    if ($('overTitle')) $('overTitle').after(note);   // under "You win": where the run stands
     $('btnTourBack').onclick = () => UI.go('menu');
     $('btnTourSkip').onclick = () => { if (Tour.skipWeek()) this.renderHub(); };
     $('btnTeBack').onclick = () => this.open();
@@ -262,7 +265,7 @@ export const TourUI = {
       $('btnTeWithdraw').onclick = () => { if (confirm('Withdraw from this tournament? It counts as a loss in this round.')) { Tour.withdraw(); this.renderEvent(); } };
     } else {
       const v = view, champ = v.title;
-      $('teRoundL').textContent = 'Result'; $('teRound').textContent = v.label; $('teSub').textContent = `#${v.rankFrom} → #${v.rankTo}`;
+      $('teRoundL').textContent = 'World ranking'; $('teRound').textContent = `#${v.rankTo}`; $('teSub').textContent = v.rankTo < v.rankFrom ? `up ${v.rankFrom - v.rankTo} from #${v.rankFrom}` : `was #${v.rankFrom}`;
       main.innerHTML = `<div class="te-result${champ ? '' : ' out'}" style="--tier:${T.color}">
         <p class="eyebrow">${v.retired ? 'Retired' : champ ? 'Title won' : `Out in the ${esc(roundName(v.R, v.reached).toLowerCase())}`}</p>
         <h3>${champ ? `Champion!` : esc(v.label)}</h3>

@@ -713,15 +713,15 @@ def main():
         pc = Server(('127.0.0.1', PC_PORT), Handler)
     except OSError:
         if already_running(PC_PORT):
-            print(f'Palm Court is already running in another window: http://localhost:{PC_PORT}')
+            print(f'Palm Court is already running in another window: http://localhost:{PC_PORT}/play/')
             if not args.no_browser:
-                webbrowser.open(f'http://localhost:{PC_PORT}')
+                webbrowser.open(f'http://localhost:{PC_PORT}/play/')
         else:
             print(f'Port {PC_PORT} is in use by another program. Close it, or start with: play.cmd --port 8770')
         return 1
     threading.Thread(target=pc.serve_forever, daemon=True).start()
     print('Palm Court is running.')
-    print(f'  On this PC:    http://localhost:{PC_PORT}')
+    print(f'  On this PC:    http://localhost:{PC_PORT}/play/')
 
     ips = []
     if not args.no_phone:
@@ -778,7 +778,7 @@ def main():
         print('                 Install Git for Windows (it includes openssl), or host the game on GitHub Pages.')
 
     if not args.no_browser:
-        webbrowser.open(f'http://localhost:{PC_PORT}')
+        webbrowser.open(f'http://localhost:{PC_PORT}/play/')
     print('\nClose this window to stop the game server.')
     try:
         threading.Event().wait()

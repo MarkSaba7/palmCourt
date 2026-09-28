@@ -178,8 +178,10 @@ const Phone = {
   async lan(fresh) {
     if (this.info !== undefined && !fresh) return this.info;
     let info = null;
-    if (location.protocol === 'http:' || location.protocol === 'https:') {
-      try { const r = await fetch('lan.json', { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch (e) { /* not served by play.cmd */ }
+    // Only play.cmd (a local or LAN address) serves lan.json; asking a public host just logs a 404.
+    const local = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[::1\]$|.*\.local$)/.test(location.hostname);
+    if (local && (location.protocol === 'http:' || location.protocol === 'https:')) {
+      try { const r = await fetch(new URL('../lan.json', import.meta.url), { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch (e) { /* not served by play.cmd */ }
     }
     this.info = info && typeof info === 'object' ? info : null;
     return this.info;
@@ -188,7 +190,7 @@ const Phone = {
   async pageUrl(fresh) {
     const info = await this.lan(fresh);
     let urls = [];
-    if (location.protocol === 'https:') urls = [{ url: new URL('controller.html', location.href).href, name: '' }];
+    if (location.protocol === 'https:') urls = [{ url: new URL('../controller.html', import.meta.url).href, name: '' }];   // site root, whichever page hosts the game (/play/)
     else if (info && Array.isArray(info.urls)) urls = info.urls.filter((u) => u && /^https:\/\//.test(u.url)).map((u) => ({ url: new URL('controller.html', u.url).href, name: String(u.name || ''), ip: u.ip }));
     else if (info && info.phoneUrl) urls = [{ url: new URL('controller.html', info.phoneUrl).href, name: '' }];
     this.urls = urls;
