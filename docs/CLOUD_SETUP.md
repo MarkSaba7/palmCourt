@@ -24,7 +24,7 @@ Players get an anonymous account per browser. No email or password is needed.
   to their real place over a few sessions.
 
 ## 4. Test before you switch it on
-- Open the live game with `?cloud=1` added to the address. This turns the cloud on for that visit only.
+- Open the live game (the `/play/` page) with `?cloud=1` added to the address. This turns the cloud on for that visit only.
   A **Leaderboards** button appears in the main menu.
 - Play one match, then open Leaderboards and set a name.
 - In the dashboard, check **Table Editor**: you should see a row in `saves`, rows in `scores` and one in `players`.
@@ -53,5 +53,5 @@ That would need an email to be linked to the account, which could be added later
 ## Testing without Supabase
 - Unit tests: `node test/cloud.test.mjs`
 - Local mock server: run `node test/cloud-mock.mjs 8907`, then open
-  `http://localhost:8765/?cloud=1&cloudUrl=http://127.0.0.1:8907`.
+  `http://localhost:8765/play/?cloud=1&cloudUrl=http://127.0.0.1:8907`.
   `cloudUrl` only accepts localhost addresses.
