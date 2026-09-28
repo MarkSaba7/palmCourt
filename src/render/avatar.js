@@ -267,8 +267,9 @@ const SVR = [
 ];
 const _p0 = new THREE.Vector3(), _v0 = new THREE.Vector3();
 // The serve's reach. The toss is met on the strings a little above the head's centre (higher on a big serve), with
-// the arm and racket straight up at it and a small jump: SV_JUMP is the jump game.js tosses for (serveHeight).
-const SV_JUMP = 0.09, svOn = (pow) => lerp(0.06, 0.01, pow);
+// the arm and racket straight up at it and a small jump: SV_JUMP is the jump game.js tosses for (serveHeight). SV_SLACK:
+// the arm solve stops a few cm short of dead straight and the body lags its keys a little, so it jumps that much more.
+const SV_JUMP = 0.08, SV_SLACK = 0.03, svOn = (pow) => lerp(0.04, 0, pow);
 const _sM = new THREE.Matrix4(), _sL = new THREE.Matrix4(), _sE = new THREE.Euler(), _sS = new THREE.Vector3(), _svP = clonePose(POSE.ready);
 
 export class Avatar {
@@ -388,7 +389,7 @@ export class Avatar {
       lerpPose(SV[i], SV[i], 0, kp);
       if (i === 2) { kp.sp[0] += 0.12 * pow; kp.knR -= 0.2 * pow; kp.knL -= 0.2 * pow; kp.py -= 0.05 * pow; if (st === 'high-toss') { kp.shL[0] = 3.05; kp.hd[0] += 0.12; } }
       if (i === 3) kp.sp[0] += 0.1 * pow;
-      if (i === 4) kp.py = clamp(c.y - this.reachY(kp, c), 0, 0.3);   // off the ground just enough to meet it at full stretch
+      if (i === 4) kp.py = clamp(c.y - this.reachY(kp, c) + SV_SLACK, 0, 0.3);   // off the ground just enough to meet it at full stretch
       if (i === 5) { kp.hipR[0] -= 0.2 * pow; kp.sp[0] -= 0.1 * pow; }
       if (i === 0 && st === 'rocker') { kp.sp[0] += 0.1; kp.hipL[0] += 0.15; kp.knL -= 0.2; }
       const K = poseToArr(kp, this.SK[i]);
