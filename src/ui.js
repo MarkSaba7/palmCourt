@@ -129,6 +129,8 @@ const UI = {
 
   go(screen) {
     const from = this.screen;
+    // The menu button that led away (Training, World Tour…): coming back to the menu lands on it again.
+    if (from === 'menu' && screen !== 'menu') { const a = document.activeElement; this.menuFrom = a && $('menu').contains(a) ? a : null; }
     this.screen = screen;
     Bus.emit('screen', { screen });
     for (const el of document.querySelectorAll('.screen')) el.hidden = el.id !== screen;   // modules add their own .screen elements
@@ -141,7 +143,9 @@ const UI = {
     this.netInfo();
     // Keyboard players land on the screen's main button; back in play nothing keeps focus, so Space always swings.
     const main = { menu: 'btnPractice', pause: 'btnResume', over: 'btnRematch' }[screen];
-    if (main && from !== screen && !$(main).disabled) $(main).focus({ preventScroll: true });
+    const back = screen === 'menu' && this.menuFrom;
+    if (back && from !== screen && back.isConnected && !back.disabled && back.getClientRects().length) { back.focus({ preventScroll: true }); back.scrollIntoView({ block: 'nearest' }); }
+    else if (main && from !== screen && !$(main).disabled) $(main).focus({ preventScroll: true });
     else if (screen === null && document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   },
   async ensureControls(then) {
