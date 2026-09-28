@@ -1,7 +1,8 @@
 // Palm Court Racket: the phone racket app's service worker (controller.html registers it).
 // Its scope is controller.html alone, so it never sees the game (play/) or the website. It keeps the racket's shell
-// (the page, its manifest and icons, and the PeerJS library) for an instant start, even on a weak signal. Everything
-// live (lan.json, the relay socket, PeerJS signalling, fonts) goes straight to the network and is never cached.
+// (the page, its manifest and icons, the PeerJS library and, once seen, the two web fonts) for an instant start, even
+// on a weak signal. Everything live (lan.json, the relay socket, PeerJS signalling) goes straight to the network and
+// is never cached.
 // Bump VERSION with every change to controller.html or this file: the new worker installs a fresh copy of the shell,
 // takes over at once and deletes the old copy. (The page is also refreshed in the background on each launch, so a
 // forgotten bump only delays an update by one launch.)
@@ -9,6 +10,7 @@ const VERSION = 'palmcourt-racket-v1';
 const SHELL = ['controller.html', 'racket.webmanifest', 'site/racket-icon.svg', 'site/racket-icon-192.png'];
 const LIB = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js';   // versioned, never changes
 const PAGE = new URL('controller.html', self.location).href;
+const FONTS = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;   // the stylesheet (asked for with CORS) and its font files
 
 self.addEventListener('install', (e) => {
   e.waitUntil((async () => {
@@ -31,7 +33,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (req.mode === 'navigate') { e.respondWith(page(e)); return; }
-  if (req.url === LIB) { e.respondWith(cacheFirst(req, LIB)); return; }
+  if (req.url === LIB || (FONTS.test(req.url) && req.mode === 'cors')) { e.respondWith(cacheFirst(req, req.url)); return; }
   if (url.origin === self.location.origin && !url.search && SHELL.some((u) => url.href === new URL(u, self.location).href)) e.respondWith(cacheFirst(req, url.href));
   // anything else: the network, untouched
 });

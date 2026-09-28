@@ -16,13 +16,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- fonts load without holding up the first paint (the app starts instantly, offline too) -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Barlow:wght@400;600;700&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Barlow:wght@400;600;700&display=swap" media="print" onload="this.media='all'" crossorigin="anonymous">
 <style>
 :root {
   --ink: #09131d; --ink-2: #102235; --ink-3: #18324b; --card: rgba(242,245,238,.06); --edge: rgba(242,245,238,.16);
   --chalk: #f2f5ee; --mist: #a3b6c8; --accent: #d6f04a; --btn: #d6f04a; --btn-ink: #1b2300; --glow: rgba(214,240,74,.45);
   --coral: #ff7a62; --good: #7fe0a8; --warn: #ffc857; --sky: #7fd3ff; --flash: #d6f04a;
-  --display: "Big Shoulders Display", "Arial Narrow", "Roboto Condensed", Impact, sans-serif;
+  --display: "Big Shoulders Display", "Roboto Condensed", sans-serif-condensed, "Avenir Next Condensed", "Arial Narrow", Impact, sans-serif;
   --body: "Barlow", "Segoe UI", system-ui, -apple-system, sans-serif;
   --r: 18px; --fs: 16px;
   color-scheme: dark;
@@ -39,7 +39,7 @@ html.big { --fs: 19px; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { font-size: var(--fs); -webkit-text-size-adjust: 100%; }
 html, body { margin: 0; min-height: 100%; background: var(--ink); color: var(--chalk); font-family: var(--body); line-height: 1.45; }
-body { overscroll-behavior: none; touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-font-smoothing: antialiased; }
+body { overflow-x: hidden; overscroll-behavior: none; touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-font-smoothing: antialiased; }
 body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background: radial-gradient(120% 60% at 50% -10%, var(--ink-3), transparent 70%), var(--ink); }
 [hidden] { display: none !important; }
@@ -52,11 +52,12 @@ p { margin: 0; }
 #app { min-height: 100vh; min-height: 100dvh; max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px;
   padding: calc(8px + env(safe-area-inset-top, 0px)) calc(18px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) calc(18px + env(safe-area-inset-left, 0px)); }
 .bar { display: flex; align-items: center; gap: 10px; min-height: 48px; }
-.brand { display: flex; align-items: center; gap: 9px; font: 900 1.3rem/1 var(--display); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
-.brand img { width: 30px; height: 30px; border-radius: 8px; }
+.brand { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; font: 900 1.3rem/1 var(--display); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.brand img { flex: none; width: 30px; height: 30px; border-radius: 8px; }
+.brand span { overflow: hidden; text-overflow: ellipsis; }
 .brand b { color: var(--accent); }
-.net { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 12px; border-radius: 99px;
-  background: var(--card); border: 1px solid var(--edge); font-size: .8rem; font-weight: 700; color: var(--mist); white-space: nowrap; max-width: 52vw; overflow: hidden; text-overflow: ellipsis; }
+.net { flex: none; display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 12px; border-radius: 99px;
+  background: var(--card); border: 1px solid var(--edge); font-size: .8rem; font-weight: 700; color: var(--mist); white-space: nowrap; }
 .net i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--coral); }
 .net.on i { background: var(--good); }
 .net.on { color: var(--chalk); }
@@ -164,18 +165,21 @@ html.sun .demo { background: #e9eef6; }
 .linkcard .via b { display: block; font-size: 1.15rem; line-height: 1.2; }
 .linkcard .lag { text-align: right; font: 900 2.2rem/1 var(--display); }
 .linkcard .lag small { font: 700 .8rem var(--body); color: var(--mist); margin-left: 3px; }
-.score { padding: 6px 16px; display: grid; }
-.srow { display: grid; grid-template-columns: 14px 1fr 2.2rem 3rem; align-items: center; gap: 10px; min-height: 42px; }
+.score { padding: 8px 16px 6px; display: grid; }
+.srow { display: grid; grid-template-columns: 14px 1fr 3rem 3.2rem; align-items: center; gap: 10px; min-height: 42px; }
 .srow + .srow { border-top: 1px solid var(--edge); }
+.srow.head { min-height: 0; padding-bottom: 4px; font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--mist); text-align: center; }
+.srow.head + .srow { border-top: 0; }
 .srow .srv { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); visibility: hidden; }
 .srow.serving .srv { visibility: visible; }
 .srow .who { font-weight: 700; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .srow .g { font: 900 1.7rem/1 var(--display); text-align: center; color: var(--mist); }
 .srow .p { font: 900 1.9rem/1 var(--display); text-align: center; padding: 4px 0; border-radius: 8px; background: var(--ink-3); }
-.score .tb { justify-self: end; font-size: .7rem; font-weight: 700; letter-spacing: .14em; color: var(--accent); text-transform: uppercase; margin-top: 2px; }
 .state { display: grid; gap: 8px; }
 .shot { display: grid; gap: 10px; align-content: start; padding: 14px 16px; min-height: 124px; }
 .last { font: 900 2.6rem/1 var(--display); text-transform: uppercase; letter-spacing: .02em; overflow-wrap: anywhere; }
+.last.idle { font-size: 1.5rem; color: var(--mist); }
+.last.idle small { color: var(--mist); font-weight: 600; }
 .last.fh, .last.read { color: var(--accent); }
 .last.bh { color: var(--sky); }
 .last small { display: block; margin-top: 7px; font: 700 1.05rem/1.35 var(--body); letter-spacing: 0; text-transform: none; color: var(--chalk); }
@@ -184,7 +188,7 @@ html.sun .demo { background: #e9eef6; }
 .chip.warn { color: var(--warn); }
 .chip.bad { color: var(--coral); }
 .toss { flex: 1; min-height: 150px; font-size: 3.4rem; }
-#screenPlay.tossing .shot, #screenPlay.tossing .meter { display: none; }
+#screenPlay.tossing .shot, #screenPlay.tossing .meter, #screenPlay.tossing .spacer { display: none; }
 .quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .quick button { min-height: 78px; border-radius: 16px; border: 1.5px solid var(--edge); background: var(--card); display: grid; place-items: center; align-content: center; gap: 6px; padding: 8px 4px; font-weight: 700; font-size: .9rem; line-height: 1.15; }
 .quick button svg { width: 26px; height: 26px; }
@@ -195,8 +199,8 @@ html.sun .demo { background: #e9eef6; }
 /* reconnecting: over the play screen */
 .reconnect { position: fixed; inset: 0; z-index: 8; display: grid; place-items: center; padding: 24px; background: rgba(9,19,29,.82); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 html.sun .reconnect { background: rgba(255,255,255,.9); }
-.reconnect .card { width: min(100%, 420px); display: grid; gap: 12px; justify-items: center; text-align: center; padding: 24px 20px; background: var(--ink-2); }
-.reconnect b { font: 900 2.2rem/1 var(--display); text-transform: uppercase; }
+.reconnect .card { width: 100%; max-width: 420px; min-width: 0; display: grid; gap: 12px; justify-items: center; text-align: center; padding: 24px 20px; background: var(--ink-2); }
+.reconnect b { max-width: 100%; font: 900 clamp(1.7rem, 8.5vw, 2.4rem)/1 var(--display); text-transform: uppercase; overflow-wrap: anywhere; }
 .reconnect span { color: var(--mist); }
 .reconnect .row { width: 100%; }
 .spin { width: 54px; height: 54px; border-radius: 50%; border: 5px solid var(--edge); border-top-color: var(--accent); animation: spin 1s linear infinite; }
@@ -233,8 +237,8 @@ html.calm #hitFlash.go { animation: none !important; }
 <body>
 <div id="app">
   <header class="bar">
-    <span class="brand"><img src="site/racket-icon.svg" alt="" width="30" height="30">Palm Court <b>Racket</b></span>
-    <span class="net" id="net" role="status"><i></i><span id="netText">Not connected</span></span>
+    <span class="brand"><img src="site/racket-icon.svg" alt="" width="30" height="30"><span>Palm Court <b>Racket</b></span></span>
+    <span class="net" id="net" role="status"><i></i><span id="netText">Offline</span></span>
     <button class="iconbtn" id="btnSettings" aria-label="Settings" aria-haspopup="dialog">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h9M18 7h2M4 17h3M12 17h8"/><circle cx="15.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/></svg>
     </button>
@@ -301,12 +305,12 @@ html.calm #hitFlash.go { animation: none !important; }
     <figure class="demo" id="calDemo" data-flip="0" aria-hidden="true">
       <svg viewBox="0 0 300 220">
         <defs><marker id="ah" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d6f04a"/></marker></defs>
-        <path class="d-net" d="M16 22 H284"/><text class="d-lbl" x="150" y="44" text-anchor="middle">Net</text>
+        <path class="d-net" d="M16 22 H284"/><text class="d-lbl" x="150" y="44" text-anchor="middle">Net</text><text class="d-lbl" x="150" y="178" text-anchor="middle">You</text>
         <g class="flip">
           <path class="d-arc" d="M228.8 209.6 A85 85 0 1 0 103 104.1" marker-end="url(#ah)"/>
           <circle class="d-ball" cx="276" cy="72" r="10"/>
-          <ellipse class="d-body" cx="150" cy="140" rx="38" ry="15"/>
-          <circle class="d-head" cx="150" cy="140" r="12"/>
+          <rect class="d-body" x="110" y="132" width="80" height="20" rx="10"/>
+          <circle class="d-head" cx="150" cy="134" r="13"/>
           <g class="d-arm"><path class="d-armline" d="M180 140 H236"/><rect class="d-phone" x="234" y="130" width="46" height="20" rx="5"/><rect class="d-screen" x="240" y="134" width="34" height="12" rx="2"/></g>
         </g>
       </svg>
@@ -331,17 +335,16 @@ html.calm #hitFlash.go { animation: none !important; }
       <span class="lag" id="linkLagBox"><span id="linkLag">–</span><small>ms</small></span>
     </div>
     <div class="card score" id="scoreCard" hidden>
+      <div class="srow head" aria-hidden="true"><span></span><span></span><span>Games</span><span id="ptsHead">Points</span></div>
       <div class="srow" id="rowMe"><i class="srv"></i><span class="who">You</span><b class="g" id="gMe">0</b><b class="p" id="pMe">0</b></div>
-      <div class="srow" id="rowThem"><i class="srv"></i><span class="who" id="oppName">Opponent</span><b class="g" id="gThem">0</b><b class="p" id="pThem">0</b></div>
-      <span class="tb" id="scoreTb" hidden>Tiebreak</span>
-    </div>
+      <div class="srow" id="rowThem"><i class="srv"></i><span class="who" id="oppName">Opponent</span><b class="g" id="gThem">0</b><b class="p" id="pThem">0</b></div>    </div>
     <div class="state">
       <p class="eyebrow" id="playEyebrow">Connected</p>
       <h1 id="playTitle">Ready</h1>
       <p class="lede" id="playText">Start a match on the game screen.</p>
     </div>
     <div class="card shot" id="shotCard" aria-live="polite">
-      <p class="last" id="lastSwing">Swing to test<small>Your swings show up here.</small></p>
+      <p class="last idle" id="lastSwing">Swing to test<small>Your swings, and how the game read each hit, show up here.</small></p>
       <span class="chip" id="shotWhen" hidden></span>
     </div>
     <div class="meter"><i id="meter"></i></div>
@@ -351,7 +354,7 @@ html.calm #hitFlash.go { animation: none !important; }
     <div class="quick">
       <button id="btnPause" disabled><span id="pauseIco"></span><span id="pauseLabel">Pause</span></button>
       <button id="btnRematch" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/></svg><span>Rematch</span></button>
-      <button id="btnSwap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h15l-4-4M20 16H5l4 4"/></svg><span id="swapLabel">Swap FH / BH</span></button>
+      <button id="btnSwap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h15l-4-4M20 16H5l4 4"/></svg><span id="swapLabel">Swap FH/BH</span></button>
     </div>
     <div class="row small">
       <button class="ghost" id="btnRecal">Grip setup</button>
@@ -435,7 +438,15 @@ function show(name) {
 }
 function msg(el, text, kind) { const m = $(el); m.textContent = text; m.className = 'msg' + (kind ? ' ' + kind : ''); }
 let netText = 'Not connected';
-function setNet(on, text) { netText = text; $('net').classList.toggle('on', on); $('netText').textContent = text; renderLink(); if (screen === 'connect') renderPair(); }
+// The header pill says it short ("18 ms", "Reconnecting"); screen readers get the whole sentence.
+function setNet(on, text) {
+  netText = text;
+  $('net').classList.toggle('on', on);
+  $('net').setAttribute('aria-label', text);
+  $('netText').textContent = on ? (lag ? `${lag} ms` : 'Linked') : (/^(Reconnecting|Connecting|Waiting)/.exec(text) || ['Offline'])[0];
+  renderLink();
+  if (screen === 'connect') renderPair();
+}
 
 // ---------- swing detection ----------
 // The gyroscope rate is projected onto gravity, so the sweep around the vertical axis tells a forehand
@@ -492,7 +503,7 @@ function onMotion(e) {
 // Lift to toss: raising the phone briskly without much rotation tosses the ball when it's your serve.
 let lastLiftToss = 0;
 function checkLiftToss(t, w) {
-  if (!lastState || !lastState.serving || lastState.tossed || screen !== 'play') return;
+  if (!lastState || !lastState.serving || lastState.tossed || lastState.paused || screen !== 'play') return;
   if (S.state === 'idle' && w < 220 && S.vIdle > 0.9 && t - lastLiftToss > 1200) { lastLiftToss = t; S.vIdle = 0; doToss(); }
 }
 
@@ -685,7 +696,7 @@ function linkUp(kind) {
   pingTimer = setInterval(() => { ping(); if (++n === 12) { clearInterval(pingTimer); pingTimer = setInterval(ping, 1500); } }, 300);
   saveLast();
   if (armed) afterStart();
-  else linkMsg('Connected to the game. Tap Start.', 'ok');
+  else linkMsg('');   // (the game card says it's found)
   if (back && screen === 'play') { gripNote('Reconnected.', 'ok'); buzz([20, 40, 20]); }
   keepAlive();
   renderPair();
@@ -938,8 +949,10 @@ function learnFromHit(stroke) {
     gripNote('Swapped forehand and backhand to match your hits.', 'ok');
   }
 }
+let noteTimer = 0;
 function gripNote(text, kind) {
-  if (text) { msg('gripNote', text, kind); return; }
+  clearTimeout(noteTimer);
+  if (text) { msg('gripNote', text, kind); if (kind === 'ok') noteTimer = setTimeout(() => gripNote(), 4000); return; }
   msg('gripNote', cal.fhSign ? '' : 'Forehand or backhand? Not set up yet: it learns from your hits, or tap Grip setup.');
 }
 // Swap which way counts as a forehand (a phone held the other way round), or set it up if it isn't yet.
@@ -961,9 +974,9 @@ function playState(s) {
   if (s.route && link && s.route !== lastRoute) { lastRoute = s.route; saveLast(); }
   renderScore(s); renderQuick(); renderLink();
   if (screen !== 'play' || performance.now() < noteUntil) return;
-  const serving = !!s.serving;
-  $('btnToss').hidden = !(serving && !s.tossed);
-  $('screenPlay').classList.toggle('tossing', serving && !s.tossed);
+  const serving = !!s.serving, tossNow = serving && !s.tossed && !s.paused;
+  $('btnToss').hidden = !tossNow;
+  $('screenPlay').classList.toggle('tossing', tossNow);
   if (s.over) { title('Match over', s.won ? 'You won!' : `${(s.score && s.score.opp) || 'They'} won`, 'Tap Rematch to play again.'); return; }
   if (s.paused) { title('Paused', 'Paused', 'Tap Resume when you’re ready.'); return; }
   if (!s.inMatch) { title('Connected', 'Ready', 'Start a match on the game screen. Swing here to test.'); return; }
@@ -990,7 +1003,7 @@ function renderScore(s) {
   $('oppName').textContent = String(sc.opp || 'Opponent').slice(0, 16);
   $('rowMe').classList.toggle('serving', s.srv === 'me' && !s.over);
   $('rowThem').classList.toggle('serving', s.srv === 'them' && !s.over);
-  $('scoreTb').hidden = !sc.tb;
+  $('ptsHead').textContent = sc.tb ? 'Tiebreak' : 'Points';
 }
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M8 5v14M16 5v14"/></svg>';
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12.5-7.5z"/></svg>';
@@ -1000,7 +1013,7 @@ function renderQuick() {
   $('pauseLabel').textContent = paused ? 'Resume' : 'Pause';
   $('pauseIco').innerHTML = paused ? ICON_PLAY : ICON_PAUSE;
   $('btnRematch').disabled = !link || !s.over;
-  $('swapLabel').textContent = cal.fhSign ? 'Swap FH / BH' : 'Set up FH / BH';
+  $('swapLabel').textContent = cal.fhSign ? 'Swap FH/BH' : 'Set up FH/BH';
 }
 
 // The link, for the play screen: which way it goes, the lag, and a clear state while it's down.
