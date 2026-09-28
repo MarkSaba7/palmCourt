@@ -46,6 +46,75 @@ export function aimGround(o) {
   return { x: clamp(x, -3.75, 3.75), depth: lerp(8.3, 10.1, sstep(0.05, 0.95, pow)) - 0.7 * Math.max(0, -spin) };
 }
 
+// ---- what a swing says: power, spin, direction and touch, for each control ----
+// Power is relative to this player's usual stroke speed (typ, learned from their hits; 0 until known), so it doesn't
+// depend on how far from the camera they stand or how they hold the phone: a usual swing is a solid rally ball (0.62),
+// ~40% faster is flat out, half as fast a soft ball. Until typ is known an absolute scale, which never reaches flat out.
+const relPower = (peak, typ) => clamp(0.62 * Math.pow(peak / typ, 1.2), 0.04, 1);
+export function cameraPower(peak, typ, sens = 1) {
+  const abs = clamp((peak * sens - 1.0) / 3.5, 0.03, 1);
+  return typ > 0 ? clamp(0.25 * abs + 0.75 * relPower(peak, typ), 0.04, 1) : 0.15 + 0.7 * abs;
+}
+// Phone: peak rotation speed of the phone in °/s (a relaxed swing ~700, a firm one 1200, a big one 1800+).
+export function phonePower(peak, typ, fallback = 0.5) {
+  if (!(peak > 0)) return clamp(fallback * 0.85, 0.05, 1);   // an older phone page: its own reading, a little tamed
+  const abs = clamp((peak - 350) / 1400, 0.03, 1);
+  return typ > 0 ? clamp(0.3 * abs + 0.7 * relPower(peak, typ), 0.04, 1) : 0.1 + 0.8 * abs;
+}
+// Spin from the rise of the swing (radians above the horizontal, + = low to high): flat is a flat drive, about 20° up
+// full topspin, 10-25° down a slice.
+export const spinFromRise = (ang) => clamp(0.15 + 2.1 * ang, -1, 1);
+
+// How far across the body a stroke goes (-1 pushed the other way, 0 straight through, +1 hard across, up to 1.3 for
+// the lines) from its follow-through: how far the racket carries on sideways after the contact compared with how far
+// it came in to it. A swing that stops short sideways (because it went on toward the camera or the net) is straight.
+export function acrossFromPath(pre, post) {
+  if (!(pre > 1e-3)) return null;
+  return clamp((post / Math.max(pre, 0.04) - 0.5) / 0.6, -1, 1.3);
+}
+
+// Camera swing (the detector's swing: vx vy at the peak, path {x0 y0 xp yp x1 y1 s0 sp s1 done} in frame widths,
+// palm sizes s* when known). o: { typ, sens, stroke, handed, prior (this player's usual across, for a swing not over
+// yet) }. Returns { pow, spin, dirX, drop, across, final }.
+export function readCamera(sw, o = {}) {
+  const P = sw.path, pow = cameraPower(sw.peak || 0, o.typ || 0, o.sens || 1);
+  let ang = Math.atan2(-(sw.vy || 0), Math.abs(sw.vx || 0) + 1e-6);
+  if (P) ang = 0.6 * ang + 0.4 * Math.atan2(-(P.yp - P.y0), Math.abs(P.xp - P.x0) + 1e-6);   // (the way in to the peak too)
+  const spin = spinFromRise(ang);
+  let across = null, final = !!(P && P.done);
+  if (P && P.done) {
+    const lat = Math.sign(P.xp - P.x0) || -ballSide(o.stroke, o.handed);
+    across = acrossFromPath(Math.abs(P.xp - P.x0), (P.x1 - P.xp) * lat);
+    // Hand growing in the picture after the contact: the racket went on toward the camera, so straighter.
+    if (across != null && P.s0 > 0 && P.sp > 0 && P.s1 > 0) across -= 0.8 * clamp(Math.log(P.s1 / P.sp) / 0.25, 0, 1);
+  }
+  if (across == null) { across = o.prior ?? 0.35; final = !!(P && P.done); }
+  const post = P && P.done ? (P.x1 - P.xp) * (Math.sign(P.xp - P.x0) || 1) / Math.max(Math.abs(P.xp - P.x0), 0.04) : 1;
+  // A drop shot: a soft swing coming down, or a soft check swing that stops short (decelerating). A normal soft swing
+  // (level or rising) stays a soft rally ball.
+  const drop = (pow < 0.3 && spin < -0.2) || (pow < 0.22 && spin < 0.2 && !!(P && P.done) && post < 0.3);
+  return { pow, spin, across, dirX: -ballSide(o.stroke, o.handed) * across, drop, final };
+}
+// Phone swing ({ peak °/s, power, spin, yawPre, yawPost (° turned before / after the peak, newer phone pages) }).
+export function readPhone(sw, o = {}) {
+  const pow = phonePower(sw.peak, o.typ || 0, sw.power), spin = clamp((Number.isFinite(sw.spin) ? sw.spin : 0.3) - 0.05, -1, 1);
+  const across = sw.yawPre > 20 && Number.isFinite(sw.yawPost) ? acrossFromPath(sw.yawPre, sw.yawPost) : null;
+  return { pow, spin, across, dirX: across == null ? null : -ballSide(o.stroke, o.handed) * across, drop: pow < 0.3 && spin < -0.15, final: true };
+}
+// Mouse / keyboard: the flick before the click (or the arrow keys) aims; see input.js.
+export function readPointer(sw) {
+  const pow = clamp(sw.power ?? 0.58, 0.05, 1), spin = clamp(sw.spin ?? 0.35, -1, 1);
+  return { pow, spin, across: null, dirX: Number.isFinite(sw.aim) ? clamp(sw.aim, -1.3, 1.3) : 0, drop: !!sw.drop || (sw.src === 'mouse' && spin < -0.35 && pow < 0.6), final: true };
+}
+
+// What the player sees after the shot: which way it went and how (e.g. "← Cross · topspin · 118 km/h").
+export function readText(shot, kmh) {
+  const x = shot.aim ?? 0, bs = shot.ballSide || 1, mx = shot.mx || 0;
+  const where = Math.abs(x) < 1.2 ? '↑ Middle' : Math.sign(x) === -bs ? (x < 0 ? '← Cross' : 'Cross →') : mx * Math.sign(x) < -0.8 ? (x < 0 ? '← Inside-out' : 'Inside-out →') : (x < 0 ? '← Down the line' : 'Down the line →');
+  const how = shot.kind === 'Drop shot' ? 'drop shot' : shot.rpm < -150 ? 'slice' : shot.rpm >= 2000 ? 'topspin' : 'flat';
+  return `${where} · ${how} · ${kmh} km/h`;
+}
+
 // A person's groundstroke. o: { from (ball position), side (player.side), mx (player's x, hitter's frame), stroke, handed,
 // pow, spin, drop, dirX, tau, q (timing quality 0..1), diff (pressure 0..1), volley, S (gear stats) }.
 export function humanGround(o) {
