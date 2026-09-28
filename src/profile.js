@@ -1,8 +1,8 @@
 // Palm Court: the player's progress (XP, Fuzz, unlocks, equipped cosmetics, career stats, match history, daily
 // challenges, achievements). Local-first: IndexedDB, mirrored to localStorage (synchronous, so a closing tab still
 // saves), in memory when the browser blocks both. Versioned schema with migrations; a backup copy of the last good
-// save survives a corrupt one. Optional cloud sync (Profile.useCloud) stays off unless src/config.js has a Supabase
-// url + anonKey. Settings (core.js) stay separate: Profile is progress only.
+// save survives a corrupt one. Optional cloud save + leaderboards live in src/cloud.js (off unless CONFIG.cloud.enabled);
+// Profile.useCloud is a generic adapter hook. Settings (core.js) stay separate: Profile is progress only.
 import { MAX_LEVEL, xpForLevel, xpToReach, levelFor, CATALOG, SLOTS, newStats, useProfile, itemById } from './economy.js';
 
 export const SCHEMA = 2;
@@ -237,37 +237,9 @@ export const Profile = {
   },
 };
 
-// Supabase (REST) adapter stub: a `profiles` table { id text primary key, data jsonb, updated_at timestamptz } with an
-// anon row-level policy. Only used when src/config.js provides cloud: { url, anonKey }.
-export function supabaseAdapter({ url, anonKey, table = 'profiles' }) {
-  const base = `${String(url).replace(/\/+$/, '')}/rest/v1/${table}`, headers = { apikey: anonKey, Authorization: `Bearer ${anonKey}`, 'Content-Type': 'application/json' };
-  return {
-    name: 'supabase',
-    async pull(id) {
-      const r = await fetch(`${base}?id=eq.${encodeURIComponent(id)}&select=data`, { headers });
-      if (!r.ok) throw new Error(`supabase pull ${r.status}`);
-      const rows = await r.json();
-      return rows && rows[0] ? rows[0].data : null;
-    },
-    async push(id, data) {
-      const r = await fetch(base, { method: 'POST', headers: { ...headers, Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ id, data, updated_at: new Date(data.updated).toISOString() }) });
-      if (!r.ok) throw new Error(`supabase push ${r.status}`);
-    },
-  };
-}
-// src/config.js is optional (read defensively): cloud sync only with a url and an anon key.
-async function cloudFromConfig() {
-  try {
-    const { CONFIG } = await import('./config.js');
-    const c = CONFIG && CONFIG.cloud;
-    if (c && c.enabled !== false && c.url && c.anonKey) await Profile.useCloud(supabaseAdapter(c));   // enabled: false = dormant
-  } catch (e) { /* no config.js: local only */ }
-}
-
 useProfile(Profile);
 Profile.ready = Profile.load().catch((e) => { console.error('[profile] load failed', e); Profile.loaded = true; return Profile; });
 if (globalThis.addEventListener && globalThis.document) {
   addEventListener('pagehide', () => Profile.flush());
   document.addEventListener('visibilitychange', () => { if (document.hidden) Profile.flush(); });
-  Profile.ready.then(cloudFromConfig);
 }

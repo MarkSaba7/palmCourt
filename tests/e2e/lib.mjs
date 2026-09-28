@@ -73,7 +73,7 @@ export async function launch(o) {
   const page = await ctx.newPage();
   page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}\n${e.stack || ''}`));
-  await page.goto(`http://127.0.0.1:${o.port}/index.html`);
+  await page.goto(`http://127.0.0.1:${o.port}/play/`);   // the game lives in play/ (the site root is the landing page)
   await page.waitForFunction(() => window.PalmCourt && window.PalmCourt.Game, null, { timeout: 180000 });
   const close = async () => { try { await browser.close(); } finally { srv.close(); } };
   return { browser, page, logs, close };

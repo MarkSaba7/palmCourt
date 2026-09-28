@@ -1,0 +1,6 @@
+# Palm Court: everything is public. Crawlers (including Google's AdSense crawler) may read every page and the
+# scripts and styles the pages need to render.
+User-agent: *
+Allow: /
+
+Sitemap: https://palmcourt.example/sitemap.xml

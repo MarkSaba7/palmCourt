@@ -87,6 +87,7 @@ await test('draws: size, you in it, pros per tier, your own pro left out, seeds 
     assert.equal(f.filter((e) => e.you).length, 1);
     assert.equal(new Set(f.map((e) => e.id)).size, N, 'no one twice');
     assert.equal(new Set(f.map((e) => e.rank)).size, N, 'unique ranks');
+    assert.equal(new Set(f.map((e) => e.short)).size, N, 'unique surnames');
     assert.ok(!f.some((e) => e.pro === 'rivas' && !e.you), 'your pro is not also your opponent');
     const pros = f.filter((e) => e.pro && !e.you).length;
     if (ev.tier === 'challenger') assert.equal(pros, 0);
