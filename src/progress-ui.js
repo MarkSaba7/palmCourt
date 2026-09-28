@@ -111,7 +111,7 @@ const STYLE = `
 .pg-who small,.pg-eyebrow{font:700 11px/1.25 var(--body);letter-spacing:.13em;text-transform:uppercase;color:var(--optic)}
 .pg-xpline{grid-column:2/-1;display:flex;align-items:center;gap:10px}
 .pg-xpline small{font:700 11px/1 var(--body);color:var(--mist);letter-spacing:.05em;white-space:nowrap;font-variant-numeric:tabular-nums}
-.pg-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.pg-nav{display:grid;grid-template-columns:repeat(4,auto);gap:6px}
 .pg-nav .btn{padding:8px 4px;font-size:12.5px;display:flex;justify-content:center;align-items:center;gap:5px;text-align:center;white-space:nowrap}
 .pg-pip{font:700 10px/1 var(--body);padding:3px 4px;background:rgba(242,245,238,.13);color:var(--chalk)}
 .pg-pip.hot{background:var(--optic);color:var(--optic-ink)}
@@ -236,6 +236,7 @@ const STYLE = `
 .pg-toast b{font:800 18px/1.05 var(--display);text-transform:uppercase;letter-spacing:.02em}
 .pg-toast span{font-size:12px;color:var(--mist)}
 @media (max-height:860px) and (min-width:700px){.over-slab>.pg-rw{grid-column:1;grid-row:3}}
+@media (max-width:480px){.pg-rw-xpl{flex-wrap:wrap;row-gap:4px}.pg-rw-lines li{grid-template-columns:minmax(0,1fr) 50px 46px}.pg-rw-lines li>span{white-space:normal}}
 @keyframes pgPop{from{transform:scale(.35);opacity:0}to{transform:none;opacity:1}}
 @keyframes pgIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
 @keyframes pgFlash{0%{box-shadow:0 0 0 0 rgba(214,240,74,.9)}100%{box-shadow:0 0 0 8px rgba(214,240,74,0)}}
@@ -592,10 +593,13 @@ export const ProgressUI = {
     btn.disabled = true; btn.textContent = 'Loading the ad…';
     let ok = false;
     try { const P = await platform(); ok = !!(await P.ads.rewarded('doubleFuzz')); } catch (e) { ok = false; }
-    if (!ok) { btn.textContent = 'No ad right now. Maybe next time.'; setTimeout(() => { if (this.anim === A) btn.hidden = true; }, 2500); return; }
+    // The button goes away under the player's focus: hand it to the screen's next button (keyboard / controller).
+    const refocus = () => { const a = document.activeElement; if (UI.screen !== 'over' || (a && a !== document.body && a !== btn)) return; const t = ['btnTourNext', 'btnRematch', 'btnOverMenu'].map($).find((b) => b && !b.hidden && !b.disabled && b.getClientRects().length); if (t) t.focus({ preventScroll: true }); };
+    if (!ok) { btn.textContent = 'No ad right now. Maybe next time.'; setTimeout(() => { if (this.anim === A) { btn.hidden = true; refocus(); } }, 2500); return; }
     A.doubled = true;
     Profile.addFuzz(A.res.fuzz, 'ad: double match Fuzz');
     btn.hidden = true;
+    refocus();
     if (this.anim === A && UI.screen === 'over') {
       A.steps.push({ tag: 'Bonus', cls: 'ad', label: 'Fuzz doubled', xp: 0, fuzz: A.res.fuzz });
       this.step();

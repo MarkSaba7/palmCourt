@@ -112,7 +112,8 @@ html.drilling #scoreboard, html.drilling #pauseScore { display: none !important;
   background: var(--panel); border: 1px solid var(--edge); border-top: 3px solid var(--optic); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 .tut-card h3 { margin: 0; font: 900 34px/.92 var(--display); text-transform: uppercase; }
 .tut-card p { margin: 0; color: var(--mist); font-size: 14px; }
-@media (max-width: 900px) { .tut-card { position: fixed; top: auto; bottom: 12px; right: 12px; left: 12px; width: auto; transform: none; } }
+/* narrow screens: pinned to the bottom while the menu scrolls, then below it, so it never hides the end of the menu */
+@media (max-width: 900px) { #menu { flex-wrap: wrap; } .tut-card { position: sticky; top: auto; bottom: 12px; right: auto; flex: 0 0 100%; max-width: 460px; width: auto; margin-top: 12px; transform: none; } }
 `;
 
 const HTML = `
