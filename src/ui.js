@@ -378,6 +378,7 @@ const UI = {
     this.phoneReturn = from || 'menu';
     this.phoneThen = then || null;
     this.go('phone');
+    $('btnPhoneDone').focus({ preventScroll: true });   // keyboard / controller: Enter or B leaves again
     Phone.ensure();
     this.renderPhone();
     await Phone.pageUrl(true);
