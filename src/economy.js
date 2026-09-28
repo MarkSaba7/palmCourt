@@ -47,6 +47,7 @@ export const REWARD = {
 };
 // ctx: { firstWinToday } (progress.js works it out from the Profile; tests pass it).
 export function rewardsFor(s, ctx = {}) {
+  if (s && s.mode === 'training') return trainingRewards(s, ctx);
   const lines = [], R = REWARD, C = R.caps, n = (v, cap) => Math.max(0, Math.min(cap, Math.floor(+v || 0)));
   const add = (label, xp, fuzz) => { if (xp || fuzz) lines.push({ label, xp: Math.round(xp), fuzz: Math.round(fuzz) }); };
   const f = FORMAT_SCALE[s.format] ?? 1, base = s.won ? R.win : R.loss;
@@ -67,6 +68,31 @@ export function rewardsFor(s, ctx = {}) {
   return { xp: lines.reduce((a, l) => a + l.xp, 0), fuzz: lines.reduce((a, l) => a + l.fuzz, 0), lines };
 }
 const cap = (t) => String(t || '').charAt(0).toUpperCase() + String(t || '').slice(1);
+
+// ---- training drills (src/training.js, src/drills.js) ----
+// Small on purpose: drills teach the controls and warm you up, matches are where the progress is. What drills pay
+// counts against a per-UTC-day cap (about one short match's worth); the one-time tutorial bonus sits outside it.
+export const TRAINING = { base: [10, 3], grade: { S: [20, 6], A: [14, 4], B: [8, 2], C: [4, 1], D: [0, 0] }, best: [10, 4], daily: [240, 60], tutorial: [100, 50] };
+// s: { mode: 'training', drill, name, grade, ... }. ctx: { today: { xp, fuzz } paid by drills so far today, newBest (beat
+// an earlier personal best), firstTutorial }. Returns { xp, fuzz, lines, capped, counted: { xp, fuzz } toward the cap }.
+export function trainingRewards(s, ctx = {}) {
+  const T = TRAINING, lines = [], add = (label, xp, fuzz) => { if (xp || fuzz) lines.push({ label, xp, fuzz }); };
+  const sum = (k) => lines.reduce((a, l) => a + l[k], 0);
+  add(`Training: ${s.name || cap(s.drill)}`, T.base[0], T.base[1]);
+  const g = T.grade[s.grade];
+  if (g) add(`Grade ${s.grade}`, g[0], g[1]);
+  if (ctx.newBest) add('Personal best', T.best[0], T.best[1]);
+  const day = ctx.today || {}, leftX = Math.max(0, T.daily[0] - (+day.xp || 0)), leftF = Math.max(0, T.daily[1] - (+day.fuzz || 0));
+  let xp = sum('xp'), fuzz = sum('fuzz'), capped = false;
+  if (xp > leftX || fuzz > leftF) {
+    capped = true;
+    lines.push({ label: 'Daily training cap reached', xp: Math.min(xp, leftX) - xp, fuzz: Math.min(fuzz, leftF) - fuzz });
+    xp = Math.min(xp, leftX); fuzz = Math.min(fuzz, leftF);
+  }
+  const counted = { xp, fuzz };
+  if (s.drill === 'tutorial' && ctx.firstTutorial) { add('Tutorial complete', T.tutorial[0], T.tutorial[1]); xp += T.tutorial[0]; fuzz += T.tutorial[1]; }
+  return { xp, fuzz, lines, capped, counted };
+}
 
 // ---- career stats (Profile.stats), updated from each match summary ----
 export const newStats = () => ({

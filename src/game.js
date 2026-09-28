@@ -65,6 +65,11 @@ const Game = {
   players: [],
   ball: Object.assign(newBall(), { simT: 0, active: false, visible: false, lastHitter: -1, bounces: 0, serve: null, netTouched: false, hitT: 0, rally: 0 }),
   hist: [], bounceLog: [], pending: null, ev: [], deadUntil: 0, deadKind: '', tossT: 0, serveReadyAt: 0, stTimer: 0, markerA: 0,
+  // Training (src/training.js): a drill, when cfg.drill sets one, runs its own balls on this machinery. It is told
+  // about each new point (point), ticks with the game (update) and takes over the rulings (ruling returns true), so
+  // nothing is scored and the match never ends. A player with ctl 'drill' (the ball machine's stand-in) stands still.
+  // null in every match: then none of the drill hooks below do anything.
+  drill: null,
 
   me() { return this.localIdx >= 0 ? this.players[this.localIdx] : null; },
   inPlay() { return (this.mode === 'cpu' || this.mode === 'online') && !Clock.paused && this.state !== 'over' && this.state !== 'idle'; },
@@ -74,6 +79,7 @@ const Game = {
 
   startMatch(cfg) {
     this.mode = cfg.mode; this.localIdx = cfg.localIdx; this.names = cfg.names.slice(); this.cfg = cfg;
+    this.drill = cfg.drill || null;   // training drill hook (see `drill` above); any other start clears it
     World.setSurface(cfg.surface);
     BallView.clearMarks();
     Replay.cancel(); Sound.hush();   // quitting mid-replay or mid-call must not carry the old match over
@@ -124,6 +130,7 @@ const Game = {
     this.pending = null; this.hist.length = 0; this.bounceLog.length = 0;
     Replay.reset();
     UI.updateScore();
+    if (this.drill) this.drill.point();   // training drill hook: set up its next ball
   },
   // Pre-serve bounce: the ball drops from the hand, is fastest as it meets the court, and slows as it comes back
   // up into the hand. Returns true while a bounce is in progress.
@@ -154,6 +161,7 @@ const Game = {
       for (const pl of this.players) this.updatePlayer(pl, dt, now);
       this.updateBall(now);
       this.updateState(now);
+      if (this.drill) this.drill.update(now, dt);   // training drill hook
       if (this.mode === 'online') this.sendState(now);
     }
     for (const pl of this.players) pl.avatar.update(Clock.paused ? 0 : dt, now, pl);
@@ -164,6 +172,7 @@ const Game = {
 
   updatePlayer(pl, dt, now) {
     if (pl.ctl === 'remote') return this.updateRemote(pl, dt);
+    if (pl.ctl === 'drill') return;   // training drill hook: the ball machine's stand-in stays put
     if (pl.ctl === 'cpu') this.cpuThink(pl, now); else this.humanThink(pl, now);
     if (this.state === 'serve' || this.state === 'toss') { pl.vx = pl.vz = 0; return; }
     if (this.state === 'dead' || this.state === 'over') {
@@ -863,6 +872,7 @@ const Game = {
   },
   pointOver(w, reason) {
     if (this.state !== 'rally') return;
+    if (this.drill && this.drill.ruling('point', w, reason)) return;   // training drill hook: no score
     const m = this.match, b = this.ball, lose = 1 - w, st = m.stats;
     if (reason === 'ace') st.aces[w]++; else if (reason === 'df') st.df[lose]++; else if (reason === 'winner') st.winners[w]++; else st.errors[lose]++;
     st.longest = Math.max(st.longest, b.rally);
@@ -875,6 +885,7 @@ const Game = {
     Bus.emit('point', { w, reason, rally: b.rally, ev, mode: this.mode, localIdx: this.localIdx });
   },
   fault(reason) {
+    if (this.drill && this.drill.ruling('fault', 1 - this.ball.lastHitter, reason)) return;   // training drill hook
     const m = this.match;
     if (m.serveNo === 2) return this.pointOver(1 - this.ball.lastHitter, 'df');
     m.serveNo = 2;
@@ -886,6 +897,7 @@ const Game = {
     Bus.emit('fault', { reason, serveNo: 1, mode: this.mode });
   },
   letCall() {
+    if (this.drill && this.drill.ruling('let', -1, 'let')) return;   // training drill hook
     this.enterDead(1.6, 'let');
     this.announceLet();
     if (this.mode === 'online') Net.send({ type: 'call', kind: 'let', m: this.match.toJSON() });
