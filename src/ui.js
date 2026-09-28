@@ -1420,7 +1420,7 @@ const UI = {
     const nodes = [label, speed, mk('div', 'si-detail', s.rpm ? `${said ? '' : `${spin} · `}${rpm} rpm` : 'Flat')];
     if (mine && !s.serve && s.tau != null) {
       const a = Math.abs(s.tau), when = a < 0.35 ? 'On time' : a > 1 ? (s.tau < 0 ? 'Very early' : 'Very late') : s.tau < 0 ? 'Early' : 'Late';
-      const where = s.aim == null ? '' : s.aim < -0.9 ? 'to your left' : s.aim > 0.9 ? 'to your right' : 'through the middle';
+      const where = s.read || (s.aim == null ? '' : s.aim < -0.9 ? 'to your left' : s.aim > 0.9 ? 'to your right' : 'through the middle');   // (s.read: what the swing did, see shot.js readText)
       this.showTiming(s.tau, when, where, a < 0.35 ? 'good' : a > 1 ? 'bad' : 'warn');
     }
     this.flashShot(nodes, s.serve ? 3200 : 2600);

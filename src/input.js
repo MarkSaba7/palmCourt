@@ -1,4 +1,5 @@
 import { clamp, Clock, Settings } from './core.js';
+import { cameraPower, phonePower, readCamera, readPhone, readPointer } from './shot.js';
 import { Sound } from './match.js';
 import { PaddleTrack, clampLock, lockPatch, frameValue, LOCK_MSG } from './camswing.js';
 import { canvas } from './render/world.js';
@@ -46,7 +47,7 @@ const Input = {
       this.speed = Math.hypot(this.vx, this.vy);
       return;
     }
-    const d = this.det, evs = d.push(t, x, y, { sens: Settings.sens, handed: Settings.handed, src, aspect: o && o.aspect, scale: o && o.scale });
+    const d = this.det, evs = d.push(t, x, y, { sens: Settings.sens, handed: Settings.handed, src, aspect: o && o.aspect, scale: o && o.scale, size: o && o.size });
     this.x = d.x; this.y = d.y; this.valid = d.valid; this.vx = d.vx; this.vy = d.vy; this.speed = d.speed;
     const lag = Math.max(0, Clock.now() - t);   // camera frame to here
     if (this.tossHeld && this.y > TOSS_LINE + 0.1) this.tossHeld = false;   // the hand came down: that raise is over
@@ -58,7 +59,7 @@ const Input = {
   },
   // Each camera tracker's usual stroke speed, learned from the swings that hit the ball (and kept between sessions),
   // so power means the same for a small hand swing far from the camera and a big paddle swing close to it.
-  typ: { hand: [], paddle: [], handServe: [], paddleServe: [] },
+  typ: { hand: [], paddle: [], handServe: [], paddleServe: [], phone: [], phoneServe: [] },
   learn(sw) {
     const k = sw.src + (sw.serve ? 'Serve' : ''), a = this.typ[k];
     if (!a || sw.learned || !(sw.peak > 0)) return;
@@ -84,10 +85,34 @@ const Input = {
     for (const ev of evs) this.emit(ev);
   },
   lost() { this.valid = false; this.tossHeld = false; this.hist.length = 0; this.vx = this.vy = this.speed = 0; this.det.reset(); },
-  press(power, spin, src = 'button') {
-    const s = { t0: Clock.now(), peak: 0, power, spin, vx: 0, vy: 0, src, x: this.x, y: this.y };
+  // A click or key press. more: { aim (-1.3 left .. 1.3 right, from the flick or the arrow keys), drop }.
+  press(power, spin, src = 'button', more = null) {
+    const s = { t0: Clock.now(), peak: 0, power, spin, vx: 0, vy: 0, src, x: this.x, y: this.y, ...(more || {}) };
     this.emit({ type: 'swing', swing: s });
   },
+  // What a swing asks for (src/shot.js): { pow, spin, dirX, drop, across, final }, for the stroke the ball needs.
+  read(sw, stroke, handed) {
+    const k = sw.src + (sw.serve ? 'Serve' : ''), typ = this.typical(k);
+    if ((sw.src === 'hand' || sw.src === 'paddle') && sw.peak > 0) return readCamera(sw, { typ, sens: Settings.sens, stroke, handed, prior: this.across[sw.src] });
+    if (sw.src === 'phone') {
+      const A = this.phoneAim[stroke === 'bh' ? 'bh' : 'fh'], med = (a) => (a.length >= 3 ? a.slice().sort((p, q) => p - q)[a.length >> 1] : 0);
+      return readPhone(sw, { typ, typYaw: med(A.yaw), typShare: med(A.share), stroke, handed });
+    }
+    return readPointer(sw);
+  },
+  // This player's usual follow-through on the camera (how far across), the best guess for a swing that isn't over yet.
+  across: { hand: 0.35, paddle: 0.35 },
+  noteAcross(src, a) { if (src in this.across && Number.isFinite(a)) this.across[src] = clamp(this.across[src] * 0.8 + a * 0.2, -0.3, 1); },
+  // The phone's usual turn by the contact, per stroke (its direction is read against these; see shot.js phoneAcross).
+  phoneAim: { fh: { yaw: [], share: [] }, bh: { yaw: [], share: [] } },
+  learnAim(sw, stroke) {
+    const A = this.phoneAim[stroke === 'bh' ? 'bh' : 'fh'];
+    if (sw.src !== 'phone' || sw.aimLearned || !(sw.yawPre > 0)) return;
+    sw.aimLearned = true;
+    A.yaw.push(sw.yawPre); if (A.yaw.length > 15) A.yaw.shift();
+    if (sw.yawShare > 0) { A.share.push(sw.yawShare); if (A.share.length > 15) A.share.shift(); }
+  },
+  keyAim: 0, keys: new Set(),
   // Phone racket: the phone detected the swing itself and sends the moment of peak racket speed in game time.
   phoneTime(tg, fallback) {
     const now = Clock.now(), t = Number.isFinite(+tg) ? +tg / 1000 : NaN;
@@ -99,23 +124,26 @@ const Input = {
       spin: clamp(Number.isFinite(+m.spin) ? +m.spin : 0.3, -1, 1), dir: m.dir === 'fh' || m.dir === 'bh' ? m.dir : null,
       vx: 0, vy: 0, src: 'phone', x: 0.5, y: 0.5,
     };
+    // Newer phone pages also say how far the phone had turned by the peak and how flat that turn was (aiming).
+    for (const k of ['yawFrac', 'yawPre', 'yawShare']) if (m[k] != null && Number.isFinite(+m[k])) s[k] = +m[k];
     this.emit({ type: 'swing', swing: s });
   },
   phoneSwingStart(m) { this.emit({ type: 'swingStart', t0: this.phoneTime(m.tg, 0), dir: m.dir === 'fh' || m.dir === 'bh' ? m.dir : null, src: 'phone' }); },
 };
 
-// Motion swings: speed sets power, the vertical part of the swing sets spin.
-// Camera power is mostly relative to this player's usual swing on this tracker (a normal swing is a solid drive, a
-// third faster nearly flat out), so it doesn't depend on how far from the camera they stand or how big their swing is.
+// Motion swings: speed sets power, the vertical part of the swing sets spin (the curves are in src/shot.js).
+// Camera and phone power are mostly relative to this player's usual swing (a normal swing is a solid drive, ~40%
+// faster flat out), so they don't depend on how far from the camera they stand or how big their swing is.
 function swingPower(s) {
+  const typ = Input.typical(s.src + (s.serve ? 'Serve' : ''));
+  if (s.src === 'phone') return phonePower(s.peak, typ, s.power);
   if (s.power != null) return s.power;
-  const abs = clamp((s.peak * Settings.sens - 1.1) / 2.9, 0.06, 1), typ = Input.typical(s.src + (s.serve ? 'Serve' : ''));
-  return typ ? 0.3 * abs + 0.7 * clamp(0.6 + 0.8 * (s.peak / typ - 1), 0.08, 1) : abs;
+  return cameraPower(s.peak || 0, typ, Settings.sens);
 }
-// By the swing's angle: a flat swing hits a drive, about 10° low-to-high is topspin, high-to-low is slice.
+// By the swing's rise: a flat swing hits a flat drive, about 20° low-to-high full topspin, high-to-low a slice.
 function swingSpin(s) {
-  if (s.spin != null) return s.spin;
-  return clamp(0.3 + Math.atan2(-s.vy, Math.abs(s.vx) + 1e-6) * 1.9, -1, 1);
+  if (s.src === 'phone' || s.spin == null) return Input.read(s, 'fh', Settings.handed).spin;
+  return s.spin;
 }
 
 // Runs inside a Web Worker (serialised with toString), so hand tracking never blocks the frame that draws the court.
@@ -616,7 +644,7 @@ const Tracker = {
     const now = performance.now(), t = Clock.fromPerf(tCap / 1000);
     this.rateN++;
     if (now - this.rateT > 1000) { this.rate = (this.rateN * 1000) / (now - this.rateT); this.rateN = 0; this.rateT = now; }
-    if (pt) Input.feed(t, pt.x, pt.y, this.kind, { aspect: this.aspect, scale: this.kind === 'hand' ? this.scale : 1 });
+    if (pt) Input.feed(t, pt.x, pt.y, this.kind, { aspect: this.aspect, scale: this.kind === 'hand' ? this.scale : 1, size: this.kind === 'hand' && lms ? palmSize(lms, this.aspect) : 0 });
     else Input.miss(t);
     const tr = this.trail;
     if (pt) tr.push({ x: pt.x, y: pt.y, t: now, sw: !!Input.swing });
@@ -812,18 +840,29 @@ canvas.addEventListener('pointerdown', (e) => {
   Sound.init();
   if (Settings.control !== 'mouse' || !Game.inPlay()) return;
   Input.x = e.clientX / innerWidth;
-  const m = Math.hypot(Input.vx, Input.vy) || 1;
+  const m = Math.hypot(Input.vx, Input.vy) || 1, ux = Input.vx / m;
   const power = clamp(0.38 + Input.speed * 0.14, 0.38, 1);
   const spin = Input.speed > 0.6 ? clamp(0.3 + (-Input.vy / m) * 1.1, -1, 1) : 0.35;
-  Input.press(power, spin, 'mouse');
+  // A flick to the left or right aims that way (an up or down flick is spin, straight ahead).
+  const aim = Input.speed > 0.6 && Math.abs(ux) > 0.35 ? ux * clamp((Input.speed - 0.4) / 1.6, 0, 1.2) : Input.keyAim;
+  Input.press(power, spin, 'mouse', { aim });
 });
+// Arrow keys held while swinging aim left / right; up adds topspin.
+const AIM_KEYS = { ArrowLeft: -1, ArrowRight: 1 };
+function keyAim() { let a = 0; for (const k of Input.keys) a += AIM_KEYS[k] || 0; Input.keyAim = clamp(a, -1, 1); }
+addEventListener('keyup', (e) => { Input.keys.delete(e.code); keyAim(); });
+addEventListener('blur', () => { Input.keys.clear(); keyAim(); });
 addEventListener('keydown', (e) => {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
   if (e.code === 'KeyC' && !e.repeat) { Settings.cam = Settings.cam === 'tv' ? 'player' : 'tv'; Settings.save(); return; }
   if (e.code === 'KeyF' && !e.repeat) { Settings.showFps = !Settings.showFps; Settings.save(); return; }
-  if (!Game.inPlay() || e.repeat) return;
-  if (e.code === 'Space') { e.preventDefault(); Sound.init(); Input.press(e.shiftKey ? 0.92 : 0.58, 0.4, 'key'); }
-  else if (e.code === 'KeyS') { Sound.init(); Input.press(0.42, -0.85, 'key'); }
+  if (!Game.inPlay()) return;
+  if (e.code in AIM_KEYS || e.code === 'ArrowUp') { e.preventDefault(); Input.keys.add(e.code); keyAim(); return; }
+  if (e.repeat) return;
+  const aim = { aim: Input.keyAim };
+  if (e.code === 'Space') { e.preventDefault(); Sound.init(); Input.press(e.shiftKey ? 0.92 : 0.58, Input.keys.has('ArrowUp') ? 0.9 : 0.4, 'key', aim); }
+  else if (e.code === 'KeyS') { Sound.init(); Input.press(0.42, -0.85, 'key', aim); }
+  else if (e.code === 'KeyD') { Sound.init(); Input.press(0.15, -0.8, 'key', { ...aim, drop: true }); }
 });
 
 export { MP_BASE, MP_MODEL, TOSS_LINE, HAND_BONES, Input, swingPower, swingSpin, handWorkerMain, Tracker };

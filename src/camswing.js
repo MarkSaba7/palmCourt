@@ -22,6 +22,7 @@ const SWING = {
   tossLine: 0.24,     // hand above this fraction of the frame height tosses the ball
   tossHold: 0.12,
   tossBlock: 0.6,     // ...unless it got there within this after a stroke (a high follow-through)
+  aimFor: 0.22,       // aiming reads the follow-through until the stroke ends, or this long after the contact
 };
 
 const median = (a) => { if (!a.length) return NaN; const s = a.slice().sort((p, q) => p - q); return s[s.length >> 1]; };
@@ -135,7 +136,7 @@ class SwingDetector {
     this.lastFrame = t;
     if (last && t - last.t > O.maxGap) { this.breakTrack(out); last = null; }
     this.thr = this.threshold(o.sens);
-    const p = { t, x, yw, sc, asp }, a = this.alt, al = a[a.length - 1];
+    const p = { t, x, yw, sc, asp, sz: o.size > 0 ? o.size : 0 }, a = this.alt, al = a[a.length - 1];
     const gAlt = al ? this.gate(t - al.t, sc) : 0, dAlt = al ? Math.hypot(x - al.x, yw - al.yw) : Infinity, off = last ? this.offTrack(p, last) : 0;
     if (last && (off > 1 || (dAlt < gAlt && dAlt < off * this.gate(t - last.t, sc)))) {
       // Off the track (or next to the last point that was): the tracker jumped to something else (skip it), unless it
@@ -275,7 +276,8 @@ class SwingDetector {
     const m = {
       t0: v.t, x0: v.x0, y0: v.y0, ux, uy, n: 0, vmax: 0, pk: null, prev: pv, pprev: null, tOn: null, v0: 0, cls: null, sw: null,
       hist: this.vh.filter((q) => q.t > v.t - 0.2 && !q.gap),   // (the samples just before it: where its speed took off)
-      turn: turned, from: turned && lm && lm.t > t - 0.12 ? lm.m : null,
+      turn: turned, from: turned && lm && lm.t > t - 0.12 ? lm.m : null, sz1: p.sz,
+      log: this.pts.filter((q) => q.t >= p.t - 0.3 && q.t < p.t).map((q) => ({ t: q.t, x: q.x, y: q.yw, sz: q.sz })),   // (the path, for aiming)
       still: !turned && this.stillEnd > t - 0.2 && this.stillFor >= 0.12,
     };
     // Setting off back the other way (or sharply turned) soon after a held-back movement from rest: if this one is about
@@ -300,6 +302,10 @@ class SwingDetector {
       else { if (v.s > (m.v2 || 0)) m.v2 = v.s; if (m.pk && !m.pk[2]) m.pk[2] = v; }
     }
     m.pprev = m.prev; m.prev = v; m.n++; m.last = { x: p.x, y: p.yw, t: p.t };
+    if (p.sz > 0) m.sz1 = m.sz1 ? 0.5 * (m.sz1 + p.sz) : p.sz;   // (palm size, lightly steadied: how near the camera the hand is)
+    if (m.log.length < 60) m.log.push({ t: p.t, x: p.x, y: p.yw, sz: m.sz1 || 0 });
+    // Aiming: the follow-through is known once the stroke ends, or once it has swept on for a while (swingAim).
+    if (m.sw && !m.aimed && m.pk && m.pk[2] && p.t >= m.sw.tPeak + this.o.aimFor) this.aimed(m, this.out);
     if (!v.gap && m.hist.length < 40) m.hist.push(v);
     const H = this.held;
     if (H && H.next === m && !m.sw && this.heldVerdict(H, m, false)) this.resolveHeld(p.t, this.out);
@@ -378,7 +384,7 @@ class SwingDetector {
     const R = this.rec;
     if (R && m.ux * R.ux + m.uy * R.uy < -0.2 && m.vmax > 1.1 * R.peak) { R.sw.role = 'windup'; this.pend = null; }
     if (this.serving(m, t)) this.served = true;
-    m.sw = sw; m.cls = 'stroke'; m.v0 = m.vmax;
+    m.sw = sw; m.cls = 'stroke'; m.v0 = m.vmax; sw.path = this.pathOf(m, t0);
     // The peak speed isn't known yet: the speed so far times how much this player's swings usually still speed up
     // after they're reported (learned; a first guess from the frame rate, since slower cameras see more of the swing).
     m.pred = passed || gap ? 0 : m.vmax * (Number.isFinite(k) ? k : 1 + 0.35 * Math.pow(0.0333 / this.frameDt, 0.7));
@@ -403,6 +409,7 @@ class SwingDetector {
       sw.peak = this.top(m);
       if (m.pk) sw.tPeak = this.peakAt(m);
       sw.end = t;
+      if (!m.aimed) this.aimed(m, out);
       if (!sw.role) sw.role = 'stroke';
       this.ended = { t, ux: m.ux, uy: m.uy, sw, m };
       this.rec = this.recovery(m, sw, t);
@@ -473,11 +480,40 @@ class SwingDetector {
     const sw = {
       t0: tp, tOn: hm.tOn ?? tp, peak: this.top(hm), vx: hm.pk ? hm.pk[1].vx : hm.ux, vy: hm.pk ? hm.pk[1].vy : hm.uy,
       x: hm.last.x, y: hm.last.y * (this.pts.length ? this.pts[this.pts.length - 1].asp : 4 / 3), src: this.src, dir: strokeDir(hm.ux, hm.uy, this.handed),
-      side: Math.abs(hm.ux), gap: !!hm.gapPk, tPeak: tp, lead: tp - t, late: true, end: h.t, role: 'stroke',
+      side: Math.abs(hm.ux), gap: !!hm.gapPk, tPeak: tp, lead: tp - t, late: true, end: h.t, role: 'stroke', path: { ...this.pathOf(hm, tp), done: true },
     };
     this.ended = { t: h.t, ux: hm.ux, uy: hm.uy, sw, m: hm };
     this.rec = this.recovery(hm, sw, h.t);
     out.push({ type: 'swing', swing: sw }, { type: 'swingEnd', swing: sw });
+  }
+  // The stroke's path for aiming (see shot.js readCamera): where it set off (x0 y0), where its speed peaked (the contact),
+  // where it has got to (x1 y1; the finish once it's over), in frame widths, and the palm's size at those points (0 when
+  // unknown, e.g. a paddle). done: the movement is over, so x1 y1 is the follow-through's end.
+  pathOf(m, tp) {
+    const L = m.log;
+    if (L.length < 2) return { x0: m.x0, y0: m.y0, xp: m.x0, yp: m.y0, x1: m.x0, y1: m.y0, sp: 0, s1: 0, done: false };
+    const at = (t) => {
+      let i = 1;
+      while (i < L.length && L[i].t < t) i++;
+      if (i >= L.length) return L[L.length - 1];
+      const a = L[i - 1], b = L[i], k = b.t > a.t ? clamp((t - a.t) / (b.t - a.t), 0, 1) : 1;
+      return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, sz: a.sz && b.sz ? a.sz + (b.sz - a.sz) * k : 0 };
+    };
+    // Where the stroke set off, where it met the ball (the speed peak) and where it has got to (its finish, once it's
+    // over): a stroke that sweeps on sideways as far as it came in goes across, one that stops short sideways (because
+    // it went on toward the camera) goes straight. xa / xb: 50 ms either side of the peak, whose exact time is the least
+    // certain part: the travel after xb (to the finish) is compared with the travel over as long before xa. Palm sizes:
+    // growing after the contact, the hand came toward the camera.
+    const B = L[L.length - 1], w = clamp(B.t - tp - 0.05, 0.08, 0.15);
+    const A = at(tp - 0.05 - w), P = at(tp), Pa = at(tp - 0.05), Pb = at(tp + 0.05);
+    return { x0: A.x, y0: A.y, xa: Pa.x, xp: P.x, yp: P.y, xb: Pb.x, x1: B.x, y1: B.y, sp: P.sz, s1: B.sz, done: false };
+  }
+  // The racket's path around the contact is known: fix it on the swing and tell the game (it may steer the ball).
+  aimed(m, out) {
+    const sw = m.sw;
+    m.aimed = true;
+    sw.path = { ...this.pathOf(m, sw.tPeak), done: true };
+    if (out) out.push({ type: 'swingAim', swing: sw });
   }
   // When a movement's speed peaked: the middle of its fast part (the samples within 20% of the top, weighted by how far
   // above that they are), which is steadier than the single fastest sample when the top is broad or noisy.
