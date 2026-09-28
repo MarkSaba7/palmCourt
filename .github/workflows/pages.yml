@@ -30,13 +30,13 @@ jobs:
       # A syntax error in any module leaves the page stuck on the loading screen, so don't publish one.
       - name: Check every module parses
         run: |
-          for f in $(find src site tools -name '*.js' -o -name '*.mjs'); do
+          for f in racket-sw.js $(find src site tools -name '*.js' -o -name '*.mjs'); do
             node --input-type=module --check < "$f" || { echo "::error file=$f::syntax error"; exit 1; }
           done
       - id: pages
         uses: actions/configure-pages@v5
-      # Only what the browser needs: the website pages, the game (play/ + src/), the phone racket page and the site
-      # assets (no serve.py, tests, docs or notes). tools/build-site.mjs also fills in the site settings from
+      # Only what the browser needs: the website pages, the game (play/ + src/), the phone racket app (controller.html,
+      # racket.webmanifest, racket-sw.js, site/racket-*) and the site assets (no serve.py, tests, docs or notes). tools/build-site.mjs also fills in the site settings from
       # site/config.mjs; repository variables with the same names override them (Settings → Secrets and variables →
       # Actions → Variables). Until there's a domain the site uses its Pages address (PAGES_URL). See docs/PUBLISHING.md.
       - name: Build the site
