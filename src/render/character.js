@@ -344,14 +344,14 @@ const HAIR = {
   ponytail: { hl: [[0, 0.66], [0.6, 0.62], [1.0, 0.36], [1.3, 0.06], [1.45, 0.1], [1.52, 0.2], [1.92, 0.2], [2.2, -0.12], [2.6, -0.42], [Math.PI, -0.5]], soft: 0.14, top: 0.007, side: 0.0045, back: 0.006, lift: 0 },
   crop: { hl: [[0, 0.72], [0.35, 0.74], [0.7, 0.68], [0.95, 0.5], [1.12, 0.2], [1.27, -0.04], [1.42, -0.06], [1.52, 0.18], [1.92, 0.22], [2.15, -0.1], [2.55, -0.38], [Math.PI, -0.48]], soft: 0.1, top: 0.022, side: 0.004, back: 0.0045, lift: 0.01 },
   textured: { hl: [[0, 0.64], [0.35, 0.67], [0.7, 0.6], [0.95, 0.42], [1.12, 0.18], [1.27, -0.08], [1.42, -0.1], [1.52, 0.18], [1.92, 0.22], [2.15, -0.1], [2.55, -0.38], [Math.PI, -0.48]], soft: 0.08, top: 0.026, side: 0.005, back: 0.007, lift: 0.012 },
-  curly: { hl: [[0, 0.56], [0.35, 0.58], [0.7, 0.52], [0.95, 0.36], [1.12, 0.18], [1.27, -0.06], [1.42, -0.08], [1.52, 0.2], [1.92, 0.24], [2.15, -0.1], [2.55, -0.4], [Math.PI, -0.5]], soft: 0.06, top: 0.042, side: 0.018, back: 0.025, lift: 0.004 },
+  curly: { hl: [[0, 0.56], [0.35, 0.58], [0.7, 0.52], [0.95, 0.36], [1.12, 0.18], [1.27, -0.06], [1.42, -0.08], [1.52, 0.2], [1.92, 0.24], [2.15, -0.1], [2.55, -0.4], [Math.PI, -0.5]], soft: 0.12, top: 0.042, side: 0.018, back: 0.025, lift: 0.004 },
   wavy: { hl: [[0, 0.7], [0.35, 0.72], [0.7, 0.6], [0.95, 0.4], [1.12, 0.16], [1.27, -0.12], [1.42, -0.14], [1.52, -0.04], [1.92, -0.02], [2.15, -0.2], [2.55, -0.48], [Math.PI, -0.6]], soft: 0.11, top: 0.026, side: 0.016, back: 0.02, lift: 0.008 },
   long: { hl: [[0, 0.7], [0.35, 0.72], [0.7, 0.6], [0.95, 0.4], [1.08, 0.12], [1.2, -0.3], [Math.PI, -0.3]], soft: 0.11, top: 0.017, side: 0.018, back: 0.018, lift: 0.002 },
 };
 
 // Headband / bandana: bottom and top edge heights (head-unit y) at the front and at the back (they sit tilted, low
 // on the occiput); the cap's lower edge likewise. bandAt / capAt give rest-pose heights at angle a from the front.
-const BAND = { headband: [[0.47, 0.76], [0.26, 0.545]], bandana: [[0.36, 0.66], [0.13, 0.43]] };
+const BAND = { headband: [[0.47, 0.76], [0.26, 0.545]], bandana: [[0.36, 0.56], [0.13, 0.33]] };
 const CAP = [0.53, 0.24];
 const bandAt = (kind, a) => { const B = BAND[kind], k = (1 - Math.cos(a)) / 2; return [0, 1].map((e) => HC[1] + HR[1] * (B[0][e] + (B[1][e] - B[0][e]) * k)); };
 const capAt = (a) => HC[1] + HR[1] * (CAP[0] + (CAP[1] - CAP[0]) * (1 - Math.cos(a)) / 2);
@@ -509,7 +509,8 @@ function buildHair(bld, look, F, style, wear, H) {
     }
     if (curly) {   // clumps of curls, with a finer set on top of them
       const [c1, id] = cells(ux / 0.22, uy / 0.22, uz / 0.22), [c2] = cells(ux / 0.12 + 7, uy / 0.12, uz / 0.12);
-      t += (0.012 * topW + 0.008 * (1 - topW)) * Math.sqrt(Math.max(0, 1 - (c1 / 0.8) ** 2)) + 0.0035 * Math.max(0, 1 - (c2 / 0.8) ** 2);
+      t += ((0.012 * topW + 0.008 * (1 - topW)) * Math.sqrt(Math.max(0, 1 - (c1 / 0.8) ** 2)) + 0.0035 * Math.max(0, 1 - (c2 / 0.8) ** 2)) * sst(m, 0, 0.25);
+      t *= 1 - 0.6 * gs(aa - 1.35, 0.3) * (1 - sst(uy, -0.05, 0.4));
       par = [ux * Math.cos(id * 6) - uz * Math.sin(id * 6), uy + 0.3 * (id - 0.5), ux * Math.sin(id * 6) + uz * Math.cos(id * 6), 1];
     }
     if (wavy) {   // side part, swept over to the other side and back, in loose waves
@@ -563,29 +564,32 @@ function buildHeadwear(bld, F, wear, H) {
         const a = -Math.PI + 2 * Math.PI * j / n, phb = Math.acos((bandAt(wear, a)[0] + 0.004 - HC[1]) / HR[1]), s = i / R;
         const back = Math.max(0, -Math.cos(a)) ** 3;
         const o = 0.0042 + 0.0012 * Math.sin(7 * a + 11 * s) * s + 0.004 * back * s * s + 0.003 * (1 - s) ** 2;
-        return [...headAt(unitAt(phb * s, a), F, o), H, [Math.cos(a), Math.sin(a), 0, 0], 1];
+        return [...headAt(unitAt(phb * s, a), F, o), H, [Math.cos(a), Math.sin(a), 0, 6], 1];
       }, 'band');
     }
     grid(bld, prof.length + 1, n, (i, j) => {
       const [top, o, dy] = prof[i % prof.length], a = -Math.PI + 2 * Math.PI * j / n, [b, t] = bandAt(wear, a), y = (top ? t : b) + dy;
       const lump = bandana ? 0.001 * Math.sin(9 * a + 4 * top) * o : 0;   // a folded cloth is never quite even
-      return [...headAt(unitAtY(y, a), F, off + o * th + lump), H, [Math.cos(a), Math.sin(a), y, 0], 1];
+      return [...headAt(unitAtY(y, a), F, off + o * th + lump), H, [Math.cos(a), Math.sin(a), y, bandana ? 6 : 0], 1];
     }, 'band');
     if (bandana) {
       const [b, t] = bandAt(wear, Math.PI), kn = headAt(unitAtY((b + t) / 2, Math.PI), F, off + th + 0.007);
-      bld.ellipsoid(kn, [0.016, 0.013, 0.011], 6, 10, H, 'band', { deform: (ux, uy, uz, d) => [d[0] * (1 + 0.15 * Math.sin(5 * uy)), d[1], d[2] * (1 + 0.2 * ux * ux)] });
-      for (const sd of [-1, 1]) {   // two tails hanging from the knot, twisting and flaring a little
-        const L = 0.13, w = 0.034;
+      for (const sd of [-1, 1]) {   // the knot: two lobes of cloth either side of the tie
+        const c = [kn[0] + sd * 0.009, kn[1] + 0.001, kn[2] - 0.001];
+        bld.ellipsoid(c, [0.013, 0.012, 0.011], 6, 10, H, 'band', { deform: (ux, uy, uz, d) => [d[0] * (1 + 0.15 * Math.sin(5 * uy)), d[1], d[2] * (1 + 0.2 * ux * ux)] });
+      }
+      for (const sd of [-1, 1]) {   // two long tails hanging from the knot, splaying apart, twisting and flaring a little
+        const L = 0.165, w = 0.042;
         const at = (s, c) => {
-          const tw = sd * (0.25 + 0.45 * s), cx = kn[0] + sd * (0.006 + 0.02 * s), cy = kn[1] - 0.006 - L * s * (c === 1 || c === 2 ? 1 : 0.86);
-          const cz = kn[2] + 0.004 + 0.022 * s + 0.006 * Math.sin(Math.PI * s);
-          const across = (c === 0 || c === 3 ? -0.5 : 0.5) * sd * (w - 0.006 * s), depth = c < 2 ? -0.001 : 0.001;
+          const tw = sd * (0.25 + 0.5 * s), cx = kn[0] + sd * (0.008 + 0.036 * s), cy = kn[1] - 0.008 - L * s * (c === 1 || c === 2 ? 1 : 0.84);
+          const cz = kn[2] + 0.005 + 0.03 * s + 0.007 * Math.sin(Math.PI * s);
+          const across = (c === 0 || c === 3 ? -0.5 : 0.5) * sd * (w - 0.01 * s), depth = c < 2 ? -0.0012 : 0.0012;
           return [cx + across * Math.cos(tw) - depth * Math.sin(tw), cy, cz + across * Math.sin(tw) + depth * Math.cos(tw)];
         };
-        grid(bld, 9, 4, (i, j) => {
-          const s = i / 8, p = at(s, j), nk = 0.35 * s;
-          return [...p, [['head', 1 - nk], ['neck', nk]], [0, 0, p[1], 0], 1];
-        }, 'band', { inside: (i) => at(i / 8, 0).map((v, k) => (v + at(i / 8, 2)[k]) / 2) });
+        grid(bld, 10, 4, (i, j) => {
+          const s = i / 9, p = at(s, j);   // the tips follow the shoulders more than the head
+          return [...p, [['head', 1 - 0.6 * s], ['neck', 0.4 * s], ['chest', 0.2 * s]], [sd, s, p[1], 6], 1];
+        }, 'band', { inside: (i) => at(i / 9, 0).map((v, k) => (v + at(i / 9, 2)[k]) / 2) });
       }
     }
   } else if (wear === 'cap') {
@@ -1066,7 +1070,7 @@ const DETAIL_ALBEDO = `
       float warm = exp(-pow((ax - 0.47) / 0.17, 2.0) - pow((vPar.y + 0.18) / 0.17, 2.0)) + 0.9 * exp(-pow(vPar.x / 0.1, 2.0) - pow((vPar.y + 0.27) / 0.07, 2.0));
       diffuseColor.rgb *= mix(vec3(1.0), vec3(1.05, 0.9, 0.87), clamp(warm * fr, 0.0, 1.0));
       float hollow = 0.16 * exp(-pow((ax - 0.33) / 0.15, 2.0) - pow((vPar.y - 0.1) / 0.1, 2.0))       // eye sockets
-        + 0.55 * exp(-pow((ax - 0.08) / 0.045, 2.0) - pow((vPar.y + 0.35) / 0.025, 2.0))              // nostrils
+        + 0.4 * exp(-pow((ax - 0.08) / 0.04, 2.0) - pow((vPar.y + 0.36) / 0.02, 2.0))                 // nostrils
         + 0.12 * exp(-pow((ax - 0.21) / 0.035, 2.0) - pow((vPar.y + 0.31) / 0.06, 2.0))               // round the nose's wings
         + 0.1 * exp(-pow(vPar.x / 0.25, 2.0) - pow((vPar.y + 0.7) / 0.05, 2.0));                     // under the lower lip
       diffuseColor.rgb *= 1.0 - hollow * fr;
@@ -1080,6 +1084,12 @@ const DETAIL_ALBEDO = `
       diffuseColor.rgb *= 1.0 - 0.55 * exp(-pow((vPar.y + 0.55) / 0.012, 2.0)) * smoothstep(0.3, 0.1, abs(vPar.x));
       diffuseColor.rgb *= 1.0 - 0.18 * exp(-pow((vPar.y - 0.02) / 0.1, 2.0)) * exp(-pow((abs(vPar.x) - 0.38) / 0.14, 2.0));
     }
+  } else if (isReg(8.0) && vPar.w > 5.5) {                       // bandana: a printed cloth (dots and rings), dark on light
+    vec3 p = vRest * 75.0, f = fract(p) - 0.5; float h = cHash(floor(p)), d = length(f);
+    float ink = h < 0.55 ? 1.0 - smoothstep(0.12 + 0.12 * h, 0.16 + 0.12 * h, d) : 1.0 - smoothstep(0.03, 0.06, abs(d - 0.3));
+    vec3 c = diffuseColor.rgb; bool light = dot(c, vec3(0.3, 0.59, 0.11)) > 0.35;
+    vec3 inkC = light ? c * vec3(0.18, 0.22, 0.4) : mix(c, vec3(0.85), 0.8);
+    diffuseColor.rgb = mix(c, inkC, mix(0.25, ink, near) * 0.85);
   } else if (isReg(2.0) && vPar.w < 0.5) {                       // shorts: accent stripe down the outer side
     if (abs(vPar.x) > 0.975 && vPar.x * vRest.x > 0.0) diffuseColor.rgb = vAccent.rgb;
   } else if (isReg(4.0) && vPar.w > 1.5) {                       // shoe upper: toe cap, heel counter, laces, collar, side flash
