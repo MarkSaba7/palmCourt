@@ -253,6 +253,13 @@ export function makeRacket({ frame = 0x1b2026, accent = 0xd6f04a, strings = 0xf4
   const stencil = rgbDist(accent, strings) > 0.35 ? accent : rgbDist(frame, strings) > 0.35 ? frame : 0x2a2c30;
   const st = stringTexture(strings, stencil);
   const strMat = new THREE.MeshStandardMaterial({ map: st, roughness: 0.55, transparent: true, alphaTest: 0.02, depthWrite: false, side: THREE.DoubleSide });
+  // Once single strings are smaller than a pixel the bed would fade to a ghost (mipmapped alpha ~0.3): thicken the
+  // film, so the head still reads as a racket from the TV camera.
+  strMat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+      float texPx = length(fwidth(vMapUv * vec2(256.0, 336.0)));
+      diffuseColor.a = mix(diffuseColor.a, max(diffuseColor.a, 0.6), smoothstep(2.0, 6.0, texPx));`);
+  };
   const strMesh = new THREE.Mesh(sg, strMat);
   // Its shadow only where the strings are solid (mostly none: at shadow-map resolution a string bed is a faint film).
   strMesh.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: st, alphaTest: 0.5, side: THREE.DoubleSide });
