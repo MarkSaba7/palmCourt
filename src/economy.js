@@ -129,6 +129,69 @@ const HW = (key, name, level, price, headwear, band, how = 'buy') => it('headwea
 const WB = (key, name, level, price, band, how = 'buy') => it('band', key, name, how, level, price, { look: { wristband: band != null }, ...(band != null ? { kit: { band } } : {}) });
 const CE = (key, name, level, price, celebrate, how = 'buy') => it('celebration', key, name, how, level, price, { style: { celebrate } });
 const TI = (key, name, how = 'earn', level = 1) => it('title', key, name, how, level, 0, { text: name });
+
+// ---- gear with stats (G1): the grind. src/stats.js turns what you have equipped into shot and footwork multipliers ----
+// Five gear slots, apart from the cosmetic ones (a racket's paint stays a cosmetic). Everyone starts with the Starter
+// kit (neutral: 1.0 everywhere); Club, Pro, Elite and Legend items unlock by Player Level and cost Fuzz, and each
+// can be upgraded +1..+5 for more Fuzz. Items trade off inside a tier (a power frame costs control), so higher tiers
+// are better but there is no single best item. `stats` are fractions (+0.04 = 4 % better): pow / ctl / spin act on
+// both wings (pow and ctl on the serve too, ctl on volleys), serve = serve pace + accuracy, volley = volley control,
+// touch = drops, slices and lobs, speed / react = footwork, reach = how far you can stretch.
+export const GEAR_SLOTS = ['frame', 'strings', 'shoes', 'grip', 'dampener'];
+export const GEAR_TIERS = [
+  { key: 'starter', name: 'Starter', color: '#a9b6c2' }, { key: 'club', name: 'Club', color: '#7fe0a8' }, { key: 'pro', name: 'Pro', color: '#6fb6ff' },
+  { key: 'elite', name: 'Elite', color: '#c996ff' }, { key: 'legend', name: 'Legend', color: '#f2c14e' },
+];
+export const MAX_UPGRADE = 5, UPGRADE_STEP = 0.06;   // each +1 makes an item's strengths 6 % stronger (its costs stay)
+const G = (kind, key, name, tier, level, price, stats, blurb) => it(kind, key, name, tier === 'starter' ? 'free' : 'buy', level, price, { gear: { tier, stats } }, { tier, stats, blurb });
+const GEAR = [
+  // Rackets (the frame; its colours are the "Racket paint" cosmetic): power, control or spin.
+  G('frame', 'rally', 'Rally 100', 'starter', 1, 0, {}, 'The club loaner: does everything, nothing special'),
+  G('frame', 'driver', 'Driver 102', 'club', 3, 500, { pow: 0.04, ctl: -0.02 }, 'A big sweet spot: free pace, a little wild'),
+  G('frame', 'scalpel', 'Scalpel 95', 'club', 3, 500, { ctl: 0.04, pow: -0.02 }, 'A small head for precise hitting'),
+  G('frame', 'whip', 'Whip 100', 'club', 4, 600, { spin: 0.05, ctl: -0.01 }, 'Open strings that bite the ball'),
+  G('frame', 'cannon', 'Cannon 100', 'pro', 10, 2000, { pow: 0.07, serve: 0.02, ctl: -0.03 }, 'Stiff and heavy: pace off both wings and the serve'),
+  G('frame', 'chisel', 'Chisel 97', 'pro', 11, 2200, { ctl: 0.07, touch: 0.02, pow: -0.03 }, 'Thin beam, pure feel'),
+  G('frame', 'cyclone', 'Cyclone 98', 'pro', 12, 2400, { spin: 0.08, pow: 0.02, ctl: -0.02 }, 'Whippy and fast through the air'),
+  G('frame', 'tempest', 'Tempest 100', 'elite', 24, 6500, { pow: 0.1, spin: 0.03, ctl: -0.04 }, 'Tour-level pace for first-strike tennis'),
+  G('frame', 'surgeon', 'Surgeon 93', 'elite', 25, 7000, { ctl: 0.1, touch: 0.04, pow: -0.03 }, 'Paints lines: for players who make their own pace'),
+  G('frame', 'monsoon', 'Monsoon 98', 'elite', 27, 7500, { spin: 0.11, ctl: 0.03, pow: -0.02 }, 'Heavy topspin that still lands'),
+  G('frame', 'sovereign', 'Sovereign 97', 'legend', 42, 21000, { pow: 0.07, ctl: 0.07, spin: 0.05, touch: 0.03 }, 'The all-court classic: no weak spot'),
+  G('frame', 'meteor', 'Meteor 100', 'legend', 45, 24000, { pow: 0.13, spin: 0.07, ctl: -0.03 }, 'Raw power and spin, if you can hold it'),
+  // Strings: spin against touch.
+  G('strings', 'syngut', 'Synthetic Gut', 'starter', 1, 0, {}, 'Basic nylon: fine for everything'),
+  G('strings', 'poly', 'Poly 17', 'club', 3, 450, { spin: 0.04, ctl: 0.01, touch: -0.02 }, 'Firm polyester: bite and control, less feel'),
+  G('strings', 'multi', 'Multifilament', 'club', 5, 550, { touch: 0.03, pow: 0.02, spin: -0.02 }, 'Soft and lively'),
+  G('strings', 'hexpoly', 'Hex Poly 16L', 'pro', 11, 2000, { spin: 0.07, ctl: 0.02, touch: -0.03 }, 'Shaped strings that grab the ball'),
+  G('strings', 'gut', 'Natural Gut', 'pro', 13, 2400, { touch: 0.05, pow: 0.04, spin: -0.02 }, 'The softest feel there is'),
+  G('strings', 'octa', 'Octa Poly', 'elite', 25, 6500, { spin: 0.1, ctl: 0.03, touch: -0.03 }, 'Eight edges of spin'),
+  G('strings', 'hybrid', 'Gut / Poly Hybrid', 'elite', 28, 7500, { spin: 0.05, touch: 0.05, pow: 0.04 }, 'Poly mains for bite, gut crosses for feel'),
+  G('strings', 'silk', 'Silk Gut', 'legend', 44, 22000, { spin: 0.08, touch: 0.08, pow: 0.05 }, 'Hand-made: spin, pace and feel together'),
+  // Shoes: top speed against the first step and the stretch.
+  G('shoes', 'trainers', 'Court Trainers', 'starter', 1, 0, {}, 'Everyday court shoes'),
+  G('shoes', 'sprinters', 'Court Sprinters', 'club', 3, 500, { speed: 0.04, react: -0.01 }, 'Light and quick in a straight line'),
+  G('shoes', 'lowriders', 'Low Riders', 'club', 4, 550, { react: 0.04, reach: 0.01, speed: -0.01 }, 'Low to the ground for a sharp first step'),
+  G('shoes', 'stride', 'Long Stride', 'pro', 10, 2000, { speed: 0.07, reach: 0.02, react: -0.02 }, 'Built for covering the whole baseline'),
+  G('shoes', 'burst', 'Burst', 'pro', 12, 2200, { react: 0.07, speed: 0.02 }, 'Explosive split-step'),
+  G('shoes', 'sliders', 'Clay Sliders', 'pro', 14, 2500, { reach: 0.05, speed: 0.03, react: -0.01 }, 'Slide into the wide ones'),
+  G('shoes', 'blaze', 'Blaze', 'elite', 24, 6800, { speed: 0.1, react: 0.03, reach: -0.02 }, 'The fastest shoe on tour'),
+  G('shoes', 'anchor', 'Anchor', 'elite', 26, 7200, { react: 0.09, reach: 0.05, speed: -0.02 }, 'Planted: quick reactions and a long stretch'),
+  G('shoes', 'wingfoot', 'Wingfoot', 'legend', 43, 22000, { speed: 0.09, react: 0.08, reach: 0.04 }, 'Everywhere at once'),
+  // Grips and overgrips: control and serve.
+  G('grip', 'stock', 'Stock Grip', 'starter', 1, 0, {}, 'The grip the racket came with'),
+  G('grip', 'tacky', 'Tacky Overgrip', 'club', 3, 400, { ctl: 0.03, pow: -0.01 }, 'Sticky: the racket never turns in your hand'),
+  G('grip', 'dry', 'Dry Overgrip', 'pro', 10, 1800, { ctl: 0.05, serve: 0.03, touch: -0.01 }, 'Stays dry in the heat: a steady serve'),
+  G('grip', 'leather', 'Leather Grip', 'pro', 12, 2200, { touch: 0.05, ctl: 0.03, pow: -0.02 }, 'You feel every string'),
+  G('grip', 'tourwrap', 'Tour Wrap', 'elite', 26, 6500, { ctl: 0.08, serve: 0.04, touch: -0.02 }, 'The pros\' choice for control'),
+  G('grip', 'featherleather', 'Feather Leather', 'elite', 29, 7500, { touch: 0.08, ctl: 0.04, pow: -0.02 }, 'Thin leather for soft hands'),
+  G('grip', 'legendwrap', 'Champion\'s Wrap', 'legend', 46, 21000, { ctl: 0.09, touch: 0.06, serve: 0.04 }, 'Worn smooth by a hundred titles'),
+  // Dampeners: feel at the net.
+  G('dampener', 'none', 'No dampener', 'starter', 1, 0, {}, 'Nothing between you and the strings'),
+  G('dampener', 'button', 'Button Dampener', 'club', 5, 450, { volley: 0.03, touch: 0.03, pow: -0.01 }, 'Takes the ping out: softer hands'),
+  G('dampener', 'worm', 'Worm Dampener', 'pro', 13, 2000, { volley: 0.06, touch: 0.03, pow: -0.01 }, 'A calm racket for punch volleys'),
+  G('dampener', 'netrusher', 'Net Rusher', 'elite', 27, 6500, { volley: 0.09, touch: 0.05, pow: -0.02 }, 'Volley like it\'s the 1980s'),
+  G('dampener', 'whisper', 'Whisper', 'legend', 48, 20000, { volley: 0.1, touch: 0.08, serve: 0.03 }, 'Silence, and perfect feel'),
+];
 export const CATALOG = [
   it('pro', 'custom', 'Your player', 'free', 1, 0, { pro: 'custom' }),
   it('pro', 'varga', 'Luka Varga', 'free', 1, 0, { pro: 'varga' }),
@@ -196,6 +259,7 @@ export const CATALOG = [
   TI('hof', 'Hall of Famer', 'level', 50),
   TI('ace', 'Ace Machine'), TI('grinder', 'Baseline Grinder'), TI('timing', 'Timing Master'),
   TI('giant', 'Giant Slayer'), TI('unstoppable', 'Unstoppable'), TI('champion', 'Champion'),
+  ...GEAR,
 ];
 const BY_ID = new Map(CATALOG.map((i) => [i.id, i]));
 const LOOKUP = new Map(CATALOG.filter((i) => /^(pro|surface|tod)$/.test(i.kind)).map((i) => [i.key, i]));   // bare ids: 'clay', 'night', 'rivas'
@@ -248,6 +312,43 @@ export function lookFor(equipped = {}) {
   const r = get('racket');
   if (r) out.racket = { ...r.racket };
   return out;
+}
+
+// ---- gear: starter kit, stats with upgrades, upgrade prices (G1) ----
+export const isGear = (i) => !!i && GEAR_SLOTS.includes(i.kind);
+export const STARTER_GEAR = Object.freeze(Object.fromEntries(GEAR_SLOTS.map((s) => [s, CATALOG.find((i) => i.kind === s && i.tier === 'starter').id])));
+export const tierIndex = (t) => Math.max(0, GEAR_TIERS.findIndex((x) => x.key === t));
+// The Profile's upgrade levels ({ id: 0..5 }); tests pass a plain { upgrades } object.
+const upsOf = (p) => (p && (p.upgrades || (p.data && p.data.upgrades))) || {};
+export const upgradeOf = (id, p = bound) => { const i = itemById(id), k = i ? upsOf(p)[i.id] : 0; return Math.max(0, Math.min(MAX_UPGRADE, Math.floor(+k || 0))); };
+// An item's stat deltas at upgrade level k: its strengths grow by UPGRADE_STEP per level, its costs stay.
+export function gearStats(id, k = 0) {
+  const i = typeof id === 'string' ? itemById(id) : id, out = {};
+  if (!isGear(i)) return out;
+  const m = 1 + UPGRADE_STEP * Math.max(0, Math.min(MAX_UPGRADE, k | 0));
+  for (const [s, v] of Object.entries(i.stats)) out[s] = +(v > 0 ? v * m : v).toFixed(4);
+  return out;
+}
+// Fuzz for upgrade level k (1..5): 15 % of the item's price for +1, rising 5 % a level (+1..+5 = 1.25× the price).
+export function upgradeCost(id, k) { const i = itemById(id); return isGear(i) && i.price > 0 && k >= 1 && k <= MAX_UPGRADE ? Math.round((i.price * (0.1 + 0.05 * k)) / 10) * 10 : 0; }
+// Can this gear be upgraded now? { ok, reason, next, cost } (reason: 'not-gear' | 'starter' | 'locked' | 'max' | 'fuzz').
+export function canUpgrade(id, p = bound) {
+  const i = itemById(id);
+  if (!isGear(i) || !p) return { ok: false, reason: 'not-gear' };
+  if (!i.price) return { ok: false, reason: 'starter' };
+  if (!isUnlocked(i.id, p)) return { ok: false, reason: 'locked' };
+  const next = upgradeOf(i.id, p) + 1, cost = upgradeCost(i.id, next);
+  if (next > MAX_UPGRADE) return { ok: false, reason: 'max', next };
+  if (p.fuzz < cost) return { ok: false, reason: 'fuzz', next, cost };
+  return { ok: true, next, cost };
+}
+export function upgrade(id, p = bound) {
+  const i = itemById(id), c = canUpgrade(id, p);
+  if (!c.ok || !p.spend(c.cost, `upgrade ${i.id} +${c.next}`)) return false;
+  const ups = p.data ? (p.data.upgrades ||= {}) : (p.upgrades ||= {});
+  ups[i.id] = c.next;
+  if (p.changed) p.changed(); else if (p.save) p.save();
+  return true;
 }
 
 // ---- seeded randomness (daily challenges) ----

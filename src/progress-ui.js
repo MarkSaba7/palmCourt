@@ -15,14 +15,18 @@ import { proById, proPortrait } from './pros.js';
 import { Profile } from './profile.js';
 import { Progress } from './progress.js';
 import { CATALOG, SLOTS, itemById, isUnlocked, canBuy, buy, unlockHint, lookFor, ACHIEVEMENTS, achievementProgress, xpToReach, xpForLevel, levelFor, MAX_LEVEL, REWARD, utcDay } from './economy.js';
+import { GEAR_SLOTS, GEAR_TIERS, STARTER_GEAR, MAX_UPGRADE, isGear, gearStats, upgradeOf, canUpgrade, upgrade } from './economy.js';
+import { Stats, WORDS, LABELS, get as statAt, summary } from './stats.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const hex = (n) => `#${((n ?? 0) >>> 0).toString(16).padStart(6, '0').slice(-6)}`;
 const nf = (n) => Math.round(n || 0).toLocaleString('en-US');
-const SLOT_NAMES = { outfit: 'Outfit', racket: 'Racket paint', headwear: 'Headwear', band: 'Wristbands', celebration: 'Celebration', title: 'Title' };
-const SHOP_CATS = [['outfit', 'Outfits'], ['racket', 'Rackets'], ['headwear', 'Headwear'], ['band', 'Wristbands'], ['celebration', 'Celebrations'], ['pro', 'Pros']];
+const SLOT_NAMES = { outfit: 'Outfit', racket: 'Racket paint', headwear: 'Headwear', band: 'Wristbands', celebration: 'Celebration', title: 'Title', frame: 'Racket', strings: 'Strings', shoes: 'Shoes', grip: 'Grip', dampener: 'Dampener' };
+// Gear (stats) first, then style (cosmetics), then the pros.
+const GEAR_CATS = [['frame', 'Rackets'], ['strings', 'Strings'], ['shoes', 'Shoes'], ['grip', 'Grips'], ['dampener', 'Dampeners']];
+const SHOP_CATS = [...GEAR_CATS, ['outfit', 'Outfits'], ['racket', 'Racket paint'], ['headwear', 'Headwear'], ['band', 'Wristbands'], ['celebration', 'Celebrations'], ['pro', 'Pros']];
 const TABS = [['shop', 'Pro Shop'], ['locker', 'Locker'], ['challenges', 'Challenges'], ['achievements', 'Achievements']];
-const DEFAULTS = Object.fromEntries(SLOTS.map((s) => [s, (CATALOG.find((i) => i.kind === s && i.how === 'free') || {}).id]));
+const DEFAULTS = { ...Object.fromEntries(SLOTS.map((s) => [s, (CATALOG.find((i) => i.kind === s && i.how === 'free') || {}).id])), ...STARTER_GEAR };
 const equippedId = (slot) => Profile.equipped[slot] || DEFAULTS[slot];
 const titleFor = (id) => (ACHIEVEMENTS.find((a) => a.title === id) || {}).name;
 
@@ -60,6 +64,41 @@ function celebSvg(kind, look) {
     + (kind === 'heart' ? '<path d="M32 33.5c-3-2.4-4.6-3.8-4.6-5.4a2.3 2.3 0 0 1 4.6-.6 2.3 2.3 0 0 1 4.6.6c0 1.6-1.6 3-4.6 5.4z" fill="#ff7a62"/>' : '')
     + (kind === 'arms' || kind === 'vamos' ? '<path d="M14 26l-4-2M50 26l4-2M16 32h-5M48 32h5" stroke="#d6f04a" stroke-width="1.6" stroke-linecap="round"/>' : '') + '</svg>';
 }
+// Gear pictures (G1): coloured by tier, with an accent for what the item is best at.
+const TIER_COL = { starter: 0x5b6570, club: 0x2f8f5b, pro: 0x2f6fb3, elite: 0x7a4bb8, legend: 0xc9a13e };
+const FOCUS_COL = { pow: 0xff7a62, ctl: 0xf2f5ee, spin: 0xd6f04a, touch: 0xf2e6c8, volley: 0x8fd6b8, serve: 0x6fb6ff, speed: 0xd6f04a, react: 0xff7a62, reach: 0x8fd6b8 };
+const focusOf = (i) => (Object.entries(i.stats || {}).sort((a, b) => b[1] - a[1])[0] || [])[0];
+function gearSvg(i) {
+  const t = hex(TIER_COL[i.tier] ?? TIER_COL.starter), a = hex(FOCUS_COL[focusOf(i)] ?? 0xd6f04a), o = ['<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">'];
+  if (i.kind === 'frame') return racketSvg({ frame: TIER_COL[i.tier] ?? TIER_COL.starter, accent: FOCUS_COL[focusOf(i)] ?? 0xd6f04a });
+  if (i.kind === 'strings') {
+    const str = hex(focusOf(i) === 'touch' ? 0xf2e6c8 : focusOf(i) === 'spin' ? 0xd6f04a : 0xf4f2e6);
+    o.push(`<circle cx="32" cy="31" r="21" fill="#1b2026" stroke="${t}" stroke-width="3.2"/><circle cx="32" cy="31" r="14.5" fill="none" stroke="${str}" stroke-width="6" stroke-dasharray="1.6 1"/>`,
+      `<circle cx="32" cy="31" r="6.5" fill="${t}"/><circle cx="32" cy="31" r="2.6" fill="#1b2026"/><path d="M50 40Q59 50 53 60" stroke="${str}" stroke-width="1.6" fill="none"/>`);
+  } else if (i.kind === 'shoes') {
+    o.push(`<path d="M7 44C7 37 11 31 17 30L26 29C30 25 34 22 39 22 41 28 45 32 52 33.5 58 35 60 39 60 44Z" fill="#f4f4f0"/><path d="M5 44H61V47.5C61 50 59 51.5 56.5 51.5H10C7 51.5 5 50 5 47.5Z" fill="${t}"/>`,
+      `<path d="M23.5 31.5 28.5 38M29 28.5 33 35.5M34 25.5 37.5 32.5" stroke="${t}" stroke-width="2.2" stroke-linecap="round"/><path d="M7.5 38.5H24" stroke="${a}" stroke-width="3.2"/><path d="M53 34.5 58.5 38" stroke="${a}" stroke-width="3" stroke-linecap="round"/>`);
+  } else if (i.kind === 'grip') {
+    o.push(`<g transform="rotate(-35 32 32)"><rect x="24.5" y="3" width="15" height="50" rx="3" fill="${t}"/>`);
+    for (let y = 9; y < 52; y += 6) o.push(`<path d="M24.5 ${y + 3}L39.5 ${y - 2}" stroke="#000" stroke-opacity=".3" stroke-width="1.6"/>`);
+    o.push(`<rect x="22.5" y="51" width="19" height="7" rx="2" fill="#1b2026"/><rect x="22.5" y="51" width="19" height="2" fill="${a}"/></g>`);
+  } else if (i.kind === 'dampener') {
+    o.push('<path d="M18 2V62M32 2V62M46 2V62M2 18H62M2 32H62M2 46H62" stroke="#f4f2e6" stroke-opacity=".55" stroke-width="1.4"/>');
+    if (i.tier !== 'starter') o.push(`<rect x="12" y="23" width="40" height="18" rx="9" fill="${t}"/><circle cx="32" cy="32" r="4.5" fill="${a}"/><path d="M17 27Q20 25 25 25.5" stroke="#fff" stroke-opacity=".35" stroke-width="1.6" fill="none"/>`);
+  }
+  o.push('</svg>');
+  return o.join('');
+}
+const pct = (v) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(Math.round(v * 100))}%`;
+const myPro = () => (proById(Settings.playAs) ? Settings.playAs : 'custom');
+// Your stats rows: [path, label], in Locker order.
+const STAT_ROWS = ['fh.pow', 'fh.ctl', 'fh.spin', 'bh.pow', 'bh.ctl', 'bh.spin', 'serve.pow', 'serve.ctl', 'volley.ctl', 'touch', 'move.speed', 'move.react', 'reach'].map((p) => [p, LABELS[p]]);
+// A bar around 1.0 over the whole stat range: fills from the 1.0 mark towards the value.
+function statBar(v) {
+  const lo = Stats.STAT_MIN, span = Stats.STAT_MAX - lo, at = (x) => (100 * (x - lo)) / span, z = at(1), p = at(v);
+  return `<i class="pg-sbar ${v >= 1 ? 'up' : 'dn'}" style="--l:${Math.min(z, p).toFixed(1)}%;--w:${Math.abs(p - z).toFixed(1)}%;--z:${z.toFixed(1)}%"></i>`;
+}
+
 // The custom player's look with everything equipped (over: slot -> item id, to try something on).
 export function myLook(over = {}) {
   const lk = lookFor({ ...Profile.equipped, ...over });
@@ -73,6 +112,7 @@ function preview(item) {
   if (k === 'band') return bandSvg(KITS[0].skin, p.look && p.look.wristband ? p.kit.band : null);
   if (k === 'celebration') return celebSvg(p.style && p.style.celebrate, myLook());
   if (k === 'title') return `<span class="pg-tb">${esc(item.name)}</span>`;
+  if (isGear(item)) return gearSvg(item);
   return '';
 }
 
@@ -111,7 +151,7 @@ const STYLE = `
 .pg-who small,.pg-eyebrow{font:700 11px/1.25 var(--body);letter-spacing:.13em;text-transform:uppercase;color:var(--optic)}
 .pg-xpline{grid-column:2/-1;display:flex;align-items:center;gap:10px}
 .pg-xpline small{font:700 11px/1 var(--body);color:var(--mist);letter-spacing:.05em;white-space:nowrap;font-variant-numeric:tabular-nums}
-.pg-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.pg-nav{display:grid;grid-template-columns:repeat(4,auto);gap:6px}
 .pg-nav .btn{padding:8px 4px;font-size:12.5px;display:flex;justify-content:center;align-items:center;gap:5px;text-align:center;white-space:nowrap}
 .pg-pip{font:700 10px/1 var(--body);padding:3px 4px;background:rgba(242,245,238,.13);color:var(--chalk)}
 .pg-pip.hot{background:var(--optic);color:var(--optic-ink)}
@@ -236,6 +276,7 @@ const STYLE = `
 .pg-toast b{font:800 18px/1.05 var(--display);text-transform:uppercase;letter-spacing:.02em}
 .pg-toast span{font-size:12px;color:var(--mist)}
 @media (max-height:860px) and (min-width:700px){.over-slab>.pg-rw{grid-column:1;grid-row:3}}
+@media (max-width:480px){.pg-rw-xpl{flex-wrap:wrap;row-gap:4px}.pg-rw-lines li{grid-template-columns:minmax(0,1fr) 50px 46px}.pg-rw-lines li>span{white-space:normal}}
 @keyframes pgPop{from{transform:scale(.35);opacity:0}to{transform:none;opacity:1}}
 @keyframes pgIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
 @keyframes pgFlash{0%{box-shadow:0 0 0 0 rgba(214,240,74,.9)}100%{box-shadow:0 0 0 8px rgba(214,240,74,0)}}
@@ -244,10 +285,52 @@ const STYLE = `
 @keyframes pgToast{from{opacity:0;transform:translateX(34px)}}
 @keyframes pgToastOut{to{opacity:0;transform:translateX(34px)}}
 @media (prefers-reduced-motion:reduce){.pg-rw *,.pg-rw,.pg-toast,.pg-lvup,.pg-lvup::before,.pg-lv.pop{animation-duration:.01s!important;transition:none!important}}
+.pg-cg{align-self:center;font:700 10px/1 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--optic);padding:0 2px 0 8px}
+.pg-cg:first-child{padding-left:0}
+.pg-item.gear{grid-template-rows:auto auto auto auto 1fr}
+.pg-item.gear .pg-prev{aspect-ratio:1.9}
+.pg-tier{position:absolute;left:6px;bottom:6px;font:800 9.5px/1 var(--body);letter-spacing:.12em;text-transform:uppercase;padding:3px 5px;background:rgba(8,18,29,.85);color:var(--c);border:1px solid var(--c)}
+.pg-upl{position:absolute;right:6px;bottom:6px;font:900 14px/1 var(--display);padding:2px 5px;background:var(--c);color:#0b1520}
+.pg-sb{list-style:none;margin:0;padding:0;display:grid;gap:3px}
+.pg-sb li{display:grid;grid-template-columns:58px minmax(0,1fr) 34px;gap:6px;align-items:center;font:600 11px/1.1 var(--body);color:var(--mist)}
+.pg-sb li>i{position:relative;height:5px;background:rgba(242,245,238,.1);overflow:hidden}
+.pg-sb li>i::after{content:'';position:absolute;inset:0 auto 0 0;width:var(--w);background:var(--good)}
+.pg-sb li.dn>i::after{background:var(--coral)}
+.pg-sb li>b{text-align:right;font:800 12px/1 var(--display);font-variant-numeric:tabular-nums;color:var(--good)}
+.pg-sb li.dn>b{color:var(--coral)}
+.pg-sb li.flat{grid-template-columns:1fr}
+.pg-cmp{margin:0;display:flex;flex-wrap:wrap;gap:2px 6px;align-items:center;font-size:10.5px;line-height:1.25}
+.pg-cmp small{font:700 9.5px/1 var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--mist)}
+.pg-cmp em{font-style:normal;font-weight:700;color:var(--mist);white-space:nowrap}
+.pg-cmp em.up{color:var(--good)}.pg-cmp em.dn{color:var(--coral)}
+.pg-btns{align-self:end;display:grid;gap:4px}
+.pg-yst{margin:0 0 12px;padding:10px 12px;border:1px solid var(--edge);background:rgba(242,245,238,.035);display:grid;gap:8px}
+.pg-yst>header{display:flex;justify-content:space-between;align-items:baseline;gap:4px 12px;flex-wrap:wrap}
+.pg-yst>header b{font:800 17px/1 var(--display);text-transform:uppercase;letter-spacing:.03em}
+.pg-yst>header small{font-size:11.5px;color:var(--mist)}
+.pg-yst ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 16px}
+.pg-yst li{display:grid;grid-template-columns:108px minmax(0,1fr) 36px;gap:8px;align-items:center;font-size:12px;color:var(--mist)}
+.pg-yst li b{text-align:right;font:800 13px/1 var(--display);font-variant-numeric:tabular-nums;color:var(--chalk)}
+.pg-yst li b.up{color:var(--good)}.pg-yst li b.dn{color:var(--coral)}
+.pg-sbar{position:relative;height:6px;background:rgba(242,245,238,.1)}
+.pg-sbar::before{content:'';position:absolute;top:0;bottom:0;left:var(--l);width:var(--w);background:var(--good)}
+.pg-sbar.dn::before{background:var(--coral)}
+.pg-sbar::after{content:'';position:absolute;top:-2px;bottom:-2px;left:var(--z);width:1px;background:var(--chalk);opacity:.55}
+.pg-sgh{grid-column:1/-1;font:700 10px/1 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--optic);margin:5px 0 1px}
+.pg-sgh:first-child{margin-top:0}
+.pg-ps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px}
+.pg-ps>span{display:grid;gap:2px;min-width:0;font:700 9.5px/1.1 var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--mist)}
+.pg-ps>span b{display:flex;justify-content:space-between;gap:4px;white-space:nowrap;overflow:hidden;font-weight:700}
+.pg-ps>span b em{font-style:normal;color:var(--good)}
+.pg-ps>span.dn b em{color:var(--coral)}
+.pg-ps>span i{position:relative;height:3px;background:rgba(242,245,238,.12)}
+.pg-ps>span i::after{content:'';position:absolute;inset:0 auto 0 0;width:var(--w);background:var(--good)}
+.pg-ps>span.dn i::after{background:var(--coral)}
+.pg-ps>p{grid-column:1/-1;margin:0;font-size:11.5px;line-height:1.3;color:var(--mist)}
 `;
 
 export const ProgressUI = {
-  tab: 'shop', cat: 'outfit', slot: 'outfit', from: null, timers: [], pending: null, matchAt: 0, anim: null,
+  tab: 'shop', cat: 'frame', slot: 'frame', from: null, timers: [], pending: null, matchAt: 0, anim: null,
 
   init() {
     const css = document.createElement('style');
@@ -257,6 +340,13 @@ export const ProgressUI = {
     document.body.insertAdjacentHTML('beforeend', '<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><radialGradient id="pgFzG" cx=".38" cy=".34" r=".75"><stop offset="0" stop-color="#eefc8a"/><stop offset=".6" stop-color="#d6f04a"/><stop offset="1" stop-color="#a9c22a"/></radialGradient></defs></svg><div class="pg-toasts" id="pgToasts" aria-live="polite"></div>');
     this.buildCard(); this.buildHub(); this.buildRewards();
     UI.customLook = () => myLook();   // the pro picker's "Your player" portrait wears your kit
+    // The pro picker also shows each pro's strengths (stats.js): after every UI.renderPros.
+    if (UI.renderPros && !UI.renderPros.pgStats) {
+      const render = UI.renderPros;
+      UI.renderPros = function (...a) { const r = render.apply(this, a); try { ProgressUI.proStats(); } catch (e) { console.warn('[progress] pro stats', e); } return r; };
+      UI.renderPros.pgStats = true;
+    }
+    this.proStats();
     Profile.on('change', () => this.changed());
     Profile.on('reward', (res) => { this.pending = { res, xp0: Profile.xp - res.totalXP, fz0: Profile.fuzz - res.totalFuzz, at: Date.now() }; });
     Bus.on('match:start', (e) => { this.matchAt = Date.now(); this.dress(e.cfg); });
@@ -264,6 +354,20 @@ export const ProgressUI = {
     document.addEventListener('keydown', (e) => this.onKey(e), true);
     Profile.ready.then(() => { this.renderCard(); if (UI.renderPros && $('proPicker')) UI.renderPros(); });
     this.renderCard();
+  },
+
+  // ---- the pro picker's strengths: the pro's top three and their weak spot, as bars ----
+  proStats() {
+    for (const side of ['you', 'opp']) {
+      const box = $('pp-' + side), blurb = box && box.querySelector('.pp-blurb');
+      if (!blurb) continue;
+      let el = box.querySelector('.pg-ps');
+      if (!el) { el = document.createElement('div'); el.className = 'pg-ps'; el.setAttribute('aria-label', 'Strengths'); blurb.after(el); }
+      const id = side === 'you' ? Settings.playAs : Settings.opponent, list = proById(id) ? Stats.strengths(id) : [];
+      el.innerHTML = list.length
+        ? list.map((s) => `<span class="${s.v < 0 ? 'dn' : 'up'}" title="${esc(s.label)} ${pct(s.v)}"><b>${esc(s.label)}<em>${pct(s.v)}</em></b><i style="--w:${Math.min(100, (100 * Math.abs(s.v)) / 0.12).toFixed(0)}%"></i></span>`).join('')
+        : `<p>${id === 'random' ? 'Every pro has their own strengths.' : side === 'you' ? 'An all-rounder: your gear makes your strengths.' : 'An all-rounder. CPU gear matches its level.'}</p>`;
+    }
   },
 
   // ---- main-menu profile card ----
@@ -350,12 +454,12 @@ export const ProgressUI = {
     if (key) { const el = body.querySelector(`[data-key="${CSS_ESC(key)}"]`); if (el && !el.disabled) el.focus({ preventScroll: true }); else body.focus({ preventScroll: true }); }
   },
   card(item, mode) {
-    const P = Profile, cosmetic = SLOTS.includes(item.kind), open = isUnlocked(item.id), on = cosmetic && equippedId(item.kind) === item.id;
+    const P = Profile, gear = isGear(item), cosmetic = gear || SLOTS.includes(item.kind), open = isUnlocked(item.id), on = cosmetic && equippedId(item.kind) === item.id;
     const c = open ? null : canBuy(item.id), dim = !open && !(mode === 'shop' && c && (c.ok || c.reason === 'fuzz'));   // for sale now: full colour
     let meta = '', btn = '';
     const k = (a) => `data-key="${a}:${item.id}" data-id="${item.id}"`;
     if (open) {
-      meta = item.how === 'free' ? 'Free' : P.owns(item.id) ? 'Owned' : item.how === 'earn' ? 'Earned' : `Unlocked at level ${item.level}`;
+      meta = item.how === 'free' ? (gear ? 'Starter kit' : 'Free') : P.owns(item.id) ? 'Owned' : item.how === 'earn' ? 'Earned' : `Unlocked at level ${item.level}`;
       if (cosmetic) btn = on ? `<button class="btn small" aria-disabled="true" ${k('eq')}>Equipped</button>` : `<button class="btn small" data-act="equip" ${k('eq')}>Equip</button>`;
       else if (item.kind === 'pro') btn = Settings.playAs === item.key ? `<button class="btn small" aria-disabled="true" ${k('eq')}>Playing as</button>` : `<button class="btn small" data-act="playas" ${k('eq')}>Play as</button>`;
     } else {
@@ -365,24 +469,64 @@ export const ProgressUI = {
       else if (mode === 'shop' && c.reason === 'level') btn = `<button class="btn small" aria-disabled="true" ${k('buy')}>Reach level ${item.level}</button>`;
       else if (mode === 'locker' && (item.how === 'buy' || item.how === 'level-or-buy')) btn = `<button class="btn small" data-act="toshop" ${k('shop')}>In the Pro Shop</button>`;
     }
-    return `<article class="pg-item${dim ? ' locked' : ''}${on ? ' equipped' : ''}"><div class="pg-prev">${preview(item)}${dim ? LOCK : ''}${on ? '<span class="pg-tag">On</span>' : ''}</div><b class="pg-iname" title="${esc(item.name)}">${esc(item.name)}</b><small class="pg-imeta">${meta}</small>${btn}</article>`;
+    if (!gear) return `<article class="pg-item${dim ? ' locked' : ''}${on ? ' equipped' : ''}"><div class="pg-prev">${preview(item)}${dim ? LOCK : ''}${on ? '<span class="pg-tag">On</span>' : ''}</div><b class="pg-iname" title="${esc(item.name)}">${esc(item.name)}</b><small class="pg-imeta">${meta}</small>${btn}</article>`;
+    // Gear: tier and upgrade level on the picture, its stats, what it would change against what you have on, upgrades.
+    const T = Stats.tierOf(item), up = open ? upgradeOf(item.id) : 0;
+    const tags = `<span class="pg-tier" style="--c:${T.color}">${T.name}</span>${up ? `<span class="pg-upl" style="--c:${T.color}">+${up}</span>` : ''}`;
+    return `<article class="pg-item gear${dim ? ' locked' : ''}${on ? ' equipped' : ''}" title="${esc(item.blurb || '')}"><div class="pg-prev">${preview(item)}${dim ? LOCK : ''}${on ? '<span class="pg-tag">On</span>' : ''}${tags}</div>`
+      + `<b class="pg-iname" title="${esc(item.name)}">${esc(item.name)}</b><small class="pg-imeta">${meta}</small>${this.gearInfo(item, up, on)}<div class="pg-btns">${btn}${this.upgradeBtn(item, open)}</div></article>`;
+  },
+  // An item's stat bars (with its upgrades) and, unless it's the one on, the change against your equipped one.
+  gearInfo(item, up, on) {
+    const st = gearStats(item, up), keys = Object.keys(st).sort((a, b) => st[b] - st[a]);
+    const rows = keys.length ? keys.map((k) => `<li class="${st[k] >= 0 ? 'up' : 'dn'}"><span>${WORDS[k] || k}</span><i style="--w:${Math.min(100, (100 * Math.abs(st[k])) / 0.15).toFixed(0)}%"></i><b>${pct(st[k])}</b></li>`).join('') : '<li class="flat"><span>Neutral: no bonus, no cost</span></li>';
+    let cmp = '';
+    if (!on) {
+      const d = this.compare(item.kind, item.id);
+      cmp = `<p class="pg-cmp" title="Your stats with this instead of your ${esc(SLOT_NAMES[item.kind].toLowerCase())}"><small>vs yours</small>${d.length ? d.map(([w, v]) => `<em class="${v > 0 ? 'up' : 'dn'}">${w} ${pct(v)}</em>`).join('') : '<em>no change</em>'}</p>`;
+    }
+    return `<ul class="pg-sb" aria-label="Stats">${rows}</ul>${cmp}`;
+  },
+  // Your stats (as the pro you play) with this item in its slot, minus your stats now: [[word, delta]] for the ones that move.
+  compare(slot, id) {
+    const a = summary(Stats.preview(myPro())), b = summary(Stats.preview(myPro(), { [slot]: id }));
+    return Object.keys(WORDS).map((k) => [WORDS[k], b[k] - a[k]]).filter(([, v]) => Math.abs(v) >= 0.005);
+  },
+  upgradeBtn(item, open) {
+    if (!open || !item.price) return '';
+    const c = canUpgrade(item.id), k = `data-key="up:${item.id}" data-id="${item.id}"`;
+    if (c.reason === 'max') return `<button class="btn small" aria-disabled="true" ${k}>Fully upgraded</button>`;
+    if (c.ok) return `<button class="btn small" data-act="upgrade" ${k} title="Its strengths get stronger; its costs stay">Upgrade +${c.next} · ${FUZZ()} ${nf(c.cost)}</button>`;
+    return c.cost ? `<button class="btn small" aria-disabled="true" ${k}>+${c.next}: ${nf(c.cost - Profile.fuzz)} more Fuzz</button>` : '';
+  },
+  // The Locker's "Your stats": the pro you play as × your gear, every stat as a bar around 1.0.
+  yourStats() {
+    const pro = proById(Settings.playAs), S = Stats.preview(myPro());
+    const rows = STAT_ROWS.map(([p, label]) => { const v = statAt(S, p), d = v - 1; return `<li><span>${label}</span>${statBar(v)}<b class="${d > 0.004 ? 'up' : d < -0.004 ? 'dn' : ''}">${Math.abs(d) < 0.005 ? '—' : pct(d)}</b></li>`; }).join('');
+    const who = pro ? `As ${esc(pro.short)}, with your gear` : 'Your player, with your gear';
+    return `<section class="pg-yst" aria-label="Your stats"><header><b>Your stats</b><small>${who}${Settings.onlineGear ? '' : ' · online matches stay even'}</small></header><ul>${rows}</ul></section>`;
   },
   shop() {
     const items = CATALOG.filter((i) => i.kind === this.cat && (i.how === 'buy' || i.how === 'level-or-buy'));
     items.sort((a, b) => a.level - b.level || a.price - b.price);
-    const cats = SHOP_CATS.map(([id, n]) => `<button class="pg-chip" type="button" data-act="cat" data-cat="${id}" data-key="cat:${id}" aria-pressed="${id === this.cat}">${n}</button>`).join('');
-    const note = this.cat === 'pro' ? '<p class="pg-note">Pros unlock by level, or buy one early with Fuzz.</p>' : '<p class="pg-note">Cosmetics for your own player. New stock unlocks as you level up.</p>';
+    const chip = ([id, n]) => `<button class="pg-chip" type="button" data-act="cat" data-cat="${id}" data-key="cat:${id}" aria-pressed="${id === this.cat}">${n}</button>`;
+    const cats = `<span class="pg-cg">Gear</span>${SHOP_CATS.slice(0, GEAR_CATS.length).map(chip).join('')}<span class="pg-cg">Style</span>${SHOP_CATS.slice(GEAR_CATS.length).map(chip).join('')}`;
+    const note = this.cat === 'pro' ? '<p class="pg-note">Pros unlock by level, or buy one early with Fuzz.</p>'
+      : GEAR_SLOTS.includes(this.cat) ? '<p class="pg-note">Gear changes how you play. Club, Pro, Elite and Legend gear unlock as you level up; every item trades something off, and you can upgrade what you own up to +5.</p>'
+        : '<p class="pg-note">Cosmetics for your own player. New stock unlocks as you level up.</p>';
     return `<div class="pg-cats" role="group" aria-label="Categories">${cats}</div>${note}<div class="pg-grid">${items.map((i) => this.card(i, 'shop')).join('')}</div>`;
   },
   locker() {
-    const L = myLook(), slots = SLOTS.map((s) => `<button class="pg-slot" type="button" data-act="slot" data-slot="${s}" data-key="slot:${s}" aria-pressed="${s === this.slot}"><small>${SLOT_NAMES[s]}</small><b>${esc((itemById(equippedId(s)) || {}).name || '')}</b></button>`).join('');
+    const slot = (s) => { const i = itemById(equippedId(s)) || {}, up = isGear(i) ? upgradeOf(i.id) : 0; return `<button class="pg-slot" type="button" data-act="slot" data-slot="${s}" data-key="slot:${s}" aria-pressed="${s === this.slot}"><small>${SLOT_NAMES[s]}</small><b>${esc(i.name || '')}${up ? ` +${up}` : ''}</b></button>`; };
+    const L = myLook(), slots = `<small class="pg-sgh">Gear</small>${GEAR_SLOTS.map(slot).join('')}<small class="pg-sgh">Style</small>${SLOTS.map(slot).join('')}`;
     const items = CATALOG.filter((i) => i.kind === this.slot).map((i) => [i, isUnlocked(i.id)]);
     items.sort((a, b) => b[1] - a[1] || a[0].level - b[0].level || a[0].price - b[0].price);
     const band = this.slot === 'band' && (itemById(equippedId('headwear')) || {}).preview?.kit ? '<p class="pg-note">Your headwear sets the colour of your wristbands too.</p>' : '';
     const cel = this.slot === 'celebration' ? '<p class="pg-note">Your player celebrates like this after winning a big point.</p>' : '';
-    const pro = proById(Settings.playAs) ? `<p class="pg-note">You're playing as ${esc(proById(Settings.playAs).short)}: pros wear their own kit, but your racket paint and celebration go with you.</p>` : '';
+    const gear = GEAR_SLOTS.includes(this.slot);
+    const pro = proById(Settings.playAs) ? `<p class="pg-note">You're playing as ${esc(proById(Settings.playAs).short)}: ${gear ? 'your gear goes with you, on top of their strengths' : 'pros wear their own kit, but your racket paint and celebration go with you'}.</p>` : '';
     return `<div class="pg-locker"><div class="pg-man"><div class="pg-big">${proPortrait(L)}${racketSvg(L.racket)}<span class="pg-tb">${esc((itemById(equippedId('title')) || {}).name || '')}</span></div><div class="pg-slots" role="group" aria-label="Slots">${slots}</div></div>`
-      + `<div>${pro}${band}${cel}<div class="pg-grid">${items.map(([i]) => this.card(i, 'locker')).join('')}</div></div></div>`;
+      + `<div>${this.yourStats()}${pro}${band}${cel}<div class="pg-grid">${items.map(([i]) => this.card(i, 'locker')).join('')}</div></div></div>`;
   },
   challenges() {
     if (!Profile.loaded) return '<p class="pg-note">Loading…</p>';
@@ -433,6 +577,23 @@ export const ProgressUI = {
         this.render();
         const eq = $('pgBody').querySelector(`[data-key="eq:${CSS_ESC(item.id)}"]`);
         if (eq) eq.focus();
+      } else { msg('Not enough Fuzz yet.', 'err'); this.render(); }
+    } else if (a === 'upgrade') {
+      // Two presses, like buying.
+      const c = canUpgrade(item.id);
+      if (!c.ok) { this.render(); return; }
+      if (b.dataset.confirm !== '1') {
+        b.dataset.confirm = '1'; b.classList.add('confirm'); b.innerHTML = `Confirm +${c.next} · ${FUZZ()} ${nf(c.cost)}`;
+        clearTimeout(this.confirmT); this.confirmT = setTimeout(() => { if (b.isConnected) this.render(); }, 3500);
+        return;
+      }
+      clearTimeout(this.confirmT);
+      if (upgrade(item.id)) {
+        chime([659, 988, 1319, 1568]); msg(`${item.name} upgraded to +${c.next}.`, 'ok');
+        this.toast('Upgrade', `${item.name} +${c.next}`, 'Its strengths got stronger', FUZZ(), 'good');
+        this.render();
+        const el = $('pgBody').querySelector(`[data-key="up:${CSS_ESC(item.id)}"]`);
+        if (el) el.focus();
       } else { msg('Not enough Fuzz yet.', 'err'); this.render(); }
     } else if (a === 'reroll') {
       if (Progress.reroll(+b.dataset.slot)) { chime([660, 880], 0.05); msg('Challenge swapped. New one below.', 'ok'); this.render(); const n = $('pgBody').querySelectorAll('.pg-ch')[+b.dataset.slot]; if (n) { n.style.animation = 'pgPop .5s var(--ease-back)'; $('pgTab-challenges').focus({ preventScroll: true }); } }
@@ -592,10 +753,13 @@ export const ProgressUI = {
     btn.disabled = true; btn.textContent = 'Loading the ad…';
     let ok = false;
     try { const P = await platform(); ok = !!(await P.ads.rewarded('doubleFuzz')); } catch (e) { ok = false; }
-    if (!ok) { btn.textContent = 'No ad right now. Maybe next time.'; setTimeout(() => { if (this.anim === A) btn.hidden = true; }, 2500); return; }
+    // The button goes away under the player's focus: hand it to the screen's next button (keyboard / controller).
+    const refocus = () => { const a = document.activeElement; if (UI.screen !== 'over' || (a && a !== document.body && a !== btn)) return; const t = ['btnTourNext', 'btnRematch', 'btnOverMenu'].map($).find((b) => b && !b.hidden && !b.disabled && b.getClientRects().length); if (t) t.focus({ preventScroll: true }); };
+    if (!ok) { btn.textContent = 'No ad right now. Maybe next time.'; setTimeout(() => { if (this.anim === A) { btn.hidden = true; refocus(); } }, 2500); return; }
     A.doubled = true;
     Profile.addFuzz(A.res.fuzz, 'ad: double match Fuzz');
     btn.hidden = true;
+    refocus();
     if (this.anim === A && UI.screen === 'over') {
       A.steps.push({ tag: 'Bonus', cls: 'ad', label: 'Fuzz doubled', xp: 0, fuzz: A.res.fuzz });
       this.step();

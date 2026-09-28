@@ -10,6 +10,7 @@ import { Replay, lineMargin } from './replay.js';
 import { judgeCameraSwing, strokeDir } from './camswing.js';
 import { Bus } from './events.js';
 import { proById, randomPro } from './pros.js';
+import { Stats } from './stats.js';   // G1: gear + pro stats (footwork here; shots in groundShot / serveShot)
 import * as Shot from './shot.js';
 
 // =====================================================================
@@ -95,6 +96,15 @@ const Game = {
     // Pros (cfg.pros: roster ids, anything else is the standard player); a standard CPU opponent turns up in a
     // different outfit each match.
     dressPlayers(this.players, cfg.pros || [], cfg.mode);
+    // ---- G1 gear stats: footwork. move.speed scales top speed and acceleration, move.react the first step; reach is
+    // used at contact. The CPU's legs are set in cpuTune (it retunes when the tour changes its level after this).
+    Stats.begin(cfg);
+    for (const pl of this.players) {
+      if (pl.ctl === 'cpu') continue;
+      const S = pl.S = Stats.forPlayer(pl);
+      pl.maxSpeed *= S.move.speed; pl.acc *= S.move.speed * S.move.react; pl.react /= S.move.react;
+    }
+    // ---- end G1
     Cam.mode = this.localIdx >= 0 ? 'play' : 'orbit';
     this.startPoint();
     if (this.localIdx >= 0) { Cam.snap(this.me()); Phone.send({ type: 'resync' }); }
@@ -246,8 +256,8 @@ const Game = {
   // Legs from the level, scaled by persona.speed (startMatch resets maxSpeed, which triggers a retune).
   cpuTune(pl) {
     if (pl.maxSpeed === pl.tunedSpeed && pl.tunedFor === pl.persona && pl.tunedLevel === pl.level) return;
-    const L = pl.level, k = this.cpuStyle(pl).speed - 0.5;
-    pl.maxSpeed = L.speed * (1 + 0.16 * k); pl.acc = L.acc * (1 + 0.2 * k); pl.react = L.react * (1 - 0.3 * k);
+    const L = pl.level, k = this.cpuStyle(pl).speed - 0.5, M = (pl.S = Stats.forPlayer(pl)).move;   // G1: M = gear footwork
+    pl.maxSpeed = L.speed * (1 + 0.16 * k) * M.speed; pl.acc = L.acc * (1 + 0.2 * k) * M.speed * M.react; pl.react = L.react * (1 - 0.3 * k) / M.react;
     pl.tunedSpeed = pl.maxSpeed; pl.tunedFor = pl.persona; pl.tunedLevel = L;
   },
   // Reaction to a new ball: a little variable, and slower when caught moving the wrong way.
@@ -568,7 +578,7 @@ const Game = {
     if (this.state !== 'rally' || b.lastHitter === pl.idx || (b.serve && b.bounces === 0)) return;
     const plan = pl.plan;
     if (!plan) return;
-    const reach = Math.hypot(pl.x - plan.bx, pl.z - plan.bz);
+    const reach = Math.hypot(pl.x - plan.bx, pl.z - plan.bz) / (pl.S ? pl.S.reach : 1);   // G1: gear reach stretches the zone
     if (reach > 1.05 || b.p.y > 2.4 || b.p.y < 0.08) { if (pl.ctl === 'human') UI.timing('Missed'); return; }
     const shot = pl.ctl === 'cpu' ? this.cpuShot(pl, reach) : this.humanShot(pl, pc.swing, reach);
     this.applyHit(pl, shot, {});

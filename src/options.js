@@ -25,6 +25,7 @@ const TABS = [
     tog('assist', 'Bounce spot', 'Marks where the ball will land, to help your timing.'),
     tog('timingMeter', 'Timing meter', 'The early / late bar after each shot.'),
     tog('replays', 'Instant replays', 'Replays of aces, winners and close line calls.'),
+    tog('onlineGear', 'Gear stats online', 'Your gear’s stats count in online matches too. Off keeps online matches even.'),
   ]],
   ['controls', 'Controls', [
     seg('control', 'Swing with', [['mouse', 'Mouse / keys'], ['phone', 'Phone'], ['hand', 'Hand cam'], ['paddle', 'Paddle cam']], 'A controller works with any of these.'),
@@ -56,7 +57,7 @@ const TABS = [
 ];
 const DEFAULTS = {
   level: 'club', format: 'short', surface: 'hard', handed: 'R', assist: true, timingMeter: true, replays: true, control: 'mouse', sens: 1, latency: 0.09,
-  volume: 0.8, sfxVol: 1, crowdVol: 1, voiceVol: 1, voice: true, gfx: 'auto', cam: 'player', showFps: false, reduceMotion: false, bigHud: false, cbSafe: false,
+  volume: 0.8, sfxVol: 1, crowdVol: 1, voiceVol: 1, voice: true, gfx: 'auto', cam: 'player', showFps: false, reduceMotion: false, bigHud: false, cbSafe: false, onlineGear: false,
 };
 // Screens' own way back, for Esc and controller B.
 const BACK = { lobby: 'btnLobbyBack', phone: 'btnPhoneDone', setup: 'btnSetupDone', over: 'btnOverMenu' };
@@ -151,7 +152,7 @@ const Options = {
     UI.go('options');
     this.show(tab || this.tab);
     const t = $(`tab-${this.tab}`);
-    if (t) t.focus({ preventScroll: true });
+    if (t) Nav.focus(t);   // scrolled into view: on a phone the tab strip scrolls sideways
   },
   close() {
     // Swing input changed mid-match: a camera or phone needs its setup now (it returns to the pause menu), and the mouse
@@ -161,8 +162,8 @@ const Options = {
       if (Settings.control !== 'mouse') { UI.openControls('pause'); return; }
       UI.ensureControls();
     }
-    UI.go(this.from);
-    const b = $(this.from === 'pause' ? 'btnOpts2' : 'btnOpts');
+    UI.go(this.from);   // the menu puts the focus back on the button that opened Settings (or About)
+    const b = this.from === 'pause' ? $('btnOpts2') : !UI.menuFrom && $('btnOpts');
     if (b) b.focus({ preventScroll: true });
   },
   show(tab, focus) {
@@ -173,7 +174,7 @@ const Options = {
       b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1;
       $(`pane-${id}`).hidden = !on;
     }
-    if (focus) $(`tab-${tab}`).focus({ preventScroll: true });
+    if (focus) Nav.focus($(`tab-${tab}`));
     this.refresh();
   },
   stepTab(k) {

@@ -3,9 +3,9 @@
 // saves), in memory when the browser blocks both. Versioned schema with migrations; a backup copy of the last good
 // save survives a corrupt one. Optional cloud save + leaderboards live in src/cloud.js (off unless CONFIG.cloud.enabled);
 // Profile.useCloud is a generic adapter hook. Settings (core.js) stay separate: Profile is progress only.
-import { MAX_LEVEL, xpForLevel, xpToReach, levelFor, CATALOG, SLOTS, newStats, useProfile, itemById } from './economy.js';
+import { MAX_LEVEL, xpForLevel, xpToReach, levelFor, CATALOG, SLOTS, GEAR_SLOTS, STARTER_GEAR, MAX_UPGRADE, newStats, useProfile, itemById } from './economy.js';
 
-export const SCHEMA = 2;
+export const SCHEMA = 3;
 const KEY = 'palmcourt.profile', BAK = 'palmcourt.profile.bak', BAD = 'palmcourt.profile.corrupt';
 const HISTORY = 50, LEDGER = 60, SAVE_MS = 400;
 
@@ -15,7 +15,8 @@ export function freshData() {
   return {
     v: SCHEMA, id: uid(), created: now, updated: now, xp: 0, fuzz: 0,
     owned: {},                                              // catalog id -> time granted (free items are never listed)
-    equipped: Object.fromEntries(SLOTS.map((s) => [s, null])),
+    equipped: { ...Object.fromEntries(SLOTS.map((s) => [s, null])), ...STARTER_GEAR },   // cosmetics (null = the free one) + gear
+    upgrades: {},                                           // gear id -> upgrade level 1..5
     stats: newStats(), history: [], ledger: [],
     daily: { date: '', ids: [], progress: {}, done: {}, rerolled: false, lastWin: '' },
     achievements: {},                                        // id -> time earned
@@ -27,7 +28,15 @@ export function freshData() {
 export const MIGRATIONS = {
   0: (d) => ({ ...d, v: 1, owned: Array.isArray(d.owned) ? Object.fromEntries(d.owned.map((id) => [id, 0])) : d.owned || {} }),
   1: (d) => ({ ...d, v: 2, seen: d.seen || { level: levelFor(+d.xp || 0) }, ledger: d.ledger || [] }),   // v2: seen + ledger
+  2: (d) => ({ ...d, v: 3, equipped: { ...STARTER_GEAR, ...(d.equipped && typeof d.equipped === 'object' ? d.equipped : {}) }, upgrades: d.upgrades || {} }),   // v3: gear (starter kit) + upgrades
 };
+// Gear slots always hold a real item of their kind (else the starter one); upgrade levels are whole numbers 1..5.
+function cleanGear(eq, ups) {
+  for (const s of GEAR_SLOTS) { const i = itemById(eq[s]); eq[s] = i && i.kind === s ? i.id : STARTER_GEAR[s]; }
+  const out = {};
+  for (const [id, k] of Object.entries(ups)) { const n = Math.min(MAX_UPGRADE, Math.floor(+k || 0)); if (n > 0 && itemById(id)) out[id] = n; }
+  return out;
+}
 // A plain object -> a valid current-schema profile, or null if it isn't a profile at all. Unknown fields are kept.
 export function normalize(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -36,13 +45,16 @@ export function normalize(raw) {
   while (v < SCHEMA) { d = MIGRATIONS[v](d); v = d.v; }
   if (!Number.isFinite(+d.xp) || !Number.isFinite(+d.fuzz)) return null;
   const f = freshData(), obj = (x, def) => (x && typeof x === 'object' && !Array.isArray(x) ? x : def);
-  return {
+  const out = {
     ...f, ...d, v: Math.max(SCHEMA, d.v), xp: Math.max(0, Math.floor(+d.xp)), fuzz: Math.max(0, Math.floor(+d.fuzz)),
     id: typeof d.id === 'string' && d.id ? d.id : f.id,
     owned: obj(d.owned, {}), equipped: { ...f.equipped, ...obj(d.equipped, {}) }, stats: { ...f.stats, ...obj(d.stats, {}) },
     history: Array.isArray(d.history) ? d.history.slice(-HISTORY) : [], ledger: Array.isArray(d.ledger) ? d.ledger.slice(-LEDGER) : [],
     daily: { ...f.daily, ...obj(d.daily, {}) }, achievements: obj(d.achievements, {}), seen: { ...f.seen, ...obj(d.seen, {}) },
+    upgrades: obj(d.upgrades, {}),
   };
+  out.upgrades = cleanGear(out.equipped, out.upgrades);
+  return out;
 }
 function parse(s) { if (typeof s !== 'string' || !s) return null; try { return normalize(JSON.parse(s)); } catch (e) { return null; } }
 
@@ -92,6 +104,7 @@ export const Profile = {
   get maxLevel() { return MAX_LEVEL; },
   get fuzz() { return this.data.fuzz; },
   get equipped() { return this.data.equipped; },
+  get upgrades() { return this.data.upgrades || (this.data.upgrades = {}); },
   get stats() { return this.data.stats; },
   get history() { return this.data.history; },
 
@@ -140,9 +153,11 @@ export const Profile = {
     this.changed();
     return true;
   },
-  // equip(slot, id) with an id you own or that is free; null puts the default back.
+  // equip(slot, id) with an id you own or that is free; null puts the default back (the starter item for gear).
   equip(slot, id) {
-    if (!SLOTS.includes(slot)) return false;
+    const gear = GEAR_SLOTS.includes(slot);
+    if (!SLOTS.includes(slot) && !gear) return false;
+    if (id == null && gear) id = STARTER_GEAR[slot];
     if (id != null) {
       const i = itemById(id);
       if (!i || i.kind !== slot) return false;
