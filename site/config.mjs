@@ -17,7 +17,7 @@ export const ADSENSE_CLIENT = '';
 export const AD_SLOT = '';
 
 // Where players and Google can reach you (privacy policy, contact and terms pages).
-export const CONTACT_EMAIL = 'hello@palmcourt.example';
+export const CONTACT_EMAIL = 'palmcourt.game@gmail.com';
 
 // The Steam store page, once it exists ('https://store.steampowered.com/app/<id>/Palm_Court/'). Empty = the
 // "Wishlist on Steam" buttons say "coming soon" instead.
