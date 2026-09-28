@@ -442,6 +442,9 @@ html.calm *, html.calm *::before, html.calm *::after { animation-duration: .01ms
 .timing-fb { position: absolute; left: 50%; bottom: calc(clamp(86px, 14vh, 150px) + env(safe-area-inset-bottom, 0px)); display: grid; justify-items: center; gap: 7px; padding: 8px 14px 9px;
   background: rgba(8,18,29,.6); font-size: clamp(12px, calc(.2vw + 10px), 14px); white-space: nowrap; opacity: 0; transform: translate(-50%, 6px); transition: opacity .3s, transform .3s var(--ease-out); }
 .timing-fb.show { opacity: 1; transform: translate(-50%, 0); }
+/* The shot read can be long ("Very early · ← Down the line · drop shot · …"): on a phone it wraps inside the screen. */
+.timing-fb { width: max-content; max-width: calc(100% - 24px); }
+.tm-text { white-space: normal; text-align: center; }
 .tm-row { display: flex; align-items: center; gap: 8px; font: 700 .72em/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--mist); }
 .timing-fb.nometer .tm-row { display: none; }
 .tm-track { position: relative; width: clamp(110px, 9vw, 150px); height: 4px;
