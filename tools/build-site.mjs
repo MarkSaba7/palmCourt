@@ -33,11 +33,12 @@ const email = setting('CONTACT_EMAIL') || PH.email;
 const steam = setting('STEAM_URL');
 if (steam && !/^https:\/\/store\.steampowered\.com\/app\/\d+/.test(steam)) fail(`STEAM_URL "${steam}" should be a store.steampowered.com/app/… address`);
 
-// What the browser needs: the pages, the game (play/ + src/), the phone racket page and the site assets.
+// What the browser needs: the pages, the game (play/ + src/), the phone racket app (controller.html, its manifest and
+// its service worker, which has to sit at the root to look after controller.html) and the site assets.
 // Never serve.py, tests, docs, tools, notes or the legacy single-file build.
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
-const rootFiles = fs.readdirSync(ROOT).filter((f) => /\.(html|xml|txt|webmanifest|ico)$/.test(f) && !/^(README|LICENSE)/i.test(f));
+const rootFiles = fs.readdirSync(ROOT).filter((f) => (/\.(html|xml|txt|webmanifest|ico)$/.test(f) || f === 'racket-sw.js') && !/^(README|LICENSE)/i.test(f));
 for (const f of rootFiles) fs.copyFileSync(path.join(ROOT, f), path.join(OUT, f));
 for (const d of ['play', 'src', 'site']) fs.cpSync(path.join(ROOT, d), path.join(OUT, d), { recursive: true, filter: (s) => !/(^|[\\/])\.|config\.mjs$/.test(path.relative(ROOT, s)) });
 fs.writeFileSync(path.join(OUT, '.nojekyll'), '');
