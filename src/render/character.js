@@ -1046,10 +1046,12 @@ const DETAIL_ALBEDO = `
   float camDist = length(vViewPosition);
   float near = clamp(1.5 - camDist / 9.0, 0.0, 1.0);
   if (isReg(7.0) && vPar.w > 0.5) {                              // eye: sclera, iris, pupil (front is -z)
-    float r = length(vPar.xy);
-    vec3 eye = vPar.z < 0.0 ? (r < 0.24 ? vec3(0.012) : r < 0.6 ? vec3(0.1, 0.06, 0.035) * (0.8 + 0.4 * r) : vec3(0.56, 0.53, 0.49)) : vec3(0.4, 0.35, 0.32);
-    eye *= 1.0 - 0.75 * smoothstep(0.62, 0.92, vPar.y);           // upper lid and lashes
-    eye *= 1.0 - 0.35 * smoothstep(0.55, 0.9, -vPar.y);           // lower lid shadow
+    vec2 q = vec2(vPar.x, vPar.y * 0.674); float r = length(q);  // q: round in metres (the eyeball is an ellipsoid)
+    vec3 iris = vec3(0.1, 0.06, 0.035) * (0.7 + 0.5 * r + 0.3 * cNoise(vec3(atan(q.y, q.x) * 9.0, r * 12.0, 0.0)));
+    vec3 white = mix(vec3(0.6, 0.57, 0.53), vec3(0.62, 0.45, 0.42), smoothstep(0.85, 1.25, abs(vPar.x)));   // pinker in the corners
+    vec3 eye = vPar.z < 0.0 ? mix(r < 0.22 ? vec3(0.012) : iris * (1.0 - 0.5 * smoothstep(0.48, 0.6, r)), white, smoothstep(0.58, 0.63, r)) : vec3(0.4, 0.35, 0.32);
+    eye *= 1.0 - 0.6 * smoothstep(0.2, 0.8, vPar.y);              // the upper lid's shadow
+    eye *= 1.0 - 0.3 * smoothstep(0.55, 0.9, -vPar.y);            // lower lid
     diffuseColor.rgb = eye;
   } else if (isReg(6.0)) {                                       // hair: strand tone, roots, soft hairline
     float th = atan(vPar.z, vPar.x);
@@ -1058,6 +1060,19 @@ const DETAIL_ALBEDO = `
     if (vPar.w > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb * 0.75 + vec3(0.03, 0.02, 0.015), diffuseColor.rgb, smoothstep(0.0, 0.6, vEdge));
   } else if (isReg(0.0)) {                                       // skin: gentle blotching, lips and brow shading on the face
     diffuseColor.rgb *= 0.95 + 0.1 * cNoise(vRest * 38.0);
+    if (abs(vPar.w - 1.5) < 0.1) {                               // face: warmth where blood shows, the hollows' shade
+      float ax = abs(vPar.x), fr = smoothstep(0.1, 0.5, -vPar.z);
+      float warm = exp(-pow((ax - 0.47) / 0.17, 2.0) - pow((vPar.y + 0.18) / 0.17, 2.0)) + 0.9 * exp(-pow(vPar.x / 0.1, 2.0) - pow((vPar.y + 0.27) / 0.07, 2.0));
+      diffuseColor.rgb *= mix(vec3(1.0), vec3(1.05, 0.9, 0.87), clamp(warm * fr, 0.0, 1.0));
+      float hollow = 0.16 * exp(-pow((ax - 0.33) / 0.15, 2.0) - pow((vPar.y - 0.1) / 0.1, 2.0))       // eye sockets
+        + 0.55 * exp(-pow((ax - 0.08) / 0.045, 2.0) - pow((vPar.y + 0.35) / 0.025, 2.0))              // nostrils
+        + 0.12 * exp(-pow((ax - 0.21) / 0.035, 2.0) - pow((vPar.y + 0.31) / 0.06, 2.0))               // round the nose's wings
+        + 0.1 * exp(-pow(vPar.x / 0.25, 2.0) - pow((vPar.y + 0.7) / 0.05, 2.0));                     // under the lower lip
+      diffuseColor.rgb *= 1.0 - hollow * fr;
+    }
+    if (abs(vPar.w - 7.0) < 0.1) diffuseColor.rgb *= mix(vec3(1.04, 0.9, 0.88), vec3(0.72, 0.6, 0.58), (1.0 - vEdge) * step(0.0, vPar.x));   // ears: pink, the bowl shaded
+    if (abs(vPar.w - 8.0) < 0.1) diffuseColor.rgb *= 1.0 - 0.8 * smoothstep(0.65, 1.0, vEdge);   // eyelids: the lash line
+    if (vPar.w < 0.5 && vPar.z > 1.55) diffuseColor.rgb *= 1.0 - 0.22 * smoothstep(1.57, 1.63, vPar.z) * smoothstep(-0.2, 0.5, -vPar.y);   // neck: shade under the jaw
     if (abs(vPar.w - 1.5) < 0.1 && vPar.z < -0.55 && abs(vPar.x) < 0.45) {   // head skin (kind 1.5)
       float lips = exp(-pow((vPar.y + 0.55) / 0.07, 2.0)) * smoothstep(0.34, 0.12, abs(vPar.x));
       diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.52, 0.5), lips * 0.8);
@@ -1124,7 +1139,7 @@ const DETAIL_ALBEDO = `
     diffuseColor.rgb *= mix(vec3(1.0), vec3(0.3, 0.29, 0.3), clamp(bd * (1.1 + 1.2 * sp), 0.0, 1.0));
   }
   if (isReg(7.0) && vPar.w > 0.5 && vPar.z < 0.0 && vColor.r + vColor.g + vColor.b > 0.03) {
-    float ir = length(vPar.xy);
+    float ir = length(vec2(vPar.x, vPar.y * 0.674));
     diffuseColor.rgb *= mix(vec3(1.0), vColor.rgb / vec3(0.1, 0.06, 0.035), smoothstep(0.22, 0.26, ir) * (1.0 - smoothstep(0.55, 0.6, ir)));
   }
   // --- end facial hair (A07) ---`;
