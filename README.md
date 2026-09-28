@@ -2,12 +2,12 @@
 
 Tennis in the browser. Swing your phone like a racket, or your hand (or a brightly colored paddle) at the webcam, and your player hits the ball. Your player runs to the ball on their own; you only swing. Play a CPU, or send a friend a link and play them online.
 
-It's a static web page (`index.html` plus the `src/` modules): no build step, no game server, no accounts.
+It's a static website: the landing and content pages at the root (`index.html`, `how-to-play.html`, `faq.html`, …), the game in `play/index.html` plus the `src/` modules, and the phone racket page `controller.html`. No build step, no game server, no accounts.
 
 ## Play
 
-- **Easiest:** double-click `play.cmd`. It starts a tiny local server with Python and opens the game at <http://localhost:8765>.
-- **Or** play it online once it's on GitHub Pages (see below). Opening `index.html` straight from a folder doesn't work: browsers block the game's modules on `file://` pages.
+- **Easiest:** double-click `play.cmd`. It starts a tiny local server with Python and opens the game at <http://localhost:8765/play/>.
+- **Or** play it online once it's on GitHub Pages (see below). Opening `play/index.html` straight from a folder doesn't work: browsers block the game's modules on `file://` pages.
 
 Pick your controls in the menu (**Phone**, **Hand cam**, **Paddle cam** or **Mouse**; Mouse is the default), who you play as and which CPU pro you face, then **Practice vs CPU**.
 
@@ -61,10 +61,12 @@ The two browsers connect directly (WebRTC via [PeerJS](https://peerjs.com)). Pee
 
 - **Quick:** send your friend the whole Palm Court folder. You both start it with `play.cmd`, then they type your code under **Join**.
 - **Proper:** put it on GitHub Pages (free). The repository already has a workflow (`.github/workflows/pages.yml`) that publishes the game on every push to `main`:
-  1. Push this folder to a public GitHub repository (all of it: the game is `index.html`, `controller.html` and the `src/` folder, not `index.html` alone).
+  1. Push this folder to a public GitHub repository (all of it: the game needs `play/`, `src/` and `controller.html`, and the website adds the root pages and `site/`).
   2. Settings → Pages → Build and deployment → Source: **GitHub Actions**.
   3. Push to `main` (or open the Actions tab → Deploy to GitHub Pages → Run workflow).
-  4. After a minute it's live at `https://<your-username>.github.io/<repository>/`. Links you create from there work for anyone, and the phone racket works there too (open the phone link the game shows).
+  4. After a minute it's live at `https://<your-username>.github.io/<repository>/` (the landing page; the game is at `…/play/`). Links you create from there work for anyone, and the phone racket works there too (open the phone link the game shows). Old `…/?join=CODE` links forward to `…/play/?join=CODE`.
+
+**Own domain, AdSense, search engines:** see [docs/PUBLISHING.md](docs/PUBLISHING.md). The website's settings (domain, contact email, Steam link) are in `site/config.mjs`; `tools/build-site.mjs` fills them in when the workflow publishes.
 
 ## Publishing
 
@@ -84,14 +86,14 @@ To test without editing the file, add URL parameters: `?portal=poki`, `?edition=
 
 **Portal requirements.** These change, so check each portal's current developer docs before you submit.
 
-- **Own domain (Google H5 Games Ads / AdSense):** your AdSense account must be approved for the H5 Games Ads (Ad Placement API) beta on your domain. Set `adsense.client: 'ca-pub-…'`. Publish `ads.txt` at the root of the domain: fill in the template in this repository and uncomment its line. In the EU and UK, Google expects a Google-certified consent platform. The simplest option is AdSense → Privacy & messaging → a GDPR message. Once that's live, set `consentPrompt: 'never'`. Until then, the game's own small prompt asks EU/UK players (detected from their time zone) whether ads may be personalised, and it requests non-personalised ads until the player says yes.
+- **Own domain (Google H5 Games Ads / AdSense):** your AdSense account must be approved for the H5 Games Ads (Ad Placement API) beta on your domain. Set `adsense.client: 'ca-pub-…'`. Publish `ads.txt` at the root of the domain (it already lists the publisher id; the site build adds the line if the id changes). In the EU and UK, Google expects a Google-certified consent platform. The simplest option is AdSense → Privacy & messaging → a GDPR message. Once that's live, set `consentPrompt: 'never'`. Until then, the game's own small prompt asks EU/UK players (detected from their time zone) whether ads may be personalised, and it requests non-personalised ads until the player says yes.
 - **CrazyGames:** set `portal: 'crazygames'` and upload the folder as an HTML5 game. The SDK (v3) handles consent and ad pacing itself. Their QA checks the gameplay start/stop calls, which the game already makes.
 - **Poki:** set `portal: 'poki'`. Poki reviews games before publishing. Their SDK handles consent and decides when a break actually shows, so `interstitialEveryMatches: 1` is fine there.
 - **GameDistribution:** set `portal: 'gd'` and `gd.gameId` to the id from your GameDistribution dashboard. Their SDK handles consent.
 - **External links:** the wishlist button, the Privacy page and the Credits page open in a new tab. Some portals restrict links to other stores, so read their link policy and set `showWishlist`/`steamUrl` to suit.
 - **Steam:** set `edition: 'steam'`. It forces `portal: 'none'`, so there are no ads and no wishlist button.
 
-**Legal pages.** `privacy.html` covers the camera (frames never leave the device), local save data, online play, what the ad partners may collect, and a contact placeholder (fill in `[contact email]` before you publish). `credits.html` lists the open-source licences (three.js MIT, MediaPipe Apache-2.0, PeerJS MIT, the fonts under OFL). Both are linked from the main menu, and the Pages workflow publishes them with `ads.txt`.
+**Legal pages.** `privacy.html` covers the camera (frames never leave the device), local save data, optional cloud saves, online play, Google's ads and cookies, and the contact address (`CONTACT_EMAIL` in `site/config.mjs`). `credits.html` lists the open-source licences (three.js MIT, MediaPipe Apache-2.0, PeerJS MIT, the fonts under OFL). Both are linked from the main menu, and the Pages workflow publishes them with the rest of the website (`about.html`, `how-to-play.html`, `faq.html`, `terms.html`, `contact.html`, `sitemap.xml`, `robots.txt`, `ads.txt`).
 
 ## What makes it realistic
 
@@ -104,7 +106,7 @@ To test without editing the file, add URL parameters: `?portal=poki`, `?edition=
 
 ## How it's built
 
-`index.html` holds the page and its screens; the code is plain ES modules in `src/`:
+`play/index.html` holds the game page and its screens; the code is plain ES modules in `src/`:
 
 | File | What's in it |
 | --- | --- |

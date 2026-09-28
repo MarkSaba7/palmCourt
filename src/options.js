@@ -142,7 +142,7 @@ const Options = {
     if (r.t === 'pad') return '<div class="opt-row"><span class="lbl">Controller</span><p class="pad-status" id="padStatus" role="status"></p></div>';
     if (r.t === 'keys') return '<div class="keymap" id="keyMap"></div>';
     return `<div class="about"><p class="about-title">Palm Court <b>v${VERSION}</b></p><p class="fine">Motion tennis in your browser: swing a phone, your hand or a paddle at a webcam, a mouse or a controller. All players and events are fictional.</p>
-      <p class="about-links"><a class="btn small" href="credits.html" target="_blank" rel="noopener">Credits</a><a class="btn small ghost" href="privacy.html" target="_blank" rel="noopener">Privacy</a><button type="button" class="btn small ghost" id="btnResetAll">Reset all settings</button></p></div>`;
+      <p class="about-links"><a class="btn small" href="${new URL('../credits.html', import.meta.url).href}" target="_blank" rel="noopener">Credits</a><a class="btn small ghost" href="${new URL('../privacy.html', import.meta.url).href}" target="_blank" rel="noopener">Privacy</a><button type="button" class="btn small ghost" id="btnResetAll">Reset all settings</button></p></div>`;
   },
   open(from, tab) {
     this.from = from === 'pause' ? 'pause' : 'menu';

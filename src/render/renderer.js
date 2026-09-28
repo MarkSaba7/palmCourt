@@ -195,7 +195,7 @@ export const Perf = {
     const k = this.software ? 'low' : this.integrated ? 'medium' : 'high', keys = Object.keys(PRESETS);
     return keys[Math.min(keys.indexOf(k), this.cap)];   // cap: lowered by frame() when even the lowest resolution was too slow
   },
-  cap: 9, bad: 0, upAt: -1e9, hold: 5000, slowSince: 0,
+  cap: 9, bad: 9, badAt: -1e9, upAt: -1e9, hold: 30000, slowSince: 0,
   cfg() { return PRESETS[this.preset]; },
   mode() { return Settings.gfx === 'auto' || !PRESETS[Settings.gfx] ? 'auto' : Settings.gfx; },
   apply() {
@@ -230,8 +230,8 @@ export const Perf = {
   },
   // Auto quality, once per drawn frame (ms since the last one). Too slow: lower the resolution a step at a time,
   // and if even the lowest is too slow for a few seconds, drop to the next preset down (only when calm: menus,
-  // between points; it stays down for the session). Fast for a while: raise the resolution again. A step up that
-  // turns out too slow doubles the wait before the next try, so it settles instead of see-sawing.
+  // between points; it stays down for the session). Fast for a while: raise the resolution again, but not back to
+  // one that was too slow for a while (30 s, doubling each time a retry fails), so it settles instead of see-sawing.
   frame(ms, calm = true) {
     this.avg = this.avg * 0.92 + Math.min(ms, 50) * 0.08;   // one long frame (a shader compiling) is a hitch, not a slow GPU
     this.fps = 1000 / this.avg;
@@ -243,7 +243,8 @@ export const Perf = {
       if (this.scale > this.min + 0.01) {
         this.slowSince = 0;
         if (now - this.lastAdjust > 1200) {
-          if (now - this.upAt < 10000) this.hold = Math.min(120000, this.hold * 2);
+          if (now - this.upAt < 10000) this.hold = Math.min(300000, this.hold * 2);   // a step up that didn't hold
+          this.bad = this.scale; this.badAt = now;
           this.setScale(Math.max(this.min, this.scale * 0.85)); this.lastAdjust = now;
         }
       } else if (this.avg > 24 && this.preset !== 'low') {
@@ -257,9 +258,10 @@ export const Perf = {
     } else if (this.avg < 17.8) {
       this.slowSince = 0;
       if (!this.goodSince) this.goodSince = now;
-      if (this.upAt > this.lastAdjust - 1 && now - this.upAt > 60000) this.hold = 5000;   // the last step up held: back to quick steps
-      if (now - this.goodSince > this.hold && now - this.lastAdjust > 5000 && this.scale < this.max - 0.01) {
-        this.setScale(Math.min(this.max, this.scale * 1.1)); this.lastAdjust = this.upAt = now; this.goodSince = now;
+      // Up in steps, but stay just under a resolution that was too slow until its hold is over (longer each time).
+      const next = Math.min(this.max, this.scale * 1.1, now - this.badAt < this.hold ? this.bad * 0.95 : Infinity);
+      if (now - this.goodSince > 5000 && now - this.lastAdjust > 5000 && next > this.scale + 0.01) {
+        this.setScale(next); this.lastAdjust = this.upAt = now; this.goodSince = now;
       }
     } else this.goodSince = this.slowSince = 0;
   },

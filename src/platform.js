@@ -18,6 +18,7 @@ import { Sound } from './match.js';
 import { Bus } from './events.js';
 
 const T = { load: 8000, init: 6000, start: 6000, interstitialMax: 45000, rewardedMax: 90000 };   // ms; tests shrink these
+const LEGAL = (f) => new URL('../' + f, import.meta.url).href;   // privacy/credits pages sit at the site root, next to src/ (the game page is in play/)
 const settle = (p, ms, fallback) => new Promise((res) => {
   const t = setTimeout(() => res(fallback), ms);
   Promise.resolve(p).then((v) => { clearTimeout(t); res(v); }, () => { clearTimeout(t); res(fallback); });
@@ -346,7 +347,7 @@ const Platform = {
       const nav = document.createElement('nav');
       nav.className = 'pf-links'; nav.id = 'pfLinks'; nav.setAttribute('aria-label', 'About');
       nav.append(wish('btnWishlist'));
-      nav.insertAdjacentHTML('beforeend', '<a href="privacy.html" target="_blank" rel="noopener">Privacy</a><a href="credits.html" target="_blank" rel="noopener">Credits</a><button type="button" class="pf-link" id="btnAdChoices">Ad choices</button>');
+      nav.insertAdjacentHTML('beforeend', `<a href="${LEGAL('privacy.html')}" target="_blank" rel="noopener">Privacy</a><a href="${LEGAL('credits.html')}" target="_blank" rel="noopener">Credits</a><button type="button" class="pf-link" id="btnAdChoices">Ad choices</button>`);
       nav.querySelector('#btnAdChoices').onclick = () => Consent.ask();
       menuSlab.append(nav);
     }
@@ -361,7 +362,7 @@ const Platform = {
     const card = document.createElement('section');
     card.className = 'pf-consent'; card.id = 'pfConsent'; card.hidden = true;
     card.setAttribute('role', 'dialog'); card.setAttribute('aria-label', 'Ad choices');
-    card.innerHTML = `<p><b>Ads keep Palm Court free.</b> May our ad partner (Google) use cookies and similar data to show ads based on your interests? Either way you get the same game, and you can change this later under Ad choices. <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></p>
+    card.innerHTML = `<p><b>Ads keep Palm Court free.</b> May our ad partner (Google) use cookies and similar data to show ads based on your interests? Either way you get the same game, and you can change this later under Ad choices. <a href="${LEGAL('privacy.html')}" target="_blank" rel="noopener">Privacy policy</a></p>
 <div class="pf-row"><button type="button" class="btn primary pf-yes">Allow personalised ads</button><button type="button" class="btn pf-no">Non-personalised only</button></div>`;
     card.querySelector('.pf-yes').onclick = () => Consent.answer(true);
     card.querySelector('.pf-no').onclick = () => Consent.answer(false);
