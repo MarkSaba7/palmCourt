@@ -1,4 +1,4 @@
-import { clamp, lerp, sstep, damp, rand, pick, gauss, RPM, DT, BALL_R, SURFACES, LEVELS, inCourt, inServiceBox, newBall, stepBall, predictPath, solveShot, travelTime, Clock, Settings } from './core.js';
+import { clamp, lerp, sstep, damp, rand, pick, gauss, RPM, DT, BALL_R, SURFACES, LEVELS, inCourt, inServiceBox, newBall, stepBall, predictPath, simLanding, solveShot, travelTime, Clock, Settings } from './core.js';
 import { PT_SHOW, Match, Sound } from './match.js';
 import { camera, Crowd, World } from './render/world.js';
 import { KITS, OUTFITS, Avatar, BallView, Cam } from './render/actors.js';
@@ -452,6 +452,7 @@ const Game = {
       return;
     }
     if (ev.type === 'swingStart') { this.swingStart(me, ev, now); return; }
+    if (ev.type === 'swingAim') { this.swingAimed(me, ev.swing); return; }   // (S1 aiming: the follow-through is known)
     if (ev.type !== 'swing') return;
     Sound.init();
     const sw = ev.swing, camSrc = cam;
@@ -531,7 +532,7 @@ const Game = {
     const a = sw.src === 'key' || sw.src === 'phone' ? clamp(0.5 + gauss() * 0.25, 0, 1) : clamp((sw.x - 0.2) / 0.6, 0, 1);
     sw.serve = true;   // (power is learned separately for serves)
     const shot = { pl: me, kind: 'serve', swing: sw, serve: { power: swingPower(sw), a, q } };
-    if (cam) Input.learn(sw);
+    if (cam || sw.src === 'phone') Input.learn(sw);
     if (tc >= b.simT) this.pending = { ...shot, t: tc };
     else if (this.rollback(tc)) this.contact(shot);
     else UI.timing('Too late');
@@ -600,19 +601,52 @@ const Game = {
     // The wrong stroke costs some control; less on camera, where the stroke is read from the hand's path.
     let q = (1 - 0.25 * sstep(0.3, 1.0, Math.abs(tau)) - 0.75 * sstep(1.0, 1.6, Math.abs(tau))) * (1 - 0.45 * stretch) * (sw.mismatch ? (cam ? 0.85 : 0.7) : 1);
     if (assist) q = 0.35 + 0.65 * q;
-    const power = swingPower(sw), spin = swingSpin(sw);
-    if (cam) Input.learn(sw);   // this player's usual swing speed, for the next swings' power
-    // ==== S1 aiming: the person's shot model (src/shot.js) ====
-    const b = this.ball, pow = power * (1 - 0.35 * stretch);
-    return Shot.humanGround({
+    // ==== S1 aiming: what the swing asked for (power, spin, direction, drop shot; Input.read → src/shot.js) ====
+    const r = Input.read(sw, plan.stroke, pl.handed);
+    if (cam || sw.src === 'phone') Input.learn(sw);   // this player's usual swing speed, for the next swings' power
+    if (sw.src === 'phone') Input.learnAim(sw, plan.stroke);   // ...and, on the phone, their usual turn by the contact
+    const b = this.ball, o = {
       from: { ...b.p }, side: pl.side, mx: pl.x * pl.side, stroke: plan.stroke, handed: pl.handed, volley: b.bounces === 0,
-      pow, spin, drop: spin < -0.55 && pow < 0.2, dirX: null, tau, q, diff, S: this.gearFor(pl),
-    });
-    // ==== end S1 aiming ====
+      pow: r.pow * (1 - 0.35 * stretch), spin: r.spin, drop: r.drop, dirX: r.dirX, tau, q, diff, S: this.gearFor(pl),
+    };
+    const shot = Shot.humanGround(o);
+    shot.read = r;
+    // A camera swing is usually heard before its follow-through is over: the ball sets off the way this player
+    // usually swings, and swingAimed steers it once the finish shows where they swung (offline only).
+    pl.aimFix = cam && !r.final && this.mode !== 'online' ? { sw, o: { ...o, ex: shot.ex, ez: shot.ez, aim0: shot.aim }, t: b.simT, rally: b.rally + 1 } : null;
+    if (cam && r.final) Input.noteAcross(sw.src, r.across);
+    return shot;
   },
+  // The camera swing that hit the ball has shown its follow-through: aim by it. The ball has only just left the racket (the
+  // screen still trails the physics then), so its sideways speed changes a little; it keeps its pace, spin and length.
+  swingAimed(pl, sw) {
+    const f = pl.aimFix, b = this.ball;
+    if (!f || f.sw !== sw) return;
+    pl.aimFix = null;
+    const r = Input.read(sw, f.o.stroke, pl.handed);
+    if (!r.final) return;
+    Input.noteAcross(sw.src, r.across);
+    if (this.state !== 'rally' || b.lastHitter !== pl.idx || b.rally !== f.rally || b.bounces || b.netTouched || b.simT - f.t > 0.45 || b.p.z * pl.side < 1) return;
+    const shot = Shot.humanGround({ ...f.o, dirX: r.dirX }), tx = pl.side * shot.land.x;
+    if (Math.abs(shot.aim - f.o.aim0) < 0.25) return;
+    const h0 = Math.hypot(b.v.x, b.v.z) || 1, wm = b.w.x * (b.v.z / h0) - b.w.z * (b.v.x / h0);   // topspin (rad/s)
+    for (let k = 0; k < 4; k++) {
+      const L = simLanding(b.p, b.v, b.w), dx = clamp(tx - L.x, -3.5, 3.5);
+      if (Math.abs(dx) < 0.03) break;
+      b.v.x += dx / Math.max(0.25, L.t);
+    }
+    // Topspin turns with the ball's new heading.
+    const h = Math.hypot(b.v.x, b.v.z) || 1;
+    b.w.x = (b.v.z / h) * wm; b.w.z = -(b.v.x / h) * wm;
+    this.replanAll();
+    const kmh = Math.round(Math.hypot(b.v.x, b.v.y, b.v.z) * 3.6);
+    shot.read = r;
+    UI.shot(pl, { kmh, rpm: shot.rpm, kind: shot.kind, tau: shot.tau, q: shot.q, aim: shot.aim, serve: false, read: Shot.readText(shot, kmh) });
+  },
+  // ==== end S1 aiming ====
   // ==== S1 aiming: gear stats (G1's src/stats.js, once game.js imports Stats); neutral (all 1.0) until then ====
   gearFor(pl) {
-    try { return typeof Stats !== 'undefined' && Stats && Stats.forPlayer ? Stats.forPlayer(pl) || Shot.NEUTRAL : Shot.NEUTRAL; } catch (e) { return Shot.NEUTRAL; }
+    try { return (Stats && Stats.forPlayer && Stats.forPlayer(pl)) || Shot.NEUTRAL; } catch (e) { return Shot.NEUTRAL; }
   },
   // The CPU's stroke: read the situation (how hard the ball is, where both players are), pick a shot the way a player
   // of its level and style would, and aim it with margins that fit its own consistency. Misses then come from pressure:
@@ -746,13 +780,15 @@ const Game = {
     if (o.depth != null) depth = o.depth;   // the CPU picks its own length (angles, approaches)
     // Harder incoming balls are harder to control.
     const pressure = o.diff || 0;
-    const errK = (1 + 1.6 * (1 - o.q)) * (1 + 1.2 * pressure) * (o.errMul || 1);
+    // ==== S1 aiming: gear stats (pow → pace, ctl → accuracy, spin → rpm, touch → drops, slices and lobs) ====
+    const st = Shot.strokeStats(this.gearFor(pl), pl.plan ? pl.plan.stroke : 'fh', b.bounces === 0), fine = o.lob || o.spin < 0 ? st.touch : 1;
+    const errK = (1 + 1.6 * (1 - o.q)) * (1 + 1.2 * pressure) * (o.errMul || 1) / (st.ctl * fine);
     const sx = (0.4 + 1.0 * o.power * o.power) * errK, sz = (0.45 + 0.95 * o.power * o.power) * errK;
     const xl = clamp(o.aimX, -3.6, 3.6) + gauss() * sx, dl = Math.max(1.2, depth + gauss() * sz);
-    const speed = vk * (1 - 0.13 * Math.abs(o.spin)) * (0.55 + 0.45 * o.q);
-    const rpm = o.spin >= 0 ? lerp(700, 3100, o.spin) : -lerp(500, 2300, -o.spin);
+    const speed = vk * (1 - 0.13 * Math.abs(o.spin)) * (0.55 + 0.45 * o.q) * st.pow;
+    const rpm = (o.spin >= 0 ? lerp(700, 3100, o.spin) : -lerp(500, 2300, -o.spin)) * st.spin;
     const sol = solveShot(from, pl.side * xl, -pl.side * dl, speed, rpm * RPM, o.lob ? { minNet: 0.12, lo: 0.45, hi: 0.8 } : { minNet: 0.12 });
-    rotateElevation(sol.v, gauss() * (0.005 + 0.006 * o.power + 0.03 * (1 - o.q)) * (1 + 0.6 * pressure) * (o.errMul || 1));
+    rotateElevation(sol.v, gauss() * (0.005 + 0.006 * o.power + 0.03 * (1 - o.q)) * (1 + 0.6 * pressure) * (o.errMul || 1) / st.ctl);
     return { sol, rpm, kind, tau: o.tau, q: o.q, power: o.power, aim: o.aimX };
   },
   // The CPU's serve: T, body or wide (rarely the same three times running in a court), big servers going for the
@@ -784,9 +820,10 @@ const Game = {
     const a = clamp(o.a, 0, 1), xl = m.court === 'deuce' ? lerp(-3.75, -0.3, a) : lerp(0.3, 3.75, a);
     const power = second ? Math.min(o.power, 0.62) : o.power;
     const dl = 5.55 + (power - 0.5) * 0.5;
-    const errK = (1 + 1.5 * (1 - o.q)) * (o.errMul || 1);
+    const Sv = this.gearFor(pl).serve || Shot.NEUTRAL.serve;   // (S1: gear stats)
+    const errK = (1 + 1.5 * (1 - o.q)) * (o.errMul || 1) / (Sv.ctl || 1);
     const sx = (0.16 + 0.6 * power * power) * errK, sz = (0.18 + 0.62 * power * power) * errK;
-    const kmh = second ? lerp(105, 160, power) : lerp(115, 205, power);
+    const kmh = (second ? lerp(105, 160, power) : lerp(115, 205, power)) * (Sv.pow || 1);
     const rpm = lerp(2800, 800, power) * (second ? 1.25 : 1);
     const sol = solveShot({ ...b.p }, pl.side * (xl + gauss() * sx), -pl.side * (dl + gauss() * sz), kmh / 3.6, rpm * RPM, { lo: -0.45, hi: 0.3, minNet: 0.03 });
     rotateElevation(sol.v, gauss() * 0.003 * errK);
@@ -801,7 +838,7 @@ const Game = {
     const kmh = Math.round(Math.hypot(b.v.x, b.v.y, b.v.z) * 3.6);
     if (this.mode !== 'attract') Sound.hit(shot.power ?? 0.6, this.camDist(b.p), shot.q ?? 1, !!b.serve);
     if (b.serve) this.match.stats.fastest[pl.idx] = Math.max(this.match.stats.fastest[pl.idx], kmh);
-    UI.shot(pl, { kmh, rpm: shot.rpm, kind: shot.kind, tau: shot.tau, q: shot.q, aim: shot.aim, serve: !!b.serve });
+    UI.shot(pl, { kmh, rpm: shot.rpm, kind: shot.kind, tau: shot.tau, q: shot.q, aim: shot.aim, serve: !!b.serve, read: shot.read ? Shot.readText(shot, kmh) : null });
     if (pl.ctl === 'human') Phone.send({ type: 'hit', power: shot.power ?? 0.6 });
     if (this.mode === 'online' && pl.ctl === 'human') {
       Net.send({ type: 'hit', t: b.simT, p: b.p, v: b.v, w: b.w, serve: b.serve, rally: b.rally, kmh, rpm: shot.rpm, kind: shot.kind, stroke: (pl.plan && pl.plan.stroke) || 'fh' });
