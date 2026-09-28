@@ -440,7 +440,7 @@ const UI = {
   phoneStatusText(info) {
     const st = Phone.status();
     if (st === 'connected') {
-      const how = Phone.via === 'wifi' ? 'over Wi-Fi' : 'over the internet';
+      const how = Phone.via === 'wifi' ? 'over Wi-Fi' : Phone.route === 'Wi-Fi direct' ? 'over Wi-Fi, direct' : Phone.route === 'TURN relay' ? 'through an internet relay (slower: put the phone on the same Wi-Fi as this PC)' : 'over the internet';
       const next = !Phone.armed ? 'Tap Start on your phone.' : Phone.calibrated ? 'Ready to play.' : 'Swing a forehand, then a backhand on your phone to finish setup (or tap Skip there).';
       return [`Connected: ${Phone.device || 'phone'} ${how}${Phone.rtt ? ` · ${Phone.rtt} ms` : ''}. ${next}`, 'ok'];
     }
@@ -484,7 +484,7 @@ const UI = {
   phoneChip() {
     const el = $('phoneInfo');
     if (Settings.control !== 'phone' || !(Game.mode === 'cpu' || Game.mode === 'online')) { el.textContent = ''; return; }
-    el.textContent = Phone.connected() ? `Phone${Phone.rtt ? ` ${Phone.rtt} ms` : ''}` : 'Phone disconnected';
+    el.textContent = Phone.connected() ? `Phone${Phone.linkText() ? `: ${Phone.linkText()}` : ''}` : 'Phone disconnected';
     el.classList.toggle('warn', !Phone.connected());
   },
 
@@ -1120,7 +1120,7 @@ const UI = {
   pause() {
     if (Game.mode === 'cpu') Clock.pause();
     $('pauseEyebrow').textContent = Game.mode === 'online' ? 'Match still running' : 'Paused';
-    $('perfInfo').textContent = `Running at ${Math.round(Perf.fps)} fps · ${Math.round(Perf.scale * 100)}% resolution · ${Perf.gpuName()}${Tracker.stream ? ` · tracking ${Tracker.info()}` : ''}`;
+    $('perfInfo').textContent = `Running at ${Math.round(Perf.fps)} fps · ${Math.round(Perf.scale * 100)}% resolution · ${Perf.gpuName()}${Tracker.stream ? ` · tracking ${Tracker.info()}` : ''}${Settings.control === 'phone' && Phone.connected() ? ` · Phone: ${Phone.linkText() || 'connected'}` : ''}`;
     this.scoreTable($('pauseScore'), false);
     this.go('pause');
   },

@@ -163,8 +163,10 @@ function setNet(on, text) { $('net').classList.toggle('on', on); $('netText').te
 // ---------- swing detection ----------
 // The gyroscope rate is projected onto gravity, so the sweep around the vertical axis tells a forehand
 // from a backhand however the phone sits in your hand. Rising vs falling hand speed gives topspin vs slice.
-const DET = { START: 240, MIN_PEAK: 380, END_FRAC: 0.5, MAX_MS: 450, GAP_MS: 320, REVERSE_MS: 60, RECOVER_MS: 650, SERVE_HOLD_MS: 120 };
-const S = { events: 0, g: null, state: 'idle', t0: 0, tPeak: 0, peak: 0, w: 0, yaw: 0, absInt: 0, vUp: 0, vIdle: 0, vUpPeak: 0, aMax: 0, lastT: 0, lastEnd: 0, lastSign: 0, meter: 0, prev: null };
+// A swing is sent to the game as soon as the racket has clearly passed its fastest point (the contact): a sample
+// PAST_FRAC below the peak, or two falling samples in a row. Waiting for the end (half speed) cost 60-120 ms.
+const DET = { START: 240, MIN_PEAK: 380, END_FRAC: 0.5, PAST_FRAC: 0.9, MAX_MS: 450, GAP_MS: 320, REVERSE_MS: 60, RECOVER_MS: 650, SERVE_HOLD_MS: 120, KEEPALIVE_MS: 80 };
+const S = { events: 0, g: null, state: 'idle', t0: 0, tPeak: 0, peak: 0, w: 0, wPrev: 0, yaw: 0, absInt: 0, vUp: 0, vIdle: 0, vUpPeak: 0, aMax: 0, lastT: 0, lastEnd: 0, lastSign: 0, meter: 0, prev: null, id: 0, sent: false };
 
 function onMotion(e) {
   const r = e.rotationRate;
@@ -194,7 +196,7 @@ function onMotion(e) {
     // Just after a swing only a turn the other way may start a new one: the swing straight after a wind-up.
     if (w > DET.START && t - S.lastEnd > (sign && sign === -S.lastSign ? DET.REVERSE_MS : DET.GAP_MS)) {
       const v0 = S.vIdle + aUp * dt;
-      Object.assign(S, { state: 'swing', t0: t, tPeak: t, peak: w, yaw: wUp * dt, absInt: w * dt, vUp: v0, vUpPeak: v0, aMax: aMag });
+      Object.assign(S, { state: 'swing', t0: t, tPeak: t, peak: w, wPrev: w, yaw: wUp * dt, absInt: w * dt, vUp: v0, vUpPeak: v0, aMax: aMag, id: S.id + 1, sent: false });
       onSwingStart(t, sign);
     }
     return;
@@ -202,6 +204,9 @@ function onMotion(e) {
   S.yaw += wUp * dt; S.absInt += w * dt; S.vUp += aUp * dt;
   if (w > S.peak) { S.peak = w; S.tPeak = t; S.vUpPeak = S.vUp; }
   S.aMax = Math.max(S.aMax, aMag);
+  // Past the peak: the racket met the ball there, so the game hears about it now (it rewinds to tPeak anyway).
+  if (!S.sent && S.peak >= DET.MIN_PEAK && t > S.tPeak && (w < S.peak * DET.PAST_FRAC || (w < S.wPrev && S.wPrev < S.peak && w < S.peak * 0.97))) S.sent = onPeak(describeSwing(t));
+  S.wPrev = w;
   // End once the racket has clearly slowed down (a single odd reading right after the peak doesn't count).
   if ((w < S.peak * DET.END_FRAC && t - S.tPeak > 35) || t - S.t0 > DET.MAX_MS) finishSwing(t);
 }
@@ -215,9 +220,8 @@ function checkLiftToss(t, w) {
 
 function strokeDir(sign, yawFrac) { return cal.fhSign && sign && yawFrac > 0.3 ? (sign === cal.fhSign ? 'fh' : 'bh') : null; }
 
-function finishSwing(t) {
-  S.state = 'idle'; S.lastEnd = t; S.vIdle = 0; S.lastSign = Math.sign(S.yaw);
-  if (S.peak < DET.MIN_PEAK) return;
+// The swing so far (at the peak, or whole at the end).
+function describeSwing(t) {
   const yawFrac = S.absInt > 0 ? Math.abs(S.yaw) / S.absInt : 0;
   const sign = Math.sign(S.yaw), dir = strokeDir(sign, yawFrac);
   const power = clamp(Math.max((S.peak - 330) / 1250, (S.aMax - 12) / 38), 0.05, 1);
@@ -225,22 +229,55 @@ function finishSwing(t) {
   // Bringing the racket back after a stroke turns the other way, more slowly: that isn't a new swing.
   const p = S.prev, expect = lastState && lastState.stroke;
   const recovery = !!p && t - p.t < DET.RECOVER_MS && sign === -p.sign && yawFrac > 0.3 && p.yawFrac > 0.3 && S.peak < p.peak * 0.7 && !(dir && dir === expect);
-  if (!recovery) S.prev = { t, sign, peak: S.peak, yawFrac };
-  onSwing({ tPeak: S.tPeak, tEnd: t, peak: Math.round(S.peak), power, spin, dir, yawFrac, sign, recovery });
+  return { id: S.id, tPeak: S.tPeak, tEnd: t, peak: Math.round(S.peak), power, spin, dir, yawFrac, sign, recovery, sent: S.sent };
+}
+
+function finishSwing(t) {
+  S.state = 'idle'; S.lastEnd = t; S.vIdle = 0; S.lastSign = Math.sign(S.yaw);
+  if (S.peak < DET.MIN_PEAK) return;
+  const sw = describeSwing(t);
+  if (!sw.recovery) S.prev = { t, sign: sw.sign, peak: S.peak, yawFrac: sw.yawFrac };
+  onSwing(sw);
 }
 
 // ---------- link to the game ----------
 // Two routes. When this page came from the PC running the game (play.cmd), its server relays our messages
 // over the Wi-Fi: no internet needed. Otherwise, or if that fails, a direct link through the PeerJS server.
-let code = '', link = '', ws = null, peer = null, pconn = null, lanInfo;
+let code = '', link = '', ws = null, peer = null, pconn = null, fast = null, lanInfo;
 let offset = 0, samples = [], rtt = 0, pingTimer = 0, retryTimer = 0, retries = 0, wakeLock = null, sensorsOn = false, armed = false, leaving = false;
 let game = { handed: 'R', name: '' };
 
-function send(m) {
+// how: 'fast' for swings: over WebRTC they also go, twice, on a second channel that's unordered and never resends
+// (the reliable one holds everything behind a lost packet until it's resent, a few hundred ms), and the game keeps
+// whichever copy comes first. 'lossy' (keep-alives): only on that channel, so a lost one never holds up a swing.
+function send(m, how) {
   try {
     if (link === 'relay' && ws && ws.readyState === 1) ws.send(JSON.stringify(m));
-    else if (link === 'p2p' && pconn && pconn.open) pconn.send(m);
+    else if (link === 'p2p') {
+      const f = how && fast && fast.readyState === 'open' ? fast : null, s = f && JSON.stringify(m);
+      if (f) f.send(s);
+      if (how !== 'lossy' && pconn && pconn.open) pconn.send(m);
+      if (f && how === 'fast') setTimeout(() => { try { if (f.readyState === 'open') f.send(s); } catch (e) { /* closed */ } }, 12);
+    }
   } catch (e) { /* link dropped */ }
+}
+const FAST_ID = 42;   // the game opens the same pre-agreed channel on its side (src/phone.js)
+function openFast(c) {
+  fast = null;
+  try {
+    const ch = c.peerConnection.createDataChannel('palmcourt-fast', { negotiated: true, id: FAST_ID, ordered: false, maxRetransmits: 0 });
+    ch.onopen = () => { if (pconn === c) fast = ch; };
+    ch.onclose = () => { if (fast === ch) fast = null; };
+  } catch (e) { /* no second channel: the reliable one carries everything */ }
+}
+
+// While a match is on, a tiny message every 80 ms keeps the phone's Wi-Fi awake. With only a ping every 1.5 s, phones
+// doze and send and get their packets in batches 100-300 ms apart. Off between matches, to spare the battery.
+let kaTimer = 0;
+const keepOn = () => !!link && armed && screen === 'play' && !!(lastState && lastState.inMatch) && document.visibilityState === 'visible';
+function keepAlive() {
+  if (kaTimer || !keepOn()) return;
+  kaTimer = setInterval(() => { if (keepOn()) send({ type: 'k' }, 'lossy'); else { clearInterval(kaTimer); kaTimer = 0; } }, DET.KEEPALIVE_MS);
 }
 
 async function relayAvailable() {
@@ -293,7 +330,7 @@ function startP2P() {
 function dial() {
   if (link || (pconn && pconn.open) || !peer) return;
   const c = (pconn = peer.connect(PREFIX + code.toLowerCase(), { reliable: true, serialization: 'json' }));
-  c.on('open', () => { if (pconn === c) linkUp('p2p'); });
+  c.on('open', () => { if (pconn === c) { openFast(c); linkUp('p2p'); } });
   c.on('data', (m) => { if (link === 'p2p' && pconn === c) onData(m); });
   const gone = () => { if (pconn !== c) return; pconn = null; if (link === 'p2p') linkDown(false); };
   c.on('close', gone);
@@ -320,7 +357,7 @@ function retry() {
 
 function stopP2P() {
   const c = pconn, p = peer;
-  pconn = null; peer = null;
+  pconn = null; peer = null; fast = null;
   try { if (c) c.close(); } catch (e) { /* closed */ }
   try { if (p) p.destroy(); } catch (e) { /* gone */ }
 }
@@ -349,6 +386,7 @@ function linkUp(kind) {
   pingTimer = setInterval(() => { ping(); if (++n === 12) { clearInterval(pingTimer); pingTimer = setInterval(ping, 1500); } }, 300);
   if (armed) afterStart();
   else linkMsg('Connected to the game. Tap Start.', 'ok');
+  keepAlive();
 }
 
 function linkDown(waitForGame) {
@@ -425,7 +463,7 @@ async function keepAwake() {
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
-  if (link) keepAwake();
+  if (link) { keepAwake(); keepAlive(); }
   else if (code && !leaving) { retries = 0; connect(); }    // the phone slept: get the link back straight away
 });
 
@@ -532,6 +570,7 @@ function gripNote(text, kind) {
 let lastState = null, noteUntil = 0;
 function playState(s) {
   if (s) lastState = s;
+  keepAlive();
   s = lastState || {};
   if (screen !== 'play' || performance.now() < noteUntil) return;
   const serving = !!s.serving;
@@ -553,7 +592,13 @@ function pointNote(m) {
 
 // ---------- swings ----------
 function onSwingStart(t, sign) {
-  if (screen === 'play') send({ type: 'swingStart', tg: t + offset, dir: strokeDir(sign, 1) });
+  if (screen === 'play') send({ type: 'swingStart', id: S.id, tg: t + offset, dir: strokeDir(sign, 1) }, 'fast');
+}
+// Just past the peak: send the swing now. Not a serve (see holdServe), nor the racket coming back after a stroke.
+function onPeak(sw) {
+  if (screen !== 'play' || sw.recovery || (lastState && lastState.serving && lastState.tossed)) return false;
+  sendSwing(sw);
+  return true;
 }
 // The game serves off the first swing after the toss, and a serve starts with a wind-up. So while our toss is in the
 // air each swing waits a moment and only the strongest is sent: the game rewinds the ball to the swing's time.
@@ -575,6 +620,11 @@ function flushServe() {
 function onSwing(sw) {
   if (screen === 'calib') { calibSwing(sw); return; }
   if (screen !== 'play' || sw.recovery) return;
+  if (!sw.sent) { if (lastState && lastState.serving && lastState.tossed) holdServe(sw); else sendSwing(sw); }
+  else if (lastSent && lastSent.id === sw.id && !lastSent.used) Object.assign(lastSent, { tEnd: sw.tEnd, yawFrac: sw.yawFrac, sign: sw.sign });   // the whole swing says more about forehand/backhand
+  showSwing(sw);
+}
+function showSwing(sw) {
   const el = $('lastSwing');
   const kind = sw.dir === 'fh' ? 'Forehand' : sw.dir === 'bh' ? 'Backhand' : 'Swing';
   const spin = sw.spin > 0.5 ? 'topspin' : sw.spin < 0 ? 'slice' : 'flat';
@@ -584,11 +634,10 @@ function onSwing(sw) {
   small.textContent = `${Math.round(sw.power * 100)}% · ${spin} · ${sw.peak}°/s`;
   el.append(small);
   el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
-  if (lastState && lastState.serving && lastState.tossed) holdServe(sw); else sendSwing(sw);
 }
 function sendSwing(sw) {
   lastSent = sw;
-  send({ type: 'swing', tg: sw.tPeak + offset, peak: sw.peak, power: +sw.power.toFixed(3), spin: +sw.spin.toFixed(3), dir: sw.dir, yawFrac: +sw.yawFrac.toFixed(2) });
+  send({ type: 'swing', id: sw.id, tg: sw.tPeak + offset, peak: sw.peak, power: +sw.power.toFixed(3), spin: +sw.spin.toFixed(3), dir: sw.dir, yawFrac: +sw.yawFrac.toFixed(2) }, 'fast');
 }
 
 // ---------- grip setup ----------

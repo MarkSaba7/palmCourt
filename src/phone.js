@@ -4,6 +4,7 @@ import { Game } from './game.js';
 import { Net } from './net.js';
 import { UI } from './ui.js';
 import { QR } from './qr.js';
+import { routeName, selectedPair } from './phonelink.js';
 
 // =====================================================================
 // PHONE: your phone as the racket. controller.html runs on the phone, reads its gyroscope, spots each
@@ -15,7 +16,7 @@ const Phone = {
   prefix: 'palmcourt-rk-',
   peer: null, peerError: false, peerTimer: 0, idRetries: 0,
   ws: null, wsRetries: 0, relayOff: false, relayConn: null,
-  conn: null, watchdog: 0, code: null, device: '', via: '', armed: false, calibrated: false, rtt: 0, lastSwing: null, lastStateKey: '',
+  conn: null, watchdog: 0, code: null, device: '', via: '', route: '', routeT: 0, armed: false, calibrated: false, rtt: 0, lastSwing: null, lastStateKey: '',
   info: undefined, urls: [], pick: 0, url: undefined,
   connected() { return !!(this.conn && this.conn.open); },
   relayUp() { return !!(this.ws && this.ws.readyState === 1); },
@@ -106,6 +107,7 @@ const Phone = {
   bind(c, via) {
     c.via = via;
     c.on('data', (m) => { c.lastRecv = performance.now(); try { this.onData(m, c); } catch (e) { console.warn(e); } });
+    if (via === 'internet') c.on('open', () => this.openFast(c));
     c.on('close', () => { if (this.conn === c) { this.conn = null; UI.renderPhone(); UI.phoneChip(); } });
     c.on('error', (e) => console.warn('phone connection', e));
   },
@@ -119,7 +121,8 @@ const Phone = {
       setTimeout(() => { try { old.close(); } catch (e) { /* closed */ } }, 300);
     }
     c.sid = m.sid;
-    this.via = c.via; this.lastStateKey = '';
+    this.via = c.via; this.lastStateKey = ''; this.route = ''; this.routeT = 0;
+    this.checkRoute(c);
     // A phone that locks its screen or leaves the Wi-Fi often never closes its PeerJS link: it pings every 1.5 s
     // while linked, so a phone that has gone quiet for several seconds counts as gone (and can link up again).
     clearInterval(this.watchdog);
@@ -135,23 +138,54 @@ const Phone = {
     this.send({ type: 'welcome', handed: Settings.handed, name: Settings.name });
     this.pushState();
   },
+  // The phone's second WebRTC channel (controller.html's openFast): pre-agreed, unordered, never resent. Swings come
+  // on it twice as well as on the reliable channel, so one lost packet can't hold a swing up; keep-alives come only here.
+  openFast(c) {
+    const pc = c.peerConnection;
+    if (c.fast || !pc || !pc.createDataChannel) return;
+    try {
+      c.fast = pc.createDataChannel('palmcourt-fast', { negotiated: true, id: 42, ordered: false, maxRetransmits: 0 });
+      c.fast.onmessage = (e) => {
+        c.lastRecv = performance.now();
+        let m; try { m = JSON.parse(e.data); } catch (x) { return; }
+        try { this.onData(m, c); } catch (x) { console.warn(x); }
+      };
+    } catch (e) { c.fast = null; }
+  },
   onData(m, c) {
-    if (!m || typeof m !== 'object') return;
+    if (!m || typeof m !== 'object' || m.type === 'k') return;   // k: the phone keeping its Wi-Fi awake
     if (m.type === 'ping') { try { c.send({ type: 'pong', t: m.t, g: Clock.now() * 1000 }); } catch (e) { /* link dropped */ } return; }
     if (m.type === 'hello') this.adopt(c, m);
     else if (c !== this.conn) return;
+    if ((m.type === 'swing' || m.type === 'swingStart') && m.id != null) {
+      // The first copy of a swing counts; the others (see openFast) are dropped.
+      const k = m.type + m.id, seen = (c.seen = c.seen || []);
+      if (seen.includes(k)) return;
+      seen.push(k);
+      if (seen.length > 12) seen.shift();
+    }
     switch (m.type) {
       case 'swingStart': Input.phoneSwingStart(m); return;
       case 'toss': Input.emit({ type: 'toss', src: 'phone' }); return;
       case 'hello': this.device = String(m.device || 'Phone').slice(0, 30); this.calibrated = !!m.calibrated; this.armed = m.armed !== false; break;
       case 'status': this.calibrated = !!m.calibrated; this.armed = !!m.armed; break;
-      case 'rtt': this.rtt = Math.round(+m.rtt || 0); break;
+      case 'rtt': this.rtt = Math.round(+m.rtt || 0); this.checkRoute(c); break;
       case 'calib': this.calibrated = !!m.done; break;
       case 'swing': this.lastSwing = m; Input.phoneSwing(m); UI.phoneSwing(m); break;
       default: return;
     }
     UI.renderPhone(); UI.phoneChip();
   },
+  // Which way the phone's messages come (see phonelink.js), checked every few seconds as its round-trip times arrive.
+  async checkRoute(c) {
+    if (c.via === 'wifi') { this.route = 'Wi-Fi via play.cmd'; return; }
+    const pc = c.peerConnection, now = performance.now();
+    if (!pc || !pc.getStats || now - this.routeT < 3000) return;
+    this.routeT = now;
+    try { const p = selectedPair(await pc.getStats()); if (!p) this.routeT = 0; else if (this.conn === c) this.route = routeName(p.local, p.remote) || this.route; } catch (e) { /* closed */ }
+  },
+  // For the HUD chip and the pause screen: "Wi-Fi direct, 18 ms".
+  linkText() { return [this.route, this.rtt ? `${this.rtt} ms` : ''].filter(Boolean).join(', '); },
   send(m) {
     // A hit also says which stroke it was, so an uncalibrated phone can learn forehand from backhand as you play.
     if (m && m.type === 'hit' && !m.stroke) { const me = Game.me(); if (me && me.plan) m = { ...m, stroke: me.plan.stroke }; }
