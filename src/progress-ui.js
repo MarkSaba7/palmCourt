@@ -204,6 +204,9 @@ const STYLE = `
 .pg-slot[aria-pressed=true]{border-color:var(--optic);background:rgba(214,240,74,.09)}
 .pg-note{margin:0 0 10px;font-size:12.5px;color:var(--mist)}
 @media (max-width:640px){.pg-locker{grid-template-columns:1fr}.pg-man{grid-template-columns:130px 1fr}.pg-big{aspect-ratio:1}}
+/* phones: the preview above the slots, so two slot columns get the full width ("Celebration", "Synthetic Gut" fit) */
+@media (max-width:480px){.pg-man{grid-template-columns:1fr}.pg-big{width:min(150px,100%);justify-self:center}}
+.pg-slot small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pg-chs{display:grid;gap:10px}
 .pg-ch{display:grid;grid-template-columns:44px minmax(0,1fr) auto;column-gap:14px;row-gap:9px;align-items:center;padding:14px 16px;border:1px solid var(--edge);background:rgba(242,245,238,.035)}
 .pg-ch-n{grid-row:span 2;font:900 38px/1 var(--display);color:rgba(242,245,238,.3);text-align:center}
