@@ -38,9 +38,10 @@ export function aimGround(o) {
   else {
     const d = clamp(o.dirX, -1.3, 1.3), a = Math.abs(d), s = Math.sign(d);
     // A clear swing to one side lands well inside that sideline; beyond it (a very wide swing) closer to the line.
-    const safe = W - lerp(0.9, 1.25, pow), line = W - 0.45;
+    const safe = W - lerp(1.15, 1.45, pow), line = W - 0.5;
     x = lerp(base, s * safe, Math.min(1, a)) + s * sstep(1, 1.3, a) * (line - safe);
-    x += tau * bs * 0.8;   // timing still pulls or pushes it a little
+    // Timing still pulls or pushes it: a little when roughly on time, a lot when clearly early or late.
+    x += tau * bs * (0.8 + 1.4 * sstep(0.45, 1.3, Math.abs(tau)));
   }
   if (drop) return { x: clamp(x * 0.8, -3.2, 3.2), depth: 2.7 + 0.9 * clamp(pow / 0.3, 0, 1) };
   return { x: clamp(x, -3.75, 3.75), depth: lerp(8.3, 10.1, sstep(0.05, 0.95, pow)) - 0.7 * Math.max(0, -spin) };
@@ -105,7 +106,7 @@ export function readCamera(sw, o = {}) {
 export function phoneAcross(yawPre, yawShare, typYaw = 0, typShare = 0) {
   if (!(yawPre > 0)) return null;
   const ty = typYaw > 0 ? typYaw : 90, ts = typShare > 0 ? typShare : 0.8;
-  let a = 0.35 + 0.65 * (yawPre - ty) / Math.max(25, 0.35 * ty);
+  let a = 0.35 + 0.65 * (yawPre - ty) / Math.max(30, 0.45 * ty);
   if (yawShare > 0) a += 0.6 * (yawShare - ts) / 0.2;
   return clamp(a, -1, 1.3);
 }
@@ -137,7 +138,7 @@ export function humanGround(o) {
   const aim = aimGround({ ...o, pow, spin, drop, side: bs });
   // Scatter: timing costs most, then how hard the incoming ball was, then swinging flat out. Better control, less.
   const errK = (1 + 3 * (1 - q)) * (1 + 0.9 * clamp(o.diff || 0, 0, 1)) / st.ctl;
-  let sx = (0.3 + 0.6 * pow * pow) * errK, sz = (0.35 + 0.6 * pow * pow + 0.7 * sstep(0.8, 1, pow)) * errK;
+  let sx = (0.3 + 0.6 * pow * pow) * errK * (1 + 0.6 * sstep(0.45, 1.3, Math.abs(o.tau || 0))), sz = (0.35 + 0.6 * pow * pow + 0.7 * sstep(0.8, 1, pow)) * errK;
   if (drop) { sx = 0.45 * errK / st.touch; sz = 0.5 * errK / st.touch; }
   else if (spin < -0.2) { sx /= Math.sqrt(st.touch); sz /= Math.sqrt(st.touch); }
   // (The random draws come back with the shot, so a steer after the follow-through keeps the same scatter.)

@@ -452,7 +452,7 @@ const Game = {
       return;
     }
     if (ev.type === 'swingStart') { this.swingStart(me, ev, now); return; }
-    if (ev.type === 'swingEnd') { this.swingEnded(me, ev.swing); return; }   // (S1 aiming: the follow-through)
+    if (ev.type === 'swingAim') { this.swingAimed(me, ev.swing); return; }   // (S1 aiming: the follow-through is known)
     if (ev.type !== 'swing') return;
     Sound.init();
     const sw = ev.swing, camSrc = cam;
@@ -612,14 +612,14 @@ const Game = {
     const shot = Shot.humanGround(o);
     shot.read = r;
     // A camera swing is usually heard before its follow-through is over: the ball sets off the way this player
-    // usually swings, and swingEnded steers it once the finish shows where they swung (offline only).
+    // usually swings, and swingAimed steers it once the finish shows where they swung (offline only).
     pl.aimFix = cam && !r.final && this.mode !== 'online' ? { sw, o: { ...o, ex: shot.ex, ez: shot.ez, aim0: shot.aim }, t: b.simT, rally: b.rally + 1 } : null;
     if (cam && r.final) Input.noteAcross(sw.src, r.across);
     return shot;
   },
-  // The camera swing that hit the ball is over: aim by its follow-through. The ball has only just left the racket (the
+  // The camera swing that hit the ball has shown its follow-through: aim by it. The ball has only just left the racket (the
   // screen still trails the physics then), so its sideways speed changes a little; it keeps its pace, spin and length.
-  swingEnded(pl, sw) {
+  swingAimed(pl, sw) {
     const f = pl.aimFix, b = this.ball;
     if (!f || f.sw !== sw) return;
     pl.aimFix = null;

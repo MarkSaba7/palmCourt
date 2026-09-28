@@ -80,10 +80,10 @@ section('direction follows the aim');
   // Straight from the middle lands in the middle; a hard swing to one side lands on that side, for both strokes.
   for (const st of ['fh', 'bh']) for (const handed of ['R', 'L']) {
     const bs = ballSide(st, handed), mean = (dirX) => { let s = 0; for (let i = 0; i < 300; i++) s += aimGround({ pow: 0.6, spin: 0.3, dirX, tau: 0, mx: 0, side: bs }).x; return s / 300; };
-    ok(Math.abs(mean(0)) < 0.2 && mean(-1) < -2.4 && mean(1) > 2.4, `${handed} ${st}: straight ${mean(0).toFixed(2)}, left ${mean(-1).toFixed(2)}, right ${mean(1).toFixed(2)}`);
+    ok(Math.abs(mean(0)) < 0.2 && mean(-1) < -2.2 && mean(1) > 2.2, `${handed} ${st}: straight ${mean(0).toFixed(2)}, left ${mean(-1).toFixed(2)}, right ${mean(1).toFixed(2)}`);
     // Timing is a smaller nudge: early pulls across (away from the ball's side).
-    const e = aimGround({ pow: 0.6, spin: 0.3, dirX: 0, tau: -1, mx: 0, side: bs }).x;
-    ok(Math.sign(e) === -bs && Math.abs(e) < 1.2, `${handed} ${st}: early pulls across a little (${e.toFixed(2)})`);
+    const e = aimGround({ pow: 0.6, spin: 0.3, dirX: 0, tau: -0.4, mx: 0, side: bs }).x, E = aimGround({ pow: 0.6, spin: 0.3, dirX: 0, tau: -1.2, mx: 0, side: bs }).x;
+    ok(Math.sign(e) === -bs && Math.abs(e) < 0.5 && Math.sign(E) === -bs && Math.abs(E) > 1.5, `${handed} ${st}: a bit early pulls across a little (${e.toFixed(2)}), very early a lot (${E.toFixed(2)})`);
   }
   // Landing spots agree with the aim.
   let hit = 0, n = 0;
