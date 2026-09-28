@@ -1,6 +1,6 @@
 // Player figures: the procedural character, a racket, and a pose-based animation system on its skeleton.
 import * as THREE from 'three';
-import { clamp, lerp, damp, sstep } from '../core.js';
+import { clamp, lerp, damp, sstep, DT, flight } from '../core.js';
 import { scene } from './renderer.js';
 import { createCharacter, recolorCharacter } from './character.js';
 import { makeRacket } from './racket.js';
@@ -252,7 +252,7 @@ const SV = [
   P({ py: -0.04, sp: [0.12, -1.05, 0.06], hd: [0.2, 0.85, 0], shR: [0.1, 0, 0.6], elR: 0.3, shL: [1.9, 0, -0.1], elL: 0.1, hipR: [0.2, 0, 0.12], knR: -0.4, hipL: [0.2, 0, -0.1], knL: -0.35 }),
   P({ py: -0.12, sp: [0.3, -1.1, 0.14], hd: [0.35, 0.8, 0], shR: [0.25, 0, 1.65], elR: 2.1, wrR: [0.4, 0, 0], shL: [2.95, 0, -0.1], elL: 0.05, hipR: [0.42, 0, 0.12], knR: -0.9, hipL: [0.38, 0, -0.1], knL: -0.85 }),
   P({ py: -0.02, sp: [0.38, -0.75, 0.1], hd: [0.45, 0.6, 0], shR: [1.2, 0, 1.6], elR: 2.4, shL: [2.2, 0, -0.25], elL: 0.4, hipR: [0.15, 0, 0.1], knR: -0.35, hipL: [0.12, 0, -0.08], knL: -0.25 }),
-  P({ py: 0.1, sp: [-0.05, -0.2, 0], hd: [0.45, 0.2, 0], shR: [2.95, 0, 0.3], elR: 0.05, shL: [1.0, 0, -0.3], elL: 1.7, hipR: [-0.1, 0, 0.05], knR: -0.15, hipL: [0.05, 0, -0.05], knL: -0.05 }),
+  P({ py: 0.1, sp: [-0.2, -0.2, 0.25], hd: [0.5, 0.2, 0], shR: [2.95, 0, 0.3], elR: 0.05, shL: [1.0, 0, -0.3], elL: 1.7, hipR: [-0.1, 0, 0.05], knR: -0.08, hipL: [0.05, 0, -0.05], knL: -0.03 }),
   P({ py: 0.02, sp: [-0.35, 0.3, 0], hd: [0.4, -0.2, 0], shR: [1.8, 0, 0.2], elR: 0.3, shL: [0.6, 0, -0.5], elL: 1.4, hipR: [-0.45, 0, 0.1], knR: -1.1, hipL: [0.35, 0, -0.08], knL: -0.4 }),
   P({ py: -0.05, sp: [-0.45, 0.7, 0], hd: [0.35, -0.55, 0], shR: [0.75, 0, -0.75], elR: 0.4, shL: [0.3, 0, -0.45], elL: 0.5, hipR: [0.35, 0, 0.12], knR: -0.45, hipL: [0.2, 0, -0.1], knL: -0.35 }),
 ];
@@ -266,6 +266,11 @@ const SVR = [
   R_([-0.28, 0.88, -0.22], [-0.45, -0.45, 0.77]),
 ];
 const _p0 = new THREE.Vector3(), _v0 = new THREE.Vector3();
+// The serve's reach. The toss is met on the strings a little above the head's centre (higher on a big serve), with
+// the arm and racket straight up at it and a small jump: SV_JUMP is the jump game.js tosses for (serveHeight). SV_SLACK:
+// the arm solve stops a few cm short of dead straight and the body lags its keys a little, so it jumps that much more.
+const SV_JUMP = 0.08, SV_SLACK = 0.03, svOn = (pow) => lerp(0.04, 0, pow);
+const _sM = new THREE.Matrix4(), _sL = new THREE.Matrix4(), _sE = new THREE.Euler(), _sS = new THREE.Vector3(), _svP = clonePose(POSE.ready);
 
 export class Avatar {
   constructor(kit) {
@@ -368,19 +373,23 @@ export class Avatar {
     kt[4] = cT; kt[3] = cT - 0.45 * Td; kt[5] = cT + 0.1; kt[6] = cT + lerp(0.52, 0.4, pow);
     kt[2] = Math.min(st === 'high-toss' ? 0.58 : st === 'compact' ? 0.4 : 0.5, kt[3] - 0.08);
     kt[1] = Math.min(st === 'compact' ? 0.16 : 0.24, kt[2] - 0.08); kt[0] = Math.min(0, kt[1] - 0.08);
-    // Where the ball will be at the contact (the toss falls freely; drag is tiny at this pace).
+    // Where the ball will be at the contact: the toss flown on to then (with drag: it rises ~6 cm less by the contact).
     const c = this.c;
     if (known && this.toss) {
-      const { p, v } = this.toss;
-      this.toBody(p.x + v.x * cT, p.y + v.y * cT - 4.905 * cT * cT, p.z + v.z * cT, pl, c);
+      if (this.cAt !== this.contactT + this.tossT) {
+        const s = { p: { ...this.toss.p }, v: { ...this.toss.v }, w: { x: 0, y: 0, z: 0 } };
+        for (let t = 0; t < cT - 1e-9; t += DT) flight(s, Math.min(DT, cT - t));
+        this.cW = s.p; this.cAt = this.contactT + this.tossT;
+      }
+      this.toBody(this.cW.x, this.cW.y, this.cW.z, pl, c);
     } else c.set(0.14, 2.8, -0.42);
-    c.y -= 0.12;   // (met on the upper strings: a high toss is still hit at full stretch)
+    c.y -= svOn(pow);   // (the racket-head centre's target: the ball sits on the strings above it)
     const kp = this.kp;
     for (let i = 0; i < 7; i++) {
       lerpPose(SV[i], SV[i], 0, kp);
       if (i === 2) { kp.sp[0] += 0.12 * pow; kp.knR -= 0.2 * pow; kp.knL -= 0.2 * pow; kp.py -= 0.05 * pow; if (st === 'high-toss') { kp.shL[0] = 3.05; kp.hd[0] += 0.12; } }
       if (i === 3) kp.sp[0] += 0.1 * pow;
-      if (i === 4) kp.py = 0.1 + 0.16 * pow;   // off the ground: more leg drive on a big one
+      if (i === 4) kp.py = clamp(c.y - this.reachY(kp, c) + SV_SLACK, 0, 0.3);   // off the ground just enough to meet it at full stretch
       if (i === 5) { kp.hipR[0] -= 0.2 * pow; kp.sp[0] -= 0.1 * pow; }
       if (i === 0 && st === 'rocker') { kp.sp[0] += 0.1; kp.hipL[0] += 0.15; kp.knL -= 0.2; }
       const K = poseToArr(kp, this.SK[i]);
@@ -389,8 +398,31 @@ export class Avatar {
       const al = Math.hypot(F[3], F[4], F[5]) || 1, ax = F[3] / al, ay = F[4] / al, az = F[5] / al;
       if (i === 4) { K[PLEN] = c.x; K[PLEN + 1] = c.y; K[PLEN + 2] = c.z; } else { K[PLEN] = F[0] + RH * ax; K[PLEN + 1] = F[1] + RH * ay; K[PLEN + 2] = F[2] + RH * az; }
       K[PLEN + 3] = ax; K[PLEN + 4] = ay; K[PLEN + 5] = az; K[PLEN + 6] = F[6]; K[PLEN + 7] = F[7]; K[PLEN + 8] = F[8]; K[PLEN + 9] = F[9]; K[PLEN + 10] = 0;
+      if (i === 4) {   // at the contact the racket is in line with the arm, from the shoulder (reachY) to the ball
+        const dx = c.x - _sS.x, dy = c.y - _sS.y - kp.py, dz = c.z - _sS.z, d = Math.hypot(dx, dy, dz) || 1;
+        K[PLEN + 3] = dx / d; K[PLEN + 4] = dy / d; K[PLEN + 5] = dz / d;
+        const e = (F[6] * dx + F[7] * dy + F[8] * dz) / d, nx = F[6] - e * dx / d, ny = F[7] - e * dy / d, nz = F[8] - e * dz / d, nl = Math.hypot(nx, ny, nz) || 1;
+        K[PLEN + 6] = nx / nl; K[PLEN + 7] = ny / nl; K[PLEN + 8] = nz / nl;   // (the face square to it, toward the court)
+      }
     }
     return known ? this.SK : this.SK3;
+  }
+  // How high the racket-head centre reaches (body frame, feet on the court) at a ball at c, with the body in pose p:
+  // the hitting shoulder from the rest bone offsets, then the arm and racket in a straight line to the ball. Moves no bones.
+  reachY(p, c) {
+    const B = this.B, sp = p.sp, h = this.rest.hips;
+    _sM.makeTranslation(h.x, h.y, h.z);
+    _sM.multiply(_sL.makeRotationFromEuler(_sE.set(sp[0] * 0.45, sp[1] * 0.45, sp[2] * 0.5)).setPosition(B.spine.position));
+    _sM.multiply(_sL.makeRotationFromEuler(_sE.set(sp[0] * 0.55, sp[1] * 0.55, sp[2] * 0.5)).setPosition(B.chest.position));
+    _sM.multiply(_sL.makeRotationFromEuler(_sE.set(0, 0, 0.22 * Math.max(0, p.shR[2] - 1.0) + 0.1 * Math.max(0, p.shR[0] - 2.0))).setPosition(B.clavR.position));
+    const s = _sS.copy(B.armR.position).applyMatrix4(_sM), L = B.foreR.position.length() + B.handR.position.length() + RH;
+    return s.y + Math.sqrt(Math.max(0, L * L - (c.x - s.x) ** 2 - (c.z - s.z) ** 2));
+  }
+  // The ball height this figure serves from: full stretch at a toss 14 cm to the side and 42 cm in front (game.js toss)
+  // with a small jump. The toss is thrown so the ball is there at the usual contact, so every build hits at its own reach.
+  serveHeight() {
+    lerpPose(SV[4], SV[4], 0, _svP);
+    return this.reachY(_svP, { x: 0.14, z: -0.42 }) + SV_JUMP + svOn(0.7);
   }
   serveHit(t, pow) { this.mode = 'serve'; this.contactT = t; if (pow != null) this.svPow = pow; for (const o of ALL) if (o !== this) o.splitStep(t - 0.2); }
   idle(standing) { this.mode = standing ? 'stand' : 'ready'; this.sh.known = false; this.cFor = -1; }
