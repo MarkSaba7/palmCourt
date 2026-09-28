@@ -10,6 +10,8 @@ import { Replay, lineMargin } from './replay.js';
 import { judgeCameraSwing, strokeDir } from './camswing.js';
 import { Bus } from './events.js';
 import { proById, randomPro } from './pros.js';
+import { Stats } from './stats.js';   // G1: gear + pro stats (footwork here; shots in groundShot / serveShot)
+import * as Shot from './shot.js';
 
 // =====================================================================
 // GAME: players, CPU, serve and rally flow, line calls
@@ -94,6 +96,15 @@ const Game = {
     // Pros (cfg.pros: roster ids, anything else is the standard player); a standard CPU opponent turns up in a
     // different outfit each match.
     dressPlayers(this.players, cfg.pros || [], cfg.mode);
+    // ---- G1 gear stats: footwork. move.speed scales top speed and acceleration, move.react the first step; reach is
+    // used at contact. The CPU's legs are set in cpuTune (it retunes when the tour changes its level after this).
+    Stats.begin(cfg);
+    for (const pl of this.players) {
+      if (pl.ctl === 'cpu') continue;
+      const S = pl.S = Stats.forPlayer(pl);
+      pl.maxSpeed *= S.move.speed; pl.acc *= S.move.speed * S.move.react; pl.react /= S.move.react;
+    }
+    // ---- end G1
     Cam.mode = this.localIdx >= 0 ? 'play' : 'orbit';
     this.startPoint();
     if (this.localIdx >= 0) { Cam.snap(this.me()); Phone.send({ type: 'resync' }); }
@@ -245,8 +256,8 @@ const Game = {
   // Legs from the level, scaled by persona.speed (startMatch resets maxSpeed, which triggers a retune).
   cpuTune(pl) {
     if (pl.maxSpeed === pl.tunedSpeed && pl.tunedFor === pl.persona && pl.tunedLevel === pl.level) return;
-    const L = pl.level, k = this.cpuStyle(pl).speed - 0.5;
-    pl.maxSpeed = L.speed * (1 + 0.16 * k); pl.acc = L.acc * (1 + 0.2 * k); pl.react = L.react * (1 - 0.3 * k);
+    const L = pl.level, k = this.cpuStyle(pl).speed - 0.5, M = (pl.S = Stats.forPlayer(pl)).move;   // G1: M = gear footwork
+    pl.maxSpeed = L.speed * (1 + 0.16 * k) * M.speed; pl.acc = L.acc * (1 + 0.2 * k) * M.speed * M.react; pl.react = L.react * (1 - 0.3 * k) / M.react;
     pl.tunedSpeed = pl.maxSpeed; pl.tunedFor = pl.persona; pl.tunedLevel = L;
   },
   // Reaction to a new ball: a little variable, and slower when caught moving the wrong way.
@@ -567,7 +578,7 @@ const Game = {
     if (this.state !== 'rally' || b.lastHitter === pl.idx || (b.serve && b.bounces === 0)) return;
     const plan = pl.plan;
     if (!plan) return;
-    const reach = Math.hypot(pl.x - plan.bx, pl.z - plan.bz);
+    const reach = Math.hypot(pl.x - plan.bx, pl.z - plan.bz) / (pl.S ? pl.S.reach : 1);   // G1: gear reach stretches the zone
     if (reach > 1.05 || b.p.y > 2.4 || b.p.y < 0.08) { if (pl.ctl === 'human') UI.timing('Missed'); return; }
     const shot = pl.ctl === 'cpu' ? this.cpuShot(pl, reach) : this.humanShot(pl, pc.swing, reach);
     this.applyHit(pl, shot, {});
@@ -589,10 +600,19 @@ const Game = {
     // The wrong stroke costs some control; less on camera, where the stroke is read from the hand's path.
     let q = (1 - 0.25 * sstep(0.3, 1.0, Math.abs(tau)) - 0.75 * sstep(1.0, 1.6, Math.abs(tau))) * (1 - 0.45 * stretch) * (sw.mismatch ? (cam ? 0.85 : 0.7) : 1);
     if (assist) q = 0.35 + 0.65 * q;
-    const hs = pl.handed === 'R' ? 1 : -1, ss = plan.stroke === 'fh' ? 1 : -1;
-    const power = swingPower(sw);
+    const power = swingPower(sw), spin = swingSpin(sw);
     if (cam) Input.learn(sw);   // this player's usual swing speed, for the next swings' power
-    return this.groundShot(pl, { power: power * (1 - 0.35 * stretch), spin: swingSpin(sw), aimX: clamp(tau, -1.15, 1.15) * ss * hs * (assist ? 2.6 : 3.3), q, tau, diff });
+    // ==== S1 aiming: the person's shot model (src/shot.js) ====
+    const b = this.ball, pow = power * (1 - 0.35 * stretch);
+    return Shot.humanGround({
+      from: { ...b.p }, side: pl.side, mx: pl.x * pl.side, stroke: plan.stroke, handed: pl.handed, volley: b.bounces === 0,
+      pow, spin, drop: spin < -0.55 && pow < 0.2, dirX: null, tau, q, diff, S: this.gearFor(pl),
+    });
+    // ==== end S1 aiming ====
+  },
+  // ==== S1 aiming: gear stats (G1's src/stats.js, once game.js imports Stats); neutral (all 1.0) until then ====
+  gearFor(pl) {
+    try { return typeof Stats !== 'undefined' && Stats && Stats.forPlayer ? Stats.forPlayer(pl) || Shot.NEUTRAL : Shot.NEUTRAL; } catch (e) { return Shot.NEUTRAL; }
   },
   // The CPU's stroke: read the situation (how hard the ball is, where both players are), pick a shot the way a player
   // of its level and style would, and aim it with margins that fit its own consistency. Misses then come from pressure:
@@ -758,6 +778,9 @@ const Game = {
   },
   serveShot(pl, o) {
     const b = this.ball, m = this.match, second = m.serveNo === 2;
+    // ==== S1 aiming: a person's serve lands inside the lines when it's on time (src/shot.js) ====
+    if (pl.ctl === 'human' && o.errMul == null) return Shot.humanServe({ from: { ...b.p }, side: pl.side, court: m.court, second, power: o.power, a: o.a, q: o.q, S: this.gearFor(pl) });
+    // ==== end S1 aiming ====
     const a = clamp(o.a, 0, 1), xl = m.court === 'deuce' ? lerp(-3.75, -0.3, a) : lerp(0.3, 3.75, a);
     const power = second ? Math.min(o.power, 0.62) : o.power;
     const dl = 5.55 + (power - 0.5) * 0.5;
