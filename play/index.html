@@ -216,6 +216,17 @@ html.pad .btn.primary:focus { outline-color: var(--chalk); }
 /* Accessibility (Settings → Accessibility). */
 html.cb { --good: #5aa9ff; --coral: #ff9f40; }
 html.big-hud #hud { zoom: 1.25; }
+/* Larger HUD on a short landscape screen (a phone on its side): the bottom pieces would run into each other, so the
+   speed readout gets compact, the timing read sits above it and narrower, and the stroke cue moves out to the edge. */
+@media (orientation: landscape) and (max-height: 500px) {
+  html.big-hud .shotinfo { min-width: 0; gap: .25em; padding: .5em .9em .55em .8em; }
+  html.big-hud .si-speed { font-size: 2.3em; }
+  html.big-hud :is(.timing-fb, .stroke-hint) { bottom: calc(var(--hp) + 78px + env(safe-area-inset-bottom, 0px)); }
+  html.big-hud .timing-fb { max-width: calc(100% - 2 * (var(--hp) + 190px)); }
+  html.big-hud .stroke-hint { font-size: 28px; }
+  html.big-hud .stroke-hint.right { right: calc(var(--hp) + env(safe-area-inset-right, 0px)); }
+  html.big-hud .stroke-hint.left { left: calc(var(--hp) + env(safe-area-inset-left, 0px)); }
+}
 html.no-timing .timing-fb .tm-row { display: none; }
 html.calm *, html.calm *::before, html.calm *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 
