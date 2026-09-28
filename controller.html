@@ -200,12 +200,23 @@ html.sun .demo { background: #e9eef6; }
 .reconnect { position: fixed; inset: 0; z-index: 8; display: grid; place-items: center; padding: 24px; background: rgba(9,19,29,.82); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 html.sun .reconnect { background: rgba(255,255,255,.9); }
 .reconnect .card { width: 100%; max-width: 420px; min-width: 0; display: grid; gap: 12px; justify-items: center; text-align: center; padding: 24px 20px; background: var(--ink-2); }
-.reconnect b { max-width: 100%; font: 900 clamp(1.7rem, 8.5vw, 2.4rem)/1 var(--display); text-transform: uppercase; overflow-wrap: anywhere; }
+.reconnect b { max-width: 100%; font: 900 clamp(1.5rem, 7.4vw, 2.4rem)/1 var(--display); text-transform: uppercase; white-space: nowrap; }
 .reconnect span { color: var(--mist); }
 .reconnect .row { width: 100%; }
 .spin { width: 54px; height: 54px; border-radius: 50%; border: 5px solid var(--edge); border-top-color: var(--accent); animation: spin 1s linear infinite; }
 .spin.stop { animation: none; border-color: var(--coral); }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* scanning the QR code in the app */
+.scanbtn { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.scanbtn svg { width: 24px; height: 24px; }
+.scan { position: fixed; inset: 0; z-index: 9; display: grid; grid-template-rows: 1fr auto auto; gap: 14px; background: #05080b; color: #f2f5ee;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 18px calc(18px + env(safe-area-inset-bottom, 0px)); }
+.scan .view { position: relative; overflow: hidden; border-radius: 22px; background: #000; }
+.scan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.scan .aim { position: absolute; left: 50%; top: 50%; width: min(64vw, 280px); aspect-ratio: 1; transform: translate(-50%, -50%); border: 4px solid #d6f04a; border-radius: 22px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
+.scan p { text-align: center; font-weight: 700; font-size: 1.05rem; }
+.scan .ghost { color: #f2f5ee; border-color: rgba(242,245,238,.3); background: rgba(242,245,238,.08); }
 
 /* settings sheet */
 .sheet { position: fixed; inset: 0; z-index: 9; display: flex; align-items: flex-end; justify-content: center; background: rgba(0,0,0,.55); }
@@ -265,6 +276,7 @@ html.calm #hitFlash.go { animation: none !important; }
     </div>
     <label class="field" for="code" id="codeField">Game code<input id="code" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCDE" enterkeyhint="go"></label>
     <button class="big" id="btnConnect">Connect</button>
+    <button class="ghost scanbtn" id="btnScan" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/></svg>Scan the QR code</button>
     <button class="link" id="btnOther" hidden>Pair a different game</button>
     <p class="msg" id="connectMsg" role="status" aria-live="polite"></p>
     <div class="spacer"></div>
@@ -370,6 +382,12 @@ html.calm #hitFlash.go { animation: none !important; }
     <span id="recoText">The link to the game dropped.</span>
     <div class="row"><button class="ghost" id="btnRetryNow">Try now</button><button class="ghost" id="btnRecoLeave">Change game</button></div>
   </div>
+</div>
+
+<div class="scan" id="scanBox" hidden role="dialog" aria-modal="true" aria-label="Scan the QR code">
+  <div class="view"><video id="scanVideo" playsinline muted></video><i class="aim"></i></div>
+  <p>Point the camera at the QR code on the game screen.</p>
+  <button class="ghost" id="btnScanClose">Cancel</button>
 </div>
 
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
@@ -812,7 +830,7 @@ async function keepAwake() {
 function letSleep() { const w = wakeLock; wakeLock = null; try { if (w) w.release(); } catch (e) { /* released */ } }
 // Back from the lock screen or another app: the screen lock is gone, and the link may be too. Get both back at once.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
+  if (document.visibilityState !== 'visible') { if (scanStream) stopScan(); return; }
   if (armed && !leaving) keepAwake();
   if (link) keepAlive();
   else if (code && !leaving) { retries = 0; connect(); }    // the phone slept: get the link back straight away
@@ -866,6 +884,7 @@ function renderPair() {
   $('btnConnect').hidden = saved;
   $('btnConnect').textContent = preset ? 'Start' : 'Connect';
   $('btnOther').hidden = !(preset || saved);
+  $('btnScan').hidden = preset || saved || !canScan();
   $('pairLede').textContent = preset ? 'Your game is on the PC screen. Tap Start, then swing.' : saved ? 'Welcome back. One tap and you’re in.' : 'Pair it with Palm Court on your PC or TV, then swing.';
   if (preset) {
     $('foundCode').textContent = code;
@@ -877,6 +896,42 @@ function renderPair() {
   renderInstall();
 }
 function reconnectClicked() { $('code').value = last.code; startClicked(); }
+
+// Scanning the game's QR code inside the app (the installed app has no address bar to open it with). Where the browser
+// can read QR codes (Chrome on Android); elsewhere the phone's camera app opens the link instead.
+let scanStream = null, scanTimer = 0;
+const canScan = () => typeof window.BarcodeDetector === 'function' && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+function codeFrom(text) {
+  const s = String(text || '').trim(), m = /[?&#](?:c|code)=([A-Za-z0-9]{5})\b/.exec(s) || /^([A-Za-z0-9]{5})$/.exec(s);
+  return m ? m[1].toUpperCase() : '';
+}
+async function startScan() {
+  let det;
+  try { det = new window.BarcodeDetector({ formats: ['qr_code'] }); } catch (e) { return; }
+  try { scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); }
+  catch (e) { msg('connectMsg', 'The camera isn’t available here. Type the code instead.', 'err'); return; }
+  const v = $('scanVideo');
+  v.srcObject = scanStream; $('scanBox').hidden = false;
+  try { await v.play(); } catch (e) { /* plays once it has a frame */ }
+  const look = async () => {
+    if (!scanStream) return;
+    try {
+      for (const b of await det.detect(v)) {
+        const c = codeFrom(b.rawValue);
+        if (c) { stopScan(); $('code').value = c; buzz(30); startClicked(); return; }
+      }
+    } catch (e) { /* no frame yet */ }
+    scanTimer = setTimeout(look, 180);
+  };
+  look();
+}
+function stopScan() {
+  clearTimeout(scanTimer);
+  const s = scanStream;
+  scanStream = null;
+  if (s) for (const t of s.getTracks()) t.stop();
+  $('scanVideo').srcObject = null; $('scanBox').hidden = true;
+}
 
 // ---------- feeling each hit ----------
 // Android vibrates. iPhones give web pages no vibration, so they get a click (sound unlocked by the Start tap),
@@ -1207,7 +1262,12 @@ async function install() {
   renderInstall();
 }
 // The service worker keeps the app's shell for an instant start. Scoped to this page only (see racket-sw.js).
+// A new version (VERSION bumped) takes over as it installs: reload into it, unless you're already playing or typing.
 if (navigator.serviceWorker && window.isSecureContext) {
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (had && screen === 'connect' && !armed && !link && !($('code').value && !code)) location.reload();
+  });
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('racket-sw.js', { scope: './controller.html' }).then(() => { appInfo(); }).catch(() => { /* a self-signed PC link: no offline start there */ });
   });
@@ -1241,6 +1301,8 @@ $('btnOther').addEventListener('click', () => {
 });
 $('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') startClicked(); });
 $('code').addEventListener('input', () => { const el = $('code'), v = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5); if (v !== el.value) el.value = v; });
+$('btnScan').addEventListener('click', startScan);
+$('btnScanClose').addEventListener('click', stopScan);
 $('btnMotion').addEventListener('click', allowMotion);
 $('btnMotionBack').addEventListener('click', () => { show('connect'); });
 let tossTimer = 0;
