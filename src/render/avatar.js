@@ -243,6 +243,30 @@ const _tH = new THREE.Vector3(), _tA = new THREE.Vector3(), _tN = new THREE.Vect
 // Every player's figure: one's stroke is the other's cue to split-step.
 const ALL = new Set();
 
+// The serve: stance, toss (the racket arm swings down and back as the other goes up), trophy (toss arm up, racket up
+// behind, knees loaded, back arched), racket drop (legs drive up, the racket falls behind the back), contact (fully
+// stretched, off the ground on a big one), pronation (the forearm turns the face out and down) and finish (racket
+// past the left hip, the back leg kicking up and then stepping through). Body keys + racket rows as for strokes.
+const SV = [
+  P({ sp: [0.02, -1.0, 0], hd: [0.05, 0.9, 0], shR: [0.45, 0, 0.3], elR: 0.8, shL: [0.75, 0, 0.1], elL: 0.9, hipR: [0.05, 0, 0.12], knR: -0.12, hipL: [0.15, 0, -0.08], knL: -0.12 }),
+  P({ py: -0.04, sp: [0.12, -1.05, 0.06], hd: [0.2, 0.85, 0], shR: [0.1, 0, 0.6], elR: 0.3, shL: [1.9, 0, -0.1], elL: 0.1, hipR: [0.2, 0, 0.12], knR: -0.4, hipL: [0.2, 0, -0.1], knL: -0.35 }),
+  P({ py: -0.12, sp: [0.3, -1.1, 0.14], hd: [0.35, 0.8, 0], shR: [0.25, 0, 1.65], elR: 2.1, wrR: [0.4, 0, 0], shL: [2.95, 0, -0.1], elL: 0.05, hipR: [0.42, 0, 0.12], knR: -0.9, hipL: [0.38, 0, -0.1], knL: -0.85 }),
+  P({ py: -0.02, sp: [0.38, -0.75, 0.1], hd: [0.45, 0.6, 0], shR: [1.2, 0, 1.6], elR: 2.4, shL: [2.2, 0, -0.25], elL: 0.4, hipR: [0.15, 0, 0.1], knR: -0.35, hipL: [0.12, 0, -0.08], knL: -0.25 }),
+  P({ py: 0.1, sp: [-0.05, -0.2, 0], hd: [0.45, 0.2, 0], shR: [2.95, 0, 0.3], elR: 0.05, shL: [1.0, 0, -0.3], elL: 1.7, hipR: [-0.1, 0, 0.05], knR: -0.15, hipL: [0.05, 0, -0.05], knL: -0.05 }),
+  P({ py: 0.02, sp: [-0.35, 0.3, 0], hd: [0.4, -0.2, 0], shR: [1.8, 0, 0.2], elR: 0.3, shL: [0.6, 0, -0.5], elL: 1.4, hipR: [-0.45, 0, 0.1], knR: -1.1, hipL: [0.35, 0, -0.08], knL: -0.4 }),
+  P({ py: -0.05, sp: [-0.45, 0.7, 0], hd: [0.35, -0.55, 0], shR: [0.75, 0, -0.75], elR: 0.4, shL: [0.3, 0, -0.45], elL: 0.5, hipR: [0.35, 0, 0.12], knR: -0.45, hipL: [0.2, 0, -0.1], knL: -0.35 }),
+];
+const SVR = [
+  R_([0.12, 0.98, -0.3], [-0.05, 0.25, -0.97]),
+  R_([0.38, 0.72, 0.12], [0.1, -0.55, 0.83]),
+  R_([0.45, 1.55, 0.18], [0.05, 0.92, 0.38]),
+  R_([0.32, 1.78, 0.08], [0.05, -0.93, 0.36]),
+  R_([0, 0, 0], [0.05, 0.93, -0.36], [0, -0.15, -0.99], 1),
+  R_([0.3, 1.5, -0.55], [0.55, -0.15, -0.82], [0.9, 0, 0.4], 0.6),
+  R_([-0.28, 0.88, -0.22], [-0.45, -0.45, 0.77]),
+];
+const _p0 = new THREE.Vector3(), _v0 = new THREE.Vector3();
+
 export class Avatar {
   constructor(kit) {
     this.kit = kit;
@@ -271,6 +295,8 @@ export class Avatar {
     this.sh = { spin: 0.4, pow: 0.6, drop: false, dir: 0, elev: 0.12, volley: false, known: false };
     this.K = Array.from({ length: 5 }, () => new Float32Array(KL)); this.kt = [0, 0, 0, 0, 0]; this.ks = [1, 1, 1, 1, 1];
     this.kv = new Float32Array(KL); this.kp = clonePose(POSE.ready);
+    this.SK = Array.from({ length: 7 }, () => new Float32Array(KL)); this.SK3 = this.SK.slice(0, 3);
+    this.skt = new Float64Array(7); this.skt3 = new Float64Array(3); this.sks = [1, 1, 1, 1, 1, 1, 1]; this.svPow = 0.7; this.toss = null;
     this.c = new THREE.Vector3(0.8, 0.95, -0.3); this.cFor = -1;
     this.ikQ = null; this.ikL = null; this.lGrip = GRIP2;
     this.fkR = (q, f) => this.armFK(q, f);
@@ -333,7 +359,39 @@ export class Avatar {
       s.dir = Math.atan2(_w.x, -_w.z); s.elev = Math.atan2(_w.y, Math.hypot(_w.x, _w.z));
     }
   }
-  serveToss(t) { this.mode = 'serve'; this.tossT = t; this.contactT = 0; }
+  // The toss (p, v: where the ball leaves the hand, world) lets the racket meet the ball at the top.
+  serveToss(t, p, v) { this.mode = 'serve'; this.tossT = t; this.contactT = 0; this.toss = p && v ? { p: { ...p }, v: { ...v } } : null; this.svPow = 0.7; }
+  // The serve's keys: timed from the toss, and around the contact once it's known (the trophy is held until then).
+  buildServe() {
+    const pow = clamp(this.svPow ?? 0.7, 0, 1), st = this.style.serve || 'classic', known = this.contactT > 0;
+    const cT = known ? Math.max(0.25, this.contactT - this.tossT) : 9, Td = lerp(0.3, 0.17, pow), kt = this.skt;
+    kt[4] = cT; kt[3] = cT - 0.45 * Td; kt[5] = cT + 0.1; kt[6] = cT + lerp(0.52, 0.4, pow);
+    kt[2] = Math.min(st === 'high-toss' ? 0.58 : st === 'compact' ? 0.4 : 0.5, kt[3] - 0.08);
+    kt[1] = Math.min(st === 'compact' ? 0.16 : 0.24, kt[2] - 0.08); kt[0] = Math.min(0, kt[1] - 0.08);
+    // Where the ball will be at the contact (the toss falls freely; drag is tiny at this pace).
+    const c = this.c;
+    if (known && this.toss) {
+      const { p, v } = this.toss;
+      this.body.updateWorldMatrix(true, false);
+      this.body.worldToLocal(c.set(p.x + v.x * cT, p.y + v.y * cT - 4.905 * cT * cT, p.z + v.z * cT));
+    } else c.set(0.14, 2.8, -0.42);
+    const kp = this.kp;
+    for (let i = 0; i < 7; i++) {
+      lerpPose(SV[i], SV[i], 0, kp);
+      if (i === 2) { kp.sp[0] += 0.12 * pow; kp.knR -= 0.2 * pow; kp.knL -= 0.2 * pow; kp.py -= 0.05 * pow; if (st === 'high-toss') { kp.shL[0] = 3.05; kp.hd[0] += 0.12; } }
+      if (i === 3) kp.sp[0] += 0.1 * pow;
+      if (i === 4) kp.py = 0.06 + 0.16 * pow;
+      if (i === 5) { kp.hipR[0] -= 0.2 * pow; kp.sp[0] -= 0.1 * pow; }
+      if (i === 0 && st === 'rocker') { kp.sp[0] += 0.1; kp.hipL[0] += 0.15; kp.knL -= 0.2; }
+      const K = poseToArr(kp, this.SK[i]);
+      let F = SVR[i];
+      if (i === 1 && st === 'compact') F = F.map((x, j) => lerp(x, SVR[2][j], 0.55));
+      const al = Math.hypot(F[3], F[4], F[5]) || 1, ax = F[3] / al, ay = F[4] / al, az = F[5] / al;
+      if (i === 4) { K[PLEN] = c.x; K[PLEN + 1] = c.y; K[PLEN + 2] = c.z; } else { K[PLEN] = F[0] + RH * ax; K[PLEN + 1] = F[1] + RH * ay; K[PLEN + 2] = F[2] + RH * az; }
+      K[PLEN + 3] = ax; K[PLEN + 4] = ay; K[PLEN + 5] = az; K[PLEN + 6] = F[6]; K[PLEN + 7] = F[7]; K[PLEN + 8] = F[8]; K[PLEN + 9] = F[9]; K[PLEN + 10] = 0;
+    }
+    return known ? this.SK : this.SK3;
+  }
   serveHit(t, pow) { this.mode = 'serve'; this.contactT = t; if (pow != null) this.svPow = pow; for (const o of ALL) if (o !== this) o.splitStep(t - 0.2); }
   idle(standing) { this.mode = standing ? 'stand' : 'ready'; this.sh.known = false; this.cFor = -1; }
   // A split step: a small hop timed to land as the opponent strikes. A second call for the same stroke is ignored.
@@ -440,10 +498,11 @@ export class Avatar {
       ik = 1; k = 40;
       if (tau > this.kt[4] + 0.12) { this.mode = 'ready'; this.cFor = -1; this.sh.known = false; }
     } else if (this.mode === 'serve') {
-      let u;
-      if (!this.contactT) u = 0.45 * clamp((now - this.tossT) / 0.55, 0, 1);
-      else u = now < this.contactT ? 0.45 + 0.17 * clamp(1 - (this.contactT - now) / 0.14, 0, 1) : 0.62 + 0.38 * clamp((now - this.contactT) / 0.45, 0, 1);
-      strokePose('sv', u, T); k = 30;
+      const ts = now - this.tossT, K = this.buildServe(), kt = K === this.SK ? this.skt : this.skt3;
+      if (K === this.SK3) this.skt3.set(this.skt.subarray(0, 3));
+      arrToPose(spline(K, kt, this.sks, ts + LEAD, this.kv), T);
+      spline(K, kt, this.sks, ts, this.kv);
+      ik = 1; k = 30;
       if (this.contactT && now > this.contactT + 0.7) this.mode = 'ready';
     } else if (this.mode === 'react') {
       lerpPose(POSE.stand, POSE[this.reactKind] || POSE.stand, 1, T);
@@ -518,7 +577,7 @@ export class Avatar {
     _tA.set(kv[P0 + 3], kv[P0 + 4], kv[P0 + 5]).transformDirection(bw);
     _tN.set(kv[P0 + 6], kv[P0 + 7], kv[P0 + 8]).transformDirection(bw);
     _t[0] = _tH.x; _t[1] = _tH.y; _t[2] = _tH.z; _t[3] = _tA.x; _t[4] = _tA.y; _t[5] = _tA.z; _t[6] = _t[7] = _t[8] = 0;
-    W_R[6] = W_R[7] = W_R[8] = 0.25 * kv[P0 + 9];
+    W_R[6] = W_R[7] = W_R[8] = 0.25 * kv[P0 + 9]; W_R[3] = W_R[4] = W_R[5] = 0.3 - 0.18 * kv[P0 + 9];   // at the contact, the head on the ball first
     _sd[0] = T.shR[0]; _sd[1] = T.shR[1]; _sd[2] = T.shR[2]; _sd[3] = T.elR; _sd[4] = T.wrR[0]; _sd[5] = T.wrR[1]; _sd[6] = T.wrR[2];
     const fresh = !this.ikQ, q = this.ikQ || (this.ikQ = Float64Array.from(_sd)), A = this.armPrev || (this.armPrev = new Float64Array(11));
     if (fresh) A.set(_sd);
