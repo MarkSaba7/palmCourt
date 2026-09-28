@@ -19,7 +19,7 @@ await test('zones sit where their names say, for either feed side', () => {
       assert.ok(r.x0 < r.x1 && r.z0 < r.z1 && r.z1 < 0, 'in the far half');
       assert.ok(inCourt((r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2), 'inside the singles court');
     }
-    assert.ok(Math.abs(angle.z1) < Math.abs(cross.z1) && Math.max(Math.abs(angle.z0), Math.abs(angle.z1)) <= 8.2 + 1e-9, 'the short angle is short');
+    assert.ok(Math.min(Math.abs(angle.z0), Math.abs(angle.z1)) < 6.4 && Math.max(Math.abs(angle.z0), Math.abs(angle.z1)) < 9, 'the short angle is short');
   }
   // The far end's hitter mirrors everything.
   const far = D.zoneRect('cross', 1, -1);

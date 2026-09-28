@@ -40,7 +40,7 @@ export function gradeFor(drill, score) {
 export const ZONES = {
   cross: { name: 'Deep cross-court', u: [1.0, 4.115], d: [8.2, 11.885], cross: true, tip: 'swing a touch early' },
   line: { name: 'Down the line', u: [1.7, 4.115], d: [7.0, 11.885], cross: false, tip: 'swing a touch late' },
-  angle: { name: 'Short angle', u: [2.2, 4.115], d: [3.6, 8.2], cross: true, tip: 'early, with slice' },
+  angle: { name: 'Short angle', u: [2.3, 4.115], d: [3.6, 8.9], cross: true, tip: 'early, with slice' },
 };
 export const ZONE_ORDER = ['cross', 'line', 'cross', 'angle', 'line'];
 // The zone as a court rectangle { x0, x1, z0, z1 } for a ball fed to feedSide (+1 = the hitter's right) and a hitter
@@ -98,7 +98,8 @@ export function feederPersona(tier) {
 // ---- live coaching hint, for the control in use ----
 // ctx: { control: 'mouse'|'hand'|'paddle'|'phone', pad (a controller is in use), touch (a touch screen), glyph (the
 // controller's A button name), handed: 'R'|'L', phase: 'ready'|'incoming'|'now'|'serve'|'toss', stroke: 'fh'|'bh',
-// feedback: null|'early'|'late'|'miss'|'wrong'|'good'|'clean'|'zone'|'out'|'net'|'in', zone: ZONES key or null }.
+// feedback: null|'early'|'late'|'miss'|'wrong'|'good'|'clean'|'zone'|'out'|'net'|'in', zone: ZONES key or null, serve: the
+// feedback is about a serve }.
 // Returns { arrow, head, text, tone: ''|'now'|'warn'|'good' }. The arrow is the swing's direction across the body as the
 // player sees it in the mirrored camera picture (a right-hander's forehand sweeps right to left), like the HUD's hint.
 export function strokeArrow(stroke, handed = 'R') { return (stroke === 'fh') === (handed !== 'L') ? '←' : '→'; }
@@ -117,6 +118,8 @@ export function coachHint(ctx = {}) {
     if (f === 'late') return { arrow: '', head: 'A bit late', text: 'Swing earlier: start as the ball bounces on your side.', tone: 'warn' };
     if (f === 'miss') return { arrow: cam || phone ? arrow : '', head: 'Swing!', text: `${verb} as the ball reaches you. Your player does the running.`, tone: 'warn' };
     if (f === 'wrong') return { arrow, head: 'Other way', text: `A ${STROKE[stroke].toLowerCase()} goes ${arrow}: swing across your body the other way.`, tone: 'warn' };
+    if (ctx.serve && (f === 'out' || f === 'net')) return { arrow: '', head: f === 'net' ? 'Net' : 'Out', text: 'Hit it just as the ball starts to drop. The harder you swing, the more it can miss.', tone: 'warn' };
+    if (ctx.serve && f === 'in') return { arrow: '', head: 'In!', text: 'A faster swing serves faster, and scores more.', tone: 'good' };
     if (f === 'out') return { arrow: '', head: 'Out', text: 'A slower, smoother swing keeps it in. Timing aims it.', tone: 'warn' };
     if (f === 'net') return { arrow: '', head: 'Net', text: mode === 'mouse' ? 'Flick the mouse upward as you click for topspin and height.' : 'Swing low to high to lift it over the net.', tone: 'warn' };
     if (f === 'clean') return { arrow: '', head: 'Clean timing!', text: aim || 'Just like that.', tone: 'good' };

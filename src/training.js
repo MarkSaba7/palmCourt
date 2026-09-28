@@ -56,7 +56,7 @@ const CSS = `
 .tr-result h3 { margin: 0; font: 900 44px/.9 var(--display); text-transform: uppercase; }
 .tr-result p { margin: 4px 0 0; color: var(--mist); font-size: 14px; }
 .tr-pb { color: var(--good) !important; font-weight: 700; }
-.tr-stats { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 14px; font-size: 14px; }
+.tr-stats { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; font-size: 14px; }
 .tr-stats li { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding-top: 6px; color: var(--mist); }
 .tr-stats b { color: var(--chalk); font-variant-numeric: tabular-nums; }
 .tr-rw { margin: 0; padding: 10px 12px; list-style: none; display: grid; gap: 4px; font-size: 13px; background: rgba(242,245,238,.04); border: 1px solid var(--edge); }
@@ -109,7 +109,7 @@ html.drilling #scoreboard, html.drilling #pauseScore { display: none !important;
 @media (max-width: 620px) { .tut-steps { grid-template-columns: 1fr; } }
 /* first-run card on the menu */
 .tut-card { position: absolute; right: max(20px, 4vw); top: 50%; transform: translateY(-50%); width: min(360px, calc(100vw - 40px)); z-index: 1; display: grid; gap: 10px; padding: 18px 18px 16px;
-  background: var(--panel); border: 1px solid var(--edge); border-top: 3px solid var(--optic); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); animation: fadeIn .4s var(--ease-out); }
+  background: var(--panel); border: 1px solid var(--edge); border-top: 3px solid var(--optic); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 .tut-card h3 { margin: 0; font: 900 34px/.92 var(--display); text-transform: uppercase; }
 .tut-card p { margin: 0; color: var(--mist); font-size: 14px; }
 @media (max-width: 900px) { .tut-card { position: fixed; top: auto; bottom: 12px; right: 12px; left: 12px; width: auto; transform: none; } }
@@ -412,7 +412,7 @@ class Run {
   // The live hint for the control in use.
   hint() {
     const G = Game, me = this.me(), b = G.ball, now = Clock.now(), st = G.state;
-    const ctx = { control: Settings.control, pad: Pad.active, touch: touch(), glyph: Pad.glyph('a'), handed: me.handed, stroke: this.stroke, zone: this.zoneKey, feedback: null, phase: 'ready' };
+    const ctx = { control: Settings.control, pad: Pad.active, touch: touch(), glyph: Pad.glyph('a'), handed: me.handed, stroke: this.stroke, zone: this.zoneKey, feedback: null, phase: 'ready', serve: this.serving() };
     const fresh = this.feedback && now - this.fbAt < (this.fbSticky ? 2.6 : 1.2) ? this.feedback : null;
     if (this.serving() && (st === 'serve' || st === 'toss')) ctx.phase = st;
     else if (st === 'rally' && me.plan && b.lastHitter !== 0 && me.hitFor !== b.rally) {
@@ -573,7 +573,7 @@ export const Training = {
       return;
     }
     if (screen !== 'setup' && screen !== 'phone' && screen !== null) this.returnTo = null;
-    if (screen === 'drillOver' || screen === 'training' || screen === 'tutorial') $('hud').hidden = true;
+    if (screen === 'drillOver' || screen === 'training' || screen === 'tutorial') queueMicrotask(() => { if (UI.screen === screen) $('hud').hidden = true; });   // (UI.go sets the HUD after this)
     if (screen === 'options' && $('optTutorial')) { const m = this.inMatch(); $('optTutorial').disabled = m; $('optTutHint').textContent = m ? 'Available from the main menu.' : 'Controls, camera check and a guided rally.'; }
     if (screen === 'menu' && this.run && !Game.cfg?.drill) this.stop();
   },
