@@ -33,10 +33,10 @@ async function phone({ fhSign = 1 } = {}) {
     id, hidden: false, textContent: '', className: '', value: '', style: {}, offsetWidth: 0, disabled: false, listeners: {},
     classList: { add() {}, remove() {}, toggle() {} }, addEventListener(ev, fn) { this.listeners[ev] = fn; }, append() {}, setAttribute() {}, click() {},
   });
-  const sockets = [], listeners = {};
+  const sockets = [], listeners = {}, hooks = {};
   class WebSocket {
     constructor(url) { this.url = url; this.readyState = 1; sockets.push(this); }
-    send(d) { out.push({ at: now, ...JSON.parse(d) }); }
+    send(d) { const m = { at: now, ...JSON.parse(d) }; out.push(m); if (hooks.onSend) hooks.onSend(m); }
     close() { this.readyState = 3; }
   }
   const out = [];
@@ -85,7 +85,7 @@ async function phone({ fhSign = 1 } = {}) {
     }
     return tBest;
   };
-  return { ctx, out, game, advance, still, swing, sample, pong, get now() { return now; }, els };
+  return { ctx, out, game, advance, still, swing, sample, pong, hooks, later: setTimeout, get now() { return now; }, els };
 }
 const sent = (p, type) => p.out.filter((m) => m.type === type);
 
@@ -185,6 +185,31 @@ await test('clock offset: the fastest round trip wins, however slow the others w
   p.game({ type: 'resync' });   // start the samples over
   for (const [up, down] of [[4, 160], [80, 6], [5, 5], [30, 90], [3, 220]]) { p.advance(1); p.pong(up, down); p.advance(400); }
   assert.ok(Math.abs(p.ctx.PalmRacket.offset - OFFSET) < 0.6, `offset ${p.ctx.PalmRacket.offset}`);
+});
+
+await test('an unset phone learns forehand from backhand from the hits, which now come back before the swing ends', async () => {
+  const p = await phone({ fhSign: 0 });
+  p.els.btnCalibSkip.listeners.click();
+  p.game({ type: 'state', inMatch: true, serving: false, tossed: false, stroke: 'fh' });
+  let hits = 0;
+  p.hooks.onSend = (m) => { if (m.type === 'swing') p.later(() => { hits++; p.game({ type: 'hit', power: 0.6, stroke: 'fh' }); }, 20); };
+  for (let i = 0; i < 3; i++) {
+    p.still(300);
+    const tPeak = p.swing({ sign: -1 });
+    assert.equal(hits, i + 1);
+    assert.ok(sent(p, 'swing')[i].at - tPeak < 40 && sent(p, 'swing')[i].dir === null);
+    p.still(700);
+  }
+  assert.equal(p.ctx.PalmRacket.cal.fhSign, -1);
+});
+
+await test('lifting the phone still tosses on your serve', async () => {
+  const p = await phone();
+  p.game({ type: 'state', inMatch: true, serving: true, tossed: false, stroke: null });
+  p.still(300);
+  for (let t = 0; t < 260; t += 1000 / HZ) { p.advance(1000 / HZ); p.sample(0, 12 * Math.sin((Math.PI * t) / 260)); }
+  p.still(100);
+  assert.equal(sent(p, 'toss').length, 1);
 });
 
 await test('grip setup still learns forehand and backhand, and sends nothing to the game', async () => {
