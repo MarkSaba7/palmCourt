@@ -18,6 +18,7 @@ import { TourUI } from './tourui.js';
 import * as Economy from './economy.js';
 import { ProgressUI } from './progress-ui.js';
 import { CloudUI } from './cloud-ui.js';
+import { Training } from './training.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t, p) => { const el = $('loadingMsg'); if (el) el.textContent = t; if (p != null && $('loadBar')) $('loadBar').style.setProperty('--p', p + '%'); };
@@ -181,6 +182,7 @@ async function boot() {
   TourUI.init();
   CloudUI.init();   // optional cloud save + leaderboards: adds nothing unless CONFIG.cloud.enabled
   Game.init();
+  Training.init();   // after Game.init: its input listener runs after the game's
   if (software) UI.gpuWarning();
   Game.startAttract();
   await warmShaders();
@@ -190,7 +192,7 @@ async function boot() {
   UI.go('menu');
   const q = new URLSearchParams(location.search).get('join');
   if (q && /^[A-Za-z0-9]{5}$/.test(q)) UI.openLobby(q.toUpperCase());
-  window.PalmCourt = { Game, Net, Input, Settings, Clock, Perf, Tracker, Phone, Env, Stadium, World, Cam, Crowd, Replay, Effects, renderer, scene, camera, Profile, Progress, Economy, Platform, ProgressUI };
+  window.PalmCourt = { Game, Net, Input, Settings, Clock, Perf, Tracker, Phone, Env, Stadium, World, Cam, Crowd, Replay, Effects, renderer, scene, camera, Profile, Progress, Economy, Platform, ProgressUI, Training };
 }
 boot().catch((e) => {
   console.error(e);

@@ -4,7 +4,7 @@
 import { Bus } from './events.js';
 import { Clock, Settings } from './core.js';
 import { Profile } from './profile.js';
-import { rewardsFor, recordMatch, dailyChallenges, rerollChallenge, challengeById, challengeStep, checkAchievements, utcDay } from './economy.js';
+import { rewardsFor, recordMatch, dailyChallenges, rerollChallenge, challengeById, challengeStep, checkAchievements, utcDay, TRAINING } from './economy.js';
 
 const CAM = ['hand', 'paddle', 'phone'];   // clean-timing hits count for camera and phone players
 const ON_TIME = 0.35;                      // |tau| under this is the HUD's "On time"
@@ -108,11 +108,42 @@ export const Progress = {
   canReroll() { const d = day(); return !d.rerolled; },
   // Achievements as earned: id -> time (Profile.data.achievements); see economy ACHIEVEMENTS / achievementProgress.
   earned(id) { return !!Profile.data.achievements[id]; },
+
+  // ---- training drills (src/training.js) ----
+  // Profile.data.training = { best: { drill: { v, score, grade, t } }, runs: { drill: n }, day: { date, xp, fuzz } }: the
+  // personal bests, how often each drill was run, and what drills paid today (for the daily cap). Kept apart from the
+  // match stats, history, challenges and achievements.
+  training() {
+    const d = Profile.data, o = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
+    const T = (d.training = o(d.training));
+    T.best = o(T.best); T.runs = o(T.runs); T.day = o(T.day);
+    if (T.day.date !== utcDay()) T.day = { date: utcDay(), xp: 0, fuzz: 0 };
+    return T;
+  },
+  best(drill) { return this.training().best[drill] || null; },
+  // Pay out a finished drill. s: { mode: 'training', drill, name, grade, score, pb (the value the personal best keeps),
+  // ... }. Returns { summary, xp, fuzz, lines, capped, leftToday: { xp, fuzz }, best: { isNew, prev, value }, levelFrom, levelTo }.
+  applyTraining(s) {
+    const P = Profile, T = this.training(), key = s.drill, prev = T.best[key] || null, value = Math.max(0, Math.round(+s.pb || 0));
+    const isNew = value > 0 && (!prev || value > (+prev.v || 0));
+    const firstTutorial = key === 'tutorial' && !T.runs.tutorial;
+    const r = rewardsFor(s, { today: T.day, newBest: isNew && !!prev, firstTutorial });
+    const levelFrom = P.level;
+    T.day.xp += r.counted.xp; T.day.fuzz += r.counted.fuzz;
+    T.runs[key] = (T.runs[key] || 0) + 1;
+    if (isNew) T.best[key] = { v: value, score: Math.round(+s.score || 0), grade: s.grade || '', t: Date.now() };
+    P.addXP(r.xp, `training ${key}`); P.addFuzz(r.fuzz, `training ${key}`);
+    P.changed();
+    const res = { summary: s, xp: r.xp, fuzz: r.fuzz, lines: r.lines, capped: r.capped, leftToday: { xp: Math.max(0, TRAINING.daily[0] - T.day.xp), fuzz: Math.max(0, TRAINING.daily[1] - T.day.fuzz) }, best: { isNew, prev, value }, levelFrom, levelTo: P.level };
+    this.lastTraining = res;
+    P.emit('training', res);
+    return res;
+  },
 };
 
 // ---- follow the match on the Bus ----
 Bus.on('match:start', ({ cfg }) => {
-  Progress.track = (cfg.mode === 'cpu' || cfg.mode === 'online') && cfg.localIdx >= 0 ? { t0: Clock.now(), hits: 0, onTime: 0, clean: 0, fastest: 0, control: Settings.control, tod: cfg.tod || Settings.tod } : null;
+  Progress.track = (cfg.mode === 'cpu' || cfg.mode === 'online') && cfg.localIdx >= 0 && !cfg.drill ? { t0: Clock.now(), hits: 0, onTime: 0, clean: 0, fastest: 0, control: Settings.control, tod: cfg.tod || Settings.tod } : null;
 });
 Bus.on('hit', (h) => {
   const t = Progress.track;
