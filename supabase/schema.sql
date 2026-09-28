@@ -159,7 +159,7 @@ begin
   if char_length(n) < 3 or char_length(n) > 16 then
     raise exception 'Names are 3 to 16 characters' using errcode = '22023';
   end if;
-  if n !~ '^[[:alnum:]][[:alnum:] _''-]*$' then
+  if n !~ '^[[:alnum:]À-ɏ][[:alnum:]À-ɏ _''-]*$' then   -- accented Latin letters too, whatever the database locale
     raise exception 'Use letters, numbers, spaces, - _ or '' only' using errcode = '22023';
   end if;
   if char_length(regexp_replace(n, '[^0-9]', '', 'g')) > 6 then
