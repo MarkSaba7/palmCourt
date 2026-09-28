@@ -160,7 +160,7 @@ const STYLE = `
 .pg-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px 20px;flex-wrap:wrap}
 .pg-wallet{display:flex;align-items:center;gap:12px}
 .pg-wallet .pg-lv{--s:38px}
-.pg-wxp{display:grid;gap:6px;width:170px}
+.pg-wxp{display:grid;gap:6px;flex:0 1 170px;min-width:0}
 .pg-wxp small{font:700 11px/1 var(--body);color:var(--mist);letter-spacing:.05em;font-variant-numeric:tabular-nums}
 .pg-wallet .pg-fuzz{font-size:24px;padding-left:12px;border-left:1px solid var(--edge)}
 .pg-tabs{display:flex;gap:2px;border-bottom:1px solid var(--edge);overflow-x:auto;scrollbar-width:none}
@@ -276,7 +276,7 @@ const STYLE = `
 .pg-toast b{font:800 18px/1.05 var(--display);text-transform:uppercase;letter-spacing:.02em}
 .pg-toast span{font-size:12px;color:var(--mist)}
 @media (max-height:860px) and (min-width:700px){.over-slab>.pg-rw{grid-column:1;grid-row:3}}
-@media (max-width:480px){.pg-rw-xpl{flex-wrap:wrap;row-gap:4px}.pg-rw-lines li{grid-template-columns:minmax(0,1fr) 50px 46px}.pg-rw-lines li>span{white-space:normal}}
+@media (max-width:480px){.pg-ch{grid-template-columns:30px minmax(0,1fr);column-gap:12px}.pg-ch-n{grid-row:span 3;font-size:30px}.pg-ch>.pg-rwd{grid-column:2}.pg-ch b{font-size:19px}.pg-rw-xpl{flex-wrap:wrap;row-gap:4px}.pg-rw-lines li{grid-template-columns:minmax(0,1fr) 50px 46px}.pg-rw-lines li>span{white-space:normal}}
 @keyframes pgPop{from{transform:scale(.35);opacity:0}to{transform:none;opacity:1}}
 @keyframes pgIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
 @keyframes pgFlash{0%{box-shadow:0 0 0 0 rgba(214,240,74,.9)}100%{box-shadow:0 0 0 8px rgba(214,240,74,0)}}
@@ -435,7 +435,10 @@ export const ProgressUI = {
     $('pgMsg').textContent = '';
     this.render();
     $('pgBody').scrollTop = 0;
-    if (focusTab) $(`pgTab-${tab}`).focus({ preventScroll: true });
+    // On a phone the tab strip scrolls sideways: bring the open tab into view (Q/E, controller bumpers).
+    const tb = $(`pgTab-${tab}`), list = tb.parentElement, r = tb.getBoundingClientRect(), lr = list.getBoundingClientRect();
+    if (r.left < lr.left || r.right > lr.right) list.scrollLeft += r.left - lr.left - (lr.width - r.width) / 2;
+    if (focusTab) tb.focus({ preventScroll: true });
   },
   changed() {
     if (this.queued) return;
