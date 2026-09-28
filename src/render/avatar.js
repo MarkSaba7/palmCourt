@@ -261,7 +261,7 @@ const SVR = [
   R_([0.38, 0.72, 0.12], [0.1, -0.55, 0.83]),
   R_([0.45, 1.55, 0.18], [0.05, 0.92, 0.38]),
   R_([0.32, 1.78, 0.08], [0.05, -0.93, 0.36]),
-  R_([0, 0, 0], [0.05, 0.93, -0.36], [0, -0.15, -0.99], 1),
+  R_([0, 0, 0], [0.03, 0.98, -0.2], [0, -0.15, -0.99], 1),
   R_([0.3, 1.5, -0.55], [0.55, -0.15, -0.82], [0.9, 0, 0.4], 0.6),
   R_([-0.28, 0.88, -0.22], [-0.45, -0.45, 0.77]),
 ];
@@ -375,12 +375,13 @@ export class Avatar {
       this.body.updateWorldMatrix(true, false);
       this.body.worldToLocal(c.set(p.x + v.x * cT, p.y + v.y * cT - 4.905 * cT * cT, p.z + v.z * cT));
     } else c.set(0.14, 2.8, -0.42);
+    c.y -= 0.12;   // (met on the upper strings: a high toss is still hit at full stretch)
     const kp = this.kp;
     for (let i = 0; i < 7; i++) {
       lerpPose(SV[i], SV[i], 0, kp);
       if (i === 2) { kp.sp[0] += 0.12 * pow; kp.knR -= 0.2 * pow; kp.knL -= 0.2 * pow; kp.py -= 0.05 * pow; if (st === 'high-toss') { kp.shL[0] = 3.05; kp.hd[0] += 0.12; } }
       if (i === 3) kp.sp[0] += 0.1 * pow;
-      if (i === 4) kp.py = 0.06 + 0.16 * pow;
+      if (i === 4) kp.py = 0.1 + 0.16 * pow;   // off the ground: more leg drive on a big one
       if (i === 5) { kp.hipR[0] -= 0.2 * pow; kp.sp[0] -= 0.1 * pow; }
       if (i === 0 && st === 'rocker') { kp.sp[0] += 0.1; kp.hipL[0] += 0.15; kp.knL -= 0.2; }
       const K = poseToArr(kp, this.SK[i]);
@@ -429,7 +430,7 @@ export class Avatar {
     kt[0] = -Tpre; kt[1] = -0.45 * Tpre; kt[2] = 0; kt[3] = (dr ? 0.5 : 0.3) * Tpost; kt[4] = Tpost;
     this.ks[2] = dr ? 0.45 : 1 - 0.2 * sl;
     // Follow-through toward the ball: wrap further across for a crosscourt ball, out toward it for down the line.
-    const al = clamp(-sh.dir * 1.3, -0.7, 0.7), ca = Math.cos(al), sa = Math.sin(al);
+    const al = clamp(-sh.dir * 2, -0.8, 0.8), ca = Math.cos(al), sa = Math.sin(al);
     // Reaching: a wide ball (lunge), a low one (bend), one well in front (lean).
     const ex = Math.abs(c.x) - 0.8, L = sstep(0.12, 0.65, ex), low = sstep(0.8, 0.35, c.y), high = sstep(1.3, 1.9, c.y), fw = sstep(0.15, 0.7, -c.z - 0.3);
     const yawK = vo ? [0.45, 0.4, 0.5, 0.3, 0.25] : dr ? [0.7, 0.7, 1, 0.3, 0.2] : null;
@@ -454,7 +455,7 @@ export class Avatar {
       oR[0] += 0.25 * oLe; oR[2] += s * 0.45 * oLe; iR[2] -= s * 0.3 * oLe;
       if (bh) { kp.knL -= 0.75 * oLe; kp.knR = lerp(kp.knR, -0.1, oLe); } else { kp.knR -= 0.75 * oLe; kp.knL = lerp(kp.knL, -0.1, oLe); }
       // The body goes to the ball: a step out to a wide one, in toward a jamming one, forward to a short one.
-      kp.px += s * clamp(ex - 0.1, -0.35, 0.7) * 0.75 * e; kp.pz -= clamp(-c.z - 0.4, -0.5, 0.6) * 0.6 * e; kp.sp[2] -= s * 0.2 * oLe;
+      kp.px += s * (clamp(ex - 0.1, -0.35, 0.7) * 0.75 + (bh ? 0.25 * L : 0)) * e; kp.pz -= clamp(-c.z - 0.4, -0.5, 0.6) * 0.6 * e; kp.sp[2] -= s * 0.2 * oLe;
       kp.knR -= 0.65 * lw; kp.knL -= 0.65 * lw; kp.hipR[0] += 0.4 * lw; kp.hipL[0] += 0.4 * lw; kp.sp[0] -= 0.18 * lw;
       kp.sp[0] -= 0.2 * fw * e;
       kp.knR = Math.min(-0.05, kp.knR + 0.2 * high * e); kp.knL = Math.min(-0.05, kp.knL + 0.2 * high * e);
@@ -484,7 +485,9 @@ export class Avatar {
     // Place the figure first: the racket is aimed at the ball in world space.
     const lat = pl.vx * pl.side, fwd = -pl.vz * pl.side;
     let yawT = 0;
-    if ((this.mode === 'ready' || this.mode === 'stand') && speed > 1.4) yawT = clamp(Math.atan2(-lat, Math.abs(fwd) + 0.01), -1.1, 1.1) * clamp((speed - 1.4) / 2, 0, 1);
+    // Short sideways moves (recovering to the middle, adjusting) are side shuffles facing the net, not a run.
+    this.shuf = damp(this.shuf || 0, this.mode === 'ready' && speed > 0.3 && speed < 3.6 && Math.abs(lat) > 0.75 * speed ? 1 : 0, 10, dt);
+    if ((this.mode === 'ready' || this.mode === 'stand') && speed > 1.4) yawT = clamp(Math.atan2(-lat, Math.abs(fwd) + 0.01), -1.1, 1.1) * clamp((speed - 1.4) / 2, 0, 1) * (1 - this.shuf);
     this.yaw = damp(this.yaw, yawT, 8, dt);
     this.root.position.set(pl.x, 0, pl.z);
     this.root.rotation.y = (pl.side > 0 ? 0 : Math.PI) + this.yaw;
@@ -519,20 +522,31 @@ export class Avatar {
         lerpPose(T, this.tmpPose, this.prep * 0.85, T);
         ik = this.prep * 0.85;
       } else this.cFor = -1;
-      const r = clamp(speed / 5, 0, 1);
+      const r = clamp(speed / 5, 0, 1) * (1 - this.shuf), gait = this.style.gait, g = gait === 'bouncy' ? 1.8 : gait === 'glide' ? 0.5 : 1;
       if (r > 0.02) {
         this.runPhase += dt * (5 + speed * 1.7);
         const s = Math.sin(this.runPhase), c = Math.cos(this.runPhase);
         T.hipR[0] = lerp(T.hipR[0], 0.25 + s * 0.8, r); T.hipL[0] = lerp(T.hipL[0], 0.25 - s * 0.8, r);
         T.knR = lerp(T.knR, -0.35 - Math.max(0, -c) * 1.1, r); T.knL = lerp(T.knL, -0.35 - Math.max(0, c) * 1.1, r);
-        T.shL[0] = lerp(T.shL[0], 0.3 - s * 0.6, r); T.py -= 0.03 * Math.abs(c) * r; T.sp[0] -= 0.12 * r;
+        T.shL[0] = lerp(T.shL[0], 0.3 - s * 0.6, r); T.py -= 0.03 * g * Math.abs(c) * r; T.sp[0] -= 0.12 * r;
       } else if (this.mode === 'ready') {
-        const b = Math.sin(now * 5.2) * 0.012;   // weight shifting on the toes
+        const b = Math.sin(now * (gait === 'bouncy' ? 7 : 5.2)) * 0.012 * g;   // weight shifting on the toes
         T.py += b; T.knR -= b * 2; T.knL -= b * 2;
+      }
+      if (this.shuf > 0.02) {
+        this.shufPhase = (this.shufPhase || 0) + dt * (8 + speed * 2.5);
+        const w = this.shuf, open = 0.5 + 0.5 * Math.sin(this.shufPhase);
+        T.hipR[2] += w * (0.05 + 0.17 * open); T.hipL[2] -= w * (0.05 + 0.17 * open);
+        T.hipR[0] += 0.1 * w; T.hipL[0] += 0.1 * w; T.knR -= 0.2 * w; T.knL -= 0.2 * w;
+        T.py += w * (0.03 * g * Math.abs(Math.cos(this.shufPhase)) - 0.05);
       }
       // Split step: a small hop as the opponent strikes, landing low and wide.
       const h = now - this.hop;
-      if (h >= 0 && h < 0.38) { const u = h / 0.38; T.py += Math.sin(u * Math.PI) * 0.07 - Math.sin(u * Math.PI * 2) * 0.03 * (u > 0.5 ? 1 : 0); T.hipR[2] += 0.12 * Math.sin(u * Math.PI); T.hipL[2] -= 0.12 * Math.sin(u * Math.PI); }
+      if (h >= 0 && h < 0.44) {
+        const u = h / 0.44, up = Math.sin(clamp(u / 0.45, 0, 1) * Math.PI), land = u > 0.45 ? Math.sin(((u - 0.45) / 0.55) * Math.PI) : 0, wd = 0.1 * up + 0.17 * land;
+        T.py += 0.07 * up - 0.07 * land; T.knR += 0.2 * up - 0.4 * land; T.knL += 0.2 * up - 0.4 * land;
+        T.hipR[0] += 0.18 * land; T.hipL[0] += 0.18 * land; T.hipR[2] += wd; T.hipL[2] -= wd;
+      }
       T.shR[0] += this.armLift;
     }
     lerpPose(this.pose, T, 1 - Math.exp(-k * dt), this.pose);
