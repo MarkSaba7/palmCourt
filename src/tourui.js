@@ -121,7 +121,7 @@ const HTML = `
       <section aria-labelledby="tourCabH"><h3 class="tour-h" id="tourCabH">Trophy cabinet</h3><div id="tourCabinet" class="tour-cabinet"></div></section>
       <section aria-labelledby="tourTabH"><h3 class="tour-h" id="tourTabH">Rankings</h3><ol id="tourTable" class="tour-table"></ol></section>
     </div>
-    <div class="actions row"><button id="btnTourBack" class="btn">Main menu</button><button id="btnTourSkip" class="btn ghost">Skip this week</button></div>
+    <div class="actions row"><button id="btnTourBack" class="btn" data-back>Main menu</button><button id="btnTourSkip" class="btn ghost">Skip this week</button></div>
   </section>
 </main>
 <main id="tourEvent" class="screen center" hidden aria-labelledby="teName">
@@ -132,7 +132,7 @@ const HTML = `
     </header>
     <div id="teMain"></div>
     <section aria-labelledby="teDrawH"><h3 class="tour-h" id="teDrawH">Draw</h3><div id="teBracket" class="bracket"></div></section>
-    <div class="actions row"><button id="btnTeBack" class="btn">World Tour</button></div>
+    <div class="actions row"><button id="btnTeBack" class="btn" data-back>World Tour</button></div>
   </section>
 </main>`;
 
@@ -164,10 +164,8 @@ export const TourUI = {
     $('btnTourBack').onclick = () => UI.go('menu');
     $('btnTourSkip').onclick = () => { if (Tour.skipWeek()) this.renderHub(); };
     $('btnTeBack').onclick = () => this.open();
-    document.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape') return;
-      if (UI.screen === 'tourEvent') this.open(); else if (UI.screen === 'tour') UI.go('menu');
-    });
+    // Esc / controller B: Nav.back (options.js) presses the data-back button (event → World Tour → menu). A key handler
+    // of our own here ran as well, so one Esc from an event went all the way to the menu.
     Bus.on('screen', ({ screen }) => this.onScreen(screen));
     Bus.on('match:start', ({ cfg }) => this.onMatchStart(cfg));
     Bus.on('tour:match', (m) => { this.lastMatch = m; if (m.retired) this.pendingEvent = true; });
@@ -271,7 +269,7 @@ export const TourUI = {
         <h3>${champ ? `Champion!` : esc(v.label)}</h3>
         <ul><li><b>+${nf(v.pts)}</b> ranking points</li><li><b>+${fmtFuzz(v.fuzz)}</b></li><li><b>+${fmtXP(v.xp)}</b></li>${champ ? '<li>Trophy added to your cabinet</li>' : ''}</ul>
         <p>World ranking #${v.rankFrom} → <b>#${v.rankTo}</b>${!champ && v.champion ? ` · ${esc(v.champion.name)} won the title` : ''}</p>
-        <div class="actions row"><button class="btn primary" id="btnTeDone">Back to World Tour</button></div>
+        <div class="actions row"><button class="btn primary" id="btnTeDone" data-back>Back to World Tour</button></div>
       </div>`;
       $('btnTeDone').onclick = () => this.open();
     }
