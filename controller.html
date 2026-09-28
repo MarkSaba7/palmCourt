@@ -249,7 +249,7 @@ html.calm #hitFlash.go { animation: none !important; }
 <div id="app">
   <header class="bar">
     <span class="brand"><img src="site/racket-icon.svg" alt="" width="30" height="30"><span>Palm Court <b>Racket</b></span></span>
-    <span class="net" id="net" role="status"><i></i><span id="netText">Offline</span></span>
+    <span class="net" id="net" role="status"><i></i><span id="netText">Not linked</span></span>
     <button class="iconbtn" id="btnSettings" aria-label="Settings" aria-haspopup="dialog">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h9M18 7h2M4 17h3M12 17h8"/><circle cx="15.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/></svg>
     </button>
@@ -461,7 +461,7 @@ function setNet(on, text) {
   netText = text;
   $('net').classList.toggle('on', on);
   $('net').setAttribute('aria-label', text);
-  $('netText').textContent = on ? (lag ? `${lag} ms` : 'Linked') : (/^(Reconnecting|Connecting|Waiting)/.exec(text) || ['Offline'])[0];
+  $('netText').textContent = on ? (lag ? `${lag} ms` : 'Linked') : (/^(Reconnecting|Connecting|Waiting)/.exec(text) || ['Not linked'])[0];
   renderLink();
   if (screen === 'connect') renderPair();
 }
