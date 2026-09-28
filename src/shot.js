@@ -38,7 +38,7 @@ export function aimGround(o) {
   else {
     const d = clamp(o.dirX, -1.3, 1.3), a = Math.abs(d), s = Math.sign(d);
     // A clear swing to one side lands well inside that sideline; beyond it (a very wide swing) closer to the line.
-    const safe = W - lerp(1.15, 1.45, pow), line = W - 0.5;
+    const safe = W - lerp(1.3, 1.6, pow), line = W - 0.5;
     x = lerp(base, s * safe, Math.min(1, a)) + s * sstep(1, 1.3, a) * (line - safe);
     // Timing still pulls or pushes it: a little when roughly on time, a lot when clearly early or late.
     x += tau * bs * (0.8 + 1.4 * sstep(0.45, 1.3, Math.abs(tau)));
