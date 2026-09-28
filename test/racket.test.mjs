@@ -189,6 +189,21 @@ await test('clock offset: the fastest round trip wins, however slow the others w
   assert.ok(Math.abs(p.ctx.PalmRacket.offset - OFFSET) < 0.6, `offset ${p.ctx.PalmRacket.offset}`);
 });
 
+await test('clock offset after a new match: pings the busy game answers late are outvoted within ~2 s', async () => {
+  const p = await phone();
+  const busyUntil = p.now + 700;   // the game is setting up the match: pings wait in its queue
+  p.hooks.onSend = (m) => {
+    if (m.type !== 'ping') return;
+    const at = p.now, seen = Math.max(at + 4, busyUntil);
+    p.later(() => p.game({ type: 'pong', t: m.t, g: seen + OFFSET }), seen + 4 - at);
+  };
+  p.game({ type: 'resync' });
+  p.advance(720);
+  assert.ok(p.ctx.PalmRacket.offset - OFFSET > 20, `skewed by the late answers: ${p.ctx.PalmRacket.offset - OFFSET}`);
+  p.advance(1700);
+  assert.ok(Math.abs(p.ctx.PalmRacket.offset - OFFSET) < 0.6, `offset ${p.ctx.PalmRacket.offset}`);
+});
+
 await test('an unset phone learns forehand from backhand from the hits, which now come back before the swing ends', async () => {
   const p = await phone({ fhSign: 0 });
   p.els.btnCalibSkip.listeners.click();

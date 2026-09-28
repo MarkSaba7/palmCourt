@@ -197,7 +197,7 @@ function onMotion(e) {
     // Just after a swing only a turn the other way may start a new one: the swing straight after a wind-up.
     if (w > DET.START && t - S.lastEnd > (sign && sign === -S.lastSign ? DET.REVERSE_MS : DET.GAP_MS)) {
       const v0 = S.vIdle + aUp * dt;
-      Object.assign(S, { state: 'swing', t0: t, tPeak: t, peak: w, wPrev: w, yaw: wUp * dt, absInt: w * dt, vUp: v0, vUpPeak: v0, aMax: aMag, id: S.id + 1, sent: false, yawPk: wUp * dt, yawLead: S.yawIdle, yawShare: w ? Math.abs(wUp) / w : 0 });
+      Object.assign(S, { state: 'swing', t0: t, tPeak: t, peak: w, wPrev: w, yaw: wUp * dt, absInt: w * dt, vUp: v0, vUpPeak: v0, aMax: aMag, id: S.id + 1, sent: false, yawPk: wUp * dt, yawLead: S.yawIdle - wUp * dt, yawShare: w ? Math.abs(wUp) / w : 0 });
       onSwingStart(t, sign);
     }
     return;
@@ -420,7 +420,7 @@ function onData(m) {
   if (m.type === 'pong') {
     const now = performance.now(), r = now - m.t;
     samples.push({ r, off: m.g + r / 2 - now });
-    if (samples.length > 6) samples.shift();
+    if (samples.length > 10) samples.shift();
     const best = samples.reduce((a, s) => (s.r < a.r ? s : a));
     offset = best.off; rtt = r;
     setNet(true, `Connected · ${Math.round(r)} ms`);
@@ -428,9 +428,11 @@ function onData(m) {
   } else if (m.type === 'welcome') {
     game = { handed: m.handed === 'L' ? 'L' : 'R', name: String(m.name || '').slice(0, 12) };
   } else if (m.type === 'resync') {
-    // The game clock jumped (pause, new match): drop old timing samples and measure again quickly.
+    // The game clock jumped (pause, new match): drop old timing samples and measure again quickly. For a couple of
+    // seconds: a game that has just set up a match is busy, and a ping it answers late skews the offset (the
+    // fastest round trip wins, so one clean answer is enough).
     samples = [];
-    for (let i = 0; i < 5; i++) setTimeout(() => send({ type: 'ping', t: performance.now() }), i * 90);
+    for (let i = 0; i < 16; i++) setTimeout(() => send({ type: 'ping', t: performance.now() }), i * 150);
   } else if (m.type === 'state') playState(m);
   else if (m.type === 'hit') { hitCue(m.power); learnFromHit(m.stroke); }
   else if (m.type === 'point') pointNote(m);
