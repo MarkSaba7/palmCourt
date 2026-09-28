@@ -231,7 +231,7 @@ const Game = {
         pl.hitFor = -2;
         const t = this.tossT + clamp(0.66 + gauss() * 0.035 * pl.level.err, 0.42, 0.9);
         this.pending = { t, pl, kind: 'serve' };
-        pl.avatar.serveHit(t);
+        pl.avatar.serveHit(t, m.serveNo === 1 ? 0.8 : 0.45);   // V2: (the power is picked at the contact; first serves are the big ones)
       }
     } else if (this.state === 'rally') {
       const plan = pl.plan;
@@ -414,7 +414,7 @@ const Game = {
     b.simT = now; b.active = true; b.visible = true;
     this.hist.length = 0; this.bounceLog.length = 0;
     this.state = 'toss'; this.tossT = now; pl.hitFor = -1;
-    pl.avatar.serveToss(now);
+    pl.avatar.serveToss(now, b.p, b.v);   // V2: (where the toss goes, so the racket meets it)
     Crowd.flashBurst(3 + (Math.random() * 4 | 0), 0.9);   // photographers catch the serve
     if (pl.ctl === 'human') { Input.swing = null; Input.lastEnd = -9; }
     if (this.mode === 'online') Net.send({ type: 'toss', t: now, p: b.p, v: b.v });
@@ -526,7 +526,7 @@ const Game = {
     if (ts < 0.22) { if (!cam || sw.vy > 0) UI.timing('Too early'); return; }
     me.hitFor = -3;
     const tc = this.tossT + clamp(ts, 0.3, 0.98);
-    me.avatar.serveHit(Math.max(tc, now));
+    me.avatar.serveHit(Math.max(tc, now), swingPower(sw));   // V2: a harder serve, a quicker motion
     if (cam) this.noteCamSwing(me, sw, now);
     const q = 1 - sstep(0.1, 0.38, Math.abs(ts - 0.68));
     const a = sw.src === 'key' || sw.src === 'phone' ? clamp(0.5 + gauss() * 0.25, 0, 1) : clamp((sw.x - 0.2) / 0.6, 0, 1);
@@ -543,7 +543,7 @@ const Game = {
     const a = pl.avatar, now = Clock.now();
     if (sw && (sw.src === 'hand' || sw.src === 'paddle')) this.noteCamSwing(pl, sw, now);
     if (a.mode === 'swing' && a.stroke === stroke && t > a.contactT && t - a.contactT < 0.12 && a.contactT > now - 0.1) return;
-    a.swing(stroke, t);
+    a.swing(stroke, t, sw ? Input.read(sw, stroke, pl.handed) : null);   // V2: the stroke shows the shot the swing asked for
   },
   // Is this camera swing the arm coming back from the last one that moved the racket (the other way, soon after)?
   armReturn(pl, sw, now) {
@@ -836,6 +836,7 @@ const Game = {
     this.hist.length = 0; this.bounceLog.length = 0;
     if (b.serve) this.state = 'rally';
     const kmh = Math.round(Math.hypot(b.v.x, b.v.y, b.v.z) * 3.6);
+    pl.avatar.hit(shot, b.v, !!(pl.plan && pl.plan.volley));   // V2: the follow-through shows the shot (spin, pace, direction)
     if (this.mode !== 'attract') Sound.hit(shot.power ?? 0.6, this.camDist(b.p), shot.q ?? 1, !!b.serve);
     if (b.serve) this.match.stats.fastest[pl.idx] = Math.max(this.match.stats.fastest[pl.idx], kmh);
     UI.shot(pl, { kmh, rpm: shot.rpm, kind: shot.kind, tau: shot.tau, q: shot.q, aim: shot.aim, serve: !!b.serve, read: shot.read ? Shot.readText(shot, kmh) : null });
@@ -984,7 +985,7 @@ const Game = {
     Crowd.cheer(amp);
     Crowd.flashBurst(Math.round(4 + amp * 10), 1.4);
     const now = Clock.now();
-    this.players[w].avatar.react('win', now + 0.35);
+    this.players[w].avatar.react('win', now + 0.35, amp);   // V2: a big point gets the player's own celebration
     this.players[1 - w].avatar.react('lose', now + 0.35);
     if (this.mode === 'attract') return;
     UI.callout(big, small);
@@ -1062,7 +1063,7 @@ const Game = {
     const b = this.ball;
     b.p = { ...m.p }; b.v = { ...m.v }; b.w = { x: 0, y: 0, z: 0 }; b.simT = m.t; b.active = b.visible = true; b.netDone = false; b.rolling = false;
     this.state = 'toss'; this.tossT = m.t;
-    pl.avatar.serveToss(m.t);
+    pl.avatar.serveToss(m.t, m.p, m.v);
     UI.prompt();
   },
   onRemoteRetoss() {
@@ -1078,6 +1079,7 @@ const Game = {
     b.lastHitter = pl.idx; b.bounces = 0; b.netTouched = false; b.serve = m.serve || null; b.rally = m.rally; b.hitT = m.t;
     this.hist.length = 0; this.bounceLog.length = 0; this.pending = null; this.state = 'rally';   // (the call looks at this shot's bounces only)
     if (m.serve) pl.avatar.serveHit(m.t); else pl.avatar.swing(m.stroke === 'bh' ? 'bh' : 'fh', m.t);
+    pl.avatar.hit({ kind: m.kind, rpm: m.rpm || 0, power: clamp(((m.kmh || 90) - 50) / 90, 0, 1) }, b.v, false);   // V2: follow-through
     Sound.hit(0.6, this.camDist(b.p), 1, !!m.serve);
     if (m.serve) this.match.stats.fastest[pl.idx] = Math.max(this.match.stats.fastest[pl.idx], m.kmh || 0);
     UI.shot(pl, { kmh: m.kmh, rpm: m.rpm, kind: m.kind, serve: !!m.serve });
