@@ -17,6 +17,7 @@ import { Progress } from './progress.js';
 import { TourUI } from './tourui.js';
 import * as Economy from './economy.js';
 import { ProgressUI } from './progress-ui.js';
+import { CloudUI } from './cloud-ui.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t, p) => { const el = $('loadingMsg'); if (el) el.textContent = t; if (p != null && $('loadBar')) $('loadBar').style.setProperty('--p', p + '%'); };
@@ -178,6 +179,7 @@ async function boot() {
   UI.init();
   ProgressUI.init();
   TourUI.init();
+  CloudUI.init();   // optional cloud save + leaderboards: adds nothing unless CONFIG.cloud.enabled
   Game.init();
   if (software) UI.gpuWarning();
   Game.startAttract();
