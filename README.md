@@ -47,6 +47,8 @@ For **Paddle** mode, hold the paddle's face in the circle and press **Lock paddl
 - **Close heavy apps and tabs**, especially video calls. Only one app can use the webcam at a time.
 - **Laptop with two graphics chips?** In Windows Settings → System → Display → Graphics, add your browser and set it to High performance.
 
+- **Phone racket feels late?** The chip at the top of the screen (and the Esc panel) says how the phone is linked and its round trip, e.g. "Phone: Wi-Fi direct, 18 ms". Fastest is `play.cmd` with the phone on the same Wi-Fi as the PC ("Wi-Fi via play.cmd"). "TURN relay" means the link goes through a server on the internet: put both on the same Wi-Fi (not a guest network). The phone sends each swing a few hundredths of a second after its fastest point and keeps its Wi-Fi awake during a match; `node test/racket.test.mjs` checks that timing without a phone.
+
 Webcam controls always trail your real hand by a few hundredths of a second. Scoring compensates, because a late-detected swing counts from when the camera saw it. The on-screen swing still starts a moment after yours. Camera swing detection lives in `src/camswing.js`; `node test/camswing.test.mjs` runs it against simulated swings (forehands, backhands, wind-ups, dropped frames, blur, glitches) with no webcam.
 
 ## Play a friend online
