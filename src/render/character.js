@@ -417,7 +417,7 @@ function buildHead(bld, look) {
   // The head is sized and placed apart from the body: heads vary far less than height, so a tall player's is not
   // scaled up with him, nor a slim one's narrowed; it sits a little forward of the neck, the chin clear of the throat.
   const hk = HEAD_K * look.height ** -0.5, hx = hk * look.width ** -0.6;
-  bld.xf = (x, y, z) => [x * hx, HEAD_PIV + (y - HEAD_PIV) * hk, (z - HC[2]) * hx + HC[2] - 0.008];
+  bld.xf = (x, y, z) => [x * hx, HEAD_PIV - 0.005 + (y - HEAD_PIV) * hk, (z - HC[2]) * hx + HC[2] - 0.008];
   // Skull and face: rows and columns bunch up on the face. aEdge carries the stubble shadow (1 = none) for the shader.
   const LAT = 44, LON = 60, stub = beard * hairDark(look.hairColor);
   const phW = (v) => Math.PI * v + 0.2 * (Math.sin(2 * Math.PI * (v - 0.05)) + Math.sin(2 * Math.PI * 0.05));
@@ -441,9 +441,10 @@ function buildHead(bld, look) {
     // eye: set into the socket; its detail coordinates are stretched so the shader's iris comes out a real size
     const ex = s * 0.033, ey = HC[1] + 0.05 * HR[1], ue = [ex / HR[0], 0.05, 0];
     ue[2] = -Math.sqrt(1 - ue[0] ** 2 - ue[1] ** 2);
-    const ez = headAt(ue, F)[2] + 0.002, er = [0.0125 * F.eyes, 0.007 * F.eyes, 0.0068];
+    const ez = headAt(ue, F)[2] + 0.0009, er = [0.0135 * F.eyes, 0.0078 * F.eyes, 0.0072];
     const eyeU = (i, j, n, m) => { const ph = Math.PI * i / n, th = 2 * Math.PI * j / m; return [Math.sin(ph) * Math.cos(th), Math.cos(ph), Math.sin(ph) * Math.sin(th)]; };
-    grid(bld, 9, 14, (i, j) => { const [ux, uy, uz] = eyeU(i, j, 8, 14); return [ex + ux * er[0], ey + uy * er[1], ez + uz * er[2], H, [ux * 1.3, uy * 1.08, uz, 1], 1]; }, 'eye');
+    // detail coordinates in units of 9.6 mm across (y pre-divided by the shader's 0.674), so the iris is round and real-sized
+    grid(bld, 9, 14, (i, j) => { const [ux, uy, uz] = eyeU(i, j, 8, 14); return [ex + ux * er[0], ey + uy * er[1], ez + uz * er[2], H, [ux * er[0] / 0.0096, uy * er[1] / 0.00647, uz, 1], 1]; }, 'eye');
     // upper lid: a skin hood over the top of the eye, its rim resting on the eyeball
     grid(bld, 5, 8, (i, j) => {
       const ph = 1.24 * i / 4, th = Math.PI + Math.PI * j / 7, ux = Math.sin(ph) * Math.cos(th), uy = Math.cos(ph), uz = Math.sin(ph) * Math.sin(th);
@@ -1047,10 +1048,10 @@ const DETAIL_ALBEDO = `
   float near = clamp(1.5 - camDist / 9.0, 0.0, 1.0);
   if (isReg(7.0) && vPar.w > 0.5) {                              // eye: sclera, iris, pupil (front is -z)
     vec2 q = vec2(vPar.x, vPar.y * 0.674); float r = length(q);  // q: round in metres (the eyeball is an ellipsoid)
-    vec3 iris = vec3(0.1, 0.06, 0.035) * (0.7 + 0.5 * r + 0.3 * cNoise(vec3(atan(q.y, q.x) * 9.0, r * 12.0, 0.0)));
+    vec3 iris = vec3(0.13, 0.08, 0.045) * (0.7 + 0.5 * r + 0.3 * cNoise(vec3(atan(q.y, q.x) * 9.0, r * 12.0, 0.0)));
     vec3 white = mix(vec3(0.6, 0.57, 0.53), vec3(0.62, 0.45, 0.42), smoothstep(0.85, 1.25, abs(vPar.x)));   // pinker in the corners
     vec3 eye = vPar.z < 0.0 ? mix(r < 0.22 ? vec3(0.012) : iris * (1.0 - 0.5 * smoothstep(0.48, 0.6, r)), white, smoothstep(0.58, 0.63, r)) : vec3(0.4, 0.35, 0.32);
-    eye *= 1.0 - 0.6 * smoothstep(0.2, 0.8, vPar.y);              // the upper lid's shadow
+    eye *= 1.0 - 0.45 * smoothstep(0.3, 0.9, vPar.y);             // the upper lid's shadow
     eye *= 1.0 - 0.3 * smoothstep(0.55, 0.9, -vPar.y);            // lower lid
     diffuseColor.rgb = eye;
   } else if (isReg(6.0)) {                                       // hair: strand tone, roots, soft hairline
@@ -1140,7 +1141,7 @@ const DETAIL_ALBEDO = `
   }
   if (isReg(7.0) && vPar.w > 0.5 && vPar.z < 0.0 && vColor.r + vColor.g + vColor.b > 0.03) {
     float ir = length(vec2(vPar.x, vPar.y * 0.674));
-    diffuseColor.rgb *= mix(vec3(1.0), vColor.rgb / vec3(0.1, 0.06, 0.035), smoothstep(0.22, 0.26, ir) * (1.0 - smoothstep(0.55, 0.6, ir)));
+    diffuseColor.rgb *= mix(vec3(1.0), vColor.rgb / vec3(0.13, 0.08, 0.045), smoothstep(0.22, 0.26, ir) * (1.0 - smoothstep(0.55, 0.6, ir)));
   }
   // --- end facial hair (A07) ---`;
 // Before DETAIL_ALBEDO: classify the pixel for the lighting.
