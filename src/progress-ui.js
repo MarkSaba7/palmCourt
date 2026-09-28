@@ -285,6 +285,8 @@ const STYLE = `
 @keyframes pgToast{from{opacity:0;transform:translateX(34px)}}
 @keyframes pgToastOut{to{opacity:0;transform:translateX(34px)}}
 @media (prefers-reduced-motion:reduce){.pg-rw *,.pg-rw,.pg-toast,.pg-lvup,.pg-lvup::before,.pg-lv.pop{animation-duration:.01s!important;transition:none!important}}
+/* Reduced motion (OS or Settings): the level-up card still shows for its 2.5 s, just without the fade (a near-zero fade ends invisible) */
+@media (prefers-reduced-motion:reduce){.pg-lvup,.pg-lvup::before{animation:none!important}}html.calm .pg-lvup,html.calm .pg-lvup::before{animation:none!important}
 .pg-cg{align-self:center;font:700 10px/1 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--optic);padding:0 2px 0 8px}
 .pg-cg:first-child{padding-left:0}
 .pg-item.gear{grid-template-rows:auto auto auto auto 1fr}
@@ -720,7 +722,9 @@ export const ProgressUI = {
     box.insertAdjacentHTML('beforeend', `<div class="pg-lvup" aria-hidden="true"><small>Level up</small><b>${lv}</b>${names.length ? `<span>Unlocked: ${esc(names.join(' · '))}</span>` : ''}</div>`);
     const badge = $('pgRwLv'); badge.classList.remove('pop'); void badge.offsetWidth; badge.classList.add('pop');
     const bar = $('pgRwBar'); bar.classList.remove('flash'); void bar.offsetWidth; bar.classList.add('flash');
-    this.later(2500, () => { const el = box.querySelector('.pg-lvup'); if (el) el.remove(); });
+    // Its own timer: finish() (the skip, and the end of the line-by-line reveal) clears this.timers, which left the card
+    // up for good (invisible only because its fade ended at opacity 0).
+    clearTimeout(this.lvupT); this.lvupT = setTimeout(() => { const el = box.querySelector('.pg-lvup'); if (el) el.remove(); }, 2500);
     chime([523, 659, 784, 1047, 1319], 0.07, 0.07);
     this.toast('Level up', `Level ${lv}`, names.length ? `Unlocked: ${names.join(', ')}` : 'Keep going: more unlocks ahead', FUZZ(), '');
   },
