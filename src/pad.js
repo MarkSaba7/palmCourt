@@ -82,8 +82,9 @@ const Pad = {
       if (this.layout !== 'standard' && !this.seen[this.id]) { this.seen[this.id] = true; if (UI.screen === 'menu') UI.menuNote(this.layoutNote(), 'err'); }
     }
     const S = normalize(gp, this.layout, this.S), P = this.P, E = this.E;
-    if (!this.fresh) { P.set(S.d); this.fresh = true; }   // held at first sight: not a press
+    // A button held at first sight is not a press (browsers show a pad once a button is pressed) but wakes the pad up.
     let any = false;
+    if (!this.fresh) { P.set(S.d); this.fresh = true; any = S.d.some((d) => d); }
     for (let i = 0; i < NB; i++) { E[i] = S.d[i] && !P[i] ? 1 : !S.d[i] && P[i] ? 2 : 0; if (E[i] === 1) any = true; }
     P.set(S.d);
     const ax = S.ax;
@@ -335,7 +336,7 @@ const Pad = {
     if (this.offerNo || !this.id || Settings.control === 'pad' || UI.screen !== 'menu' || $('padOffer')) return;
     const acts = $('menu') && $('menu').querySelector('.actions');
     if (!acts) return;
-    acts.insertAdjacentHTML('afterend', `<aside class="pad-offer" id="padOffer"><p><b>${LAYOUT_NAME[this.kind]} controller found.</b> Play with it? Hold ${this.glyphHTML('b')} ${this.glyphHTML('a')} ${this.glyphHTML('x')} or ${this.glyphHTML('y')} and let go as the ball arrives; the left stick aims.</p><div class="row"><button type="button" class="btn small primary" id="btnPadYes">Use the controller</button><button type="button" class="btn small ghost" id="btnPadNo">Not now</button></div></aside>`);
+    acts.insertAdjacentHTML('afterend', `<aside class="pad-offer" id="padOffer"><p><b>${LAYOUT_NAME[this.kind]} controller found.</b> Play with it? Hold ${this.glyphHTML('a')} ${this.glyphHTML('b')} ${this.glyphHTML('x')} or ${this.glyphHTML('y')} and let go as the ball arrives; the left stick aims.</p><div class="row"><button type="button" class="btn small primary" id="btnPadYes">Use the controller</button><button type="button" class="btn small ghost" id="btnPadNo">Not now</button></div></aside>`);
     this.glyphs($('padOffer'));
     $('btnPadYes').onclick = () => { UI.setControl('pad'); this.unoffer(); UI.menuNote(`Controller on. Test it (and see every button) under ${$('btnSetup').textContent}.`); $('btnPractice').focus({ preventScroll: true }); };
     $('btnPadNo').onclick = () => { this.offerNo = true; this.unoffer(); $('btnPractice').focus({ preventScroll: true }); };
