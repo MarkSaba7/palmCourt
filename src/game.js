@@ -538,6 +538,7 @@ const Game = {
     const a = sw.src === 'key' || sw.src === 'phone' ? clamp(0.5 + gauss() * 0.25, 0, 1) : clamp((sw.x - 0.2) / 0.6, 0, 1);
     sw.serve = true;   // (power is learned separately for serves)
     const shot = { pl: me, kind: 'serve', swing: sw, serve: { power: swingPower(sw), a, q } };
+    if (sw.src === 'pad' && sw.pad) shot.serve.pad = sw.pad;   // G2: a controller's serve (flat / kick / slice)
     if (cam || sw.src === 'phone') Input.learn(sw);
     if (tc >= b.simT) this.pending = { ...shot, t: tc };
     else if (this.rollback(tc)) this.contact(shot);
@@ -621,6 +622,7 @@ const Game = {
       from: { ...b.p }, side: pl.side, mx: pl.x * pl.side, stroke: plan.stroke, handed: pl.handed, volley: b.bounces === 0,
       pow: r.pow * (1 - 0.35 * stretch), spin: r.spin, drop: r.drop, dirX: r.dirX, tau, q, diff, S: this.gearFor(pl),
     };
+    if (r.pad) o.pad = r.pad;   // G2: a controller's shot (lob, depth, risk: src/shot.js readPad)
     const shot = Shot.humanGround(o);
     shot.read = r;
     // A camera swing is usually heard before its follow-through is over: the ball sets off the way this player
@@ -828,6 +830,7 @@ const Game = {
   serveShot(pl, o) {
     const b = this.ball, m = this.match, second = m.serveNo === 2;
     // ==== S1 aiming: a person's serve lands inside the lines when it's on time (src/shot.js) ====
+    if (pl.ctl === 'human' && o.pad) return Shot.humanServe({ from: { ...b.p }, side: pl.side, court: m.court, second, power: o.power, a: o.a, q: o.q, S: this.gearFor(pl), pad: o.pad });   // G2: controller serve
     if (pl.ctl === 'human' && o.errMul == null) return Shot.humanServe({ from: { ...b.p }, side: pl.side, court: m.court, second, power: o.power, a: o.a, q: o.q, S: this.gearFor(pl) });
     // ==== end S1 aiming ====
     const a = clamp(o.a, 0, 1), xl = m.court === 'deuce' ? lerp(-3.75, -0.3, a) : lerp(0.3, 3.75, a);

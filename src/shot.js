@@ -5,7 +5,7 @@
 // aiming close to the lines. Gear stats (src/stats.js) scale it: pow → speed, ctl → accuracy, spin → rpm, touch →
 // drop shots and slices.
 // =====================================================================
-import { clamp, lerp, sstep, gauss, RPM, solveShot } from './core.js';
+import { clamp, lerp, sstep, gauss, RPM, solveShot, simLanding } from './core.js';
 
 const W = 4.115;   // singles sideline (m from the centre)
 
@@ -116,8 +116,17 @@ export function readPhone(sw, o = {}) {
   const across = phoneAcross(sw.yawPre, sw.yawShare, o.typYaw, o.typShare);
   return { pow, spin, across, dirX: across == null ? null : -ballSide(o.stroke, o.handed) * across, drop: pow < 0.3 && spin < -0.15, final: true };
 }
+// Controller, Buttons scheme (src/pad.js, src/padmap.js): the button picks the shot (sw.pad.shot: 'flat' | 'topspin' |
+// 'slice' | 'lob' | 'drop'), the charge sets the power, the left stick at the release aims (ax -1 left .. 1 right, ay -1
+// a short angle .. 1 deep; centred, a safe middle ball) and R1 (risk) goes for more: nearer the lines, harder.
+export function readPad(sw) {
+  const P = sw.pad || {}, pow = clamp(sw.power ?? 0.55, 0.05, 1), spin = clamp(sw.spin ?? 0.12, -1, 1);
+  const ax = clamp(+P.ax || 0, -1, 1), ay = clamp(+P.ay || 0, -1, 1), risk = !!P.risk, shot = P.shot || 'flat';
+  return { pow, spin, across: null, dirX: ax * (risk ? 1.3 : 1), drop: shot === 'drop', final: true, pad: { shot, lob: shot === 'lob', risk, ax, ay } };
+}
 // Mouse / keyboard: the flick before the click (or the arrow keys) aims; see input.js.
 export function readPointer(sw) {
+  if (sw.src === 'pad' && sw.pad) return readPad(sw);
   const pow = clamp(sw.power ?? 0.58, 0.05, 1), spin = clamp(sw.spin ?? 0.35, -1, 1);
   return { pow, spin, across: null, dirX: Number.isFinite(sw.aim) ? clamp(sw.aim, -1.3, 1.3) : 0, drop: !!sw.drop || (sw.src === 'mouse' && spin < -0.35 && pow < 0.6), final: true };
 }
@@ -130,39 +139,87 @@ export function readText(shot, kmh) {
   return `${where} · ${how} · ${kmh} km/h`;
 }
 
+// ==== G2 controller: where a pad's shot goes and how much it scatters (src/pad.js; tuned in the human-vs-CPU sim) ====
+// aimGround's direction for the stick's sideways push; pushed up, deeper (nearer the baseline, so riskier); pulled down,
+// short: with a sideways push too, a sharp short angle toward the sideline. A centred stick plays a safe middle ball.
+// A lob goes up and deep, over a player at the net.
+export const PAD = { err: 0.75, risk: 1.45, wide: 0.35, deep: 0.8, angle: 6.1 };
+export function padAim(aim, P, pow) {
+  const up = Math.max(0, P.ay || 0), dn = Math.max(0, -(P.ay || 0)), side = Math.abs(P.ax || 0);
+  if (side < 0.05) aim.x *= 0.5;
+  if (P.lob) { aim.depth = lerp(9.3, 10.5, clamp(pow / 0.62, 0, 1)) + 0.5 * up - 1.2 * dn; return aim; }
+  if (P.shot === 'drop') return aim;
+  aim.depth += (P.risk ? 1.25 : 1) * PAD.deep * up;
+  if (dn > 0) {
+    aim.depth = lerp(aim.depth, PAD.angle, dn);
+    aim.x = lerp(aim.x, Math.sign(P.ax || aim.x) * (W - 0.6), side * dn);
+  }
+  return aim;
+}
+// ==== end G2 controller ====
+
 // A person's groundstroke. o: { from (ball position), side (player.side), mx (player's x, hitter's frame), stroke, handed,
-// pow, spin, drop, dirX, tau, q (timing quality 0..1), diff (pressure 0..1), volley, S (gear stats) }.
+// pow, spin, drop, dirX, tau, q (timing quality 0..1), diff (pressure 0..1), volley, S (gear stats), pad (a controller's
+// shot: readPad) }.
 export function humanGround(o) {
   const st = strokeStats(o.S, o.stroke, o.volley), pow = clamp(o.pow, 0.03, 1), spin = clamp(o.spin, -1, 1), q = clamp(o.q ?? 1, 0.2, 1);
-  const drop = !!o.drop, kind = shotKind(spin, drop), bs = ballSide(o.stroke, o.handed);
+  const P = o.pad || null, lob = !!(P && P.lob), drop = !!o.drop, kind = lob ? 'Lob' : shotKind(spin, drop), bs = ballSide(o.stroke, o.handed);
   const aim = aimGround({ ...o, pow, spin, drop, side: bs });
+  if (P) padAim(aim, P, pow);
   // Scatter: timing costs most, then how hard the incoming ball was, then swinging flat out. Better control, less.
-  const errK = (1 + 3 * (1 - q)) * (1 + 0.9 * clamp(o.diff || 0, 0, 1)) / st.ctl;
+  let errK = (1 + 3 * (1 - q)) * (1 + 0.9 * clamp(o.diff || 0, 0, 1)) / st.ctl;
+  // A controller's aim is exact, so its scatter grows with how far toward a line the stick asks (G2).
+  if (P) errK *= PAD.err * (P.risk ? PAD.risk : 1) * (1 + PAD.wide * Math.abs(P.ax || 0));
   let sx = (0.3 + 0.6 * pow * pow) * errK * (1 + 0.6 * sstep(0.45, 1.3, Math.abs(o.tau || 0))), sz = (0.35 + 0.6 * pow * pow + 0.7 * sstep(0.8, 1, pow)) * errK;
   if (drop) { sx = 0.45 * errK / st.touch; sz = 0.5 * errK / st.touch; }
+  else if (lob) { sx = 0.5 * errK / st.touch; sz = 0.65 * errK / st.touch; }
   else if (spin < -0.2) { sx /= Math.sqrt(st.touch); sz /= Math.sqrt(st.touch); }
   // (The random draws come back with the shot, so a steer after the follow-through keeps the same scatter.)
   const ex = o.ex ?? gauss(), ez = o.ez ?? gauss(), xl = aim.x + ex * sx, dl = Math.max(1.3, aim.depth + ez * sz);
-  const vk = drop ? lerp(10.5, 13, pow / 0.3) : lerp(15, 33.5, Math.pow(pow, 0.9)) * (1 - 0.12 * Math.max(0, -spin));
+  // (A pad's short angle comes off slower, with more topspin to dip it in.)
+  const short = P && !lob && !drop ? Math.max(0, -(P.ay || 0)) : 0;
+  const vk = drop ? lerp(10.5, 13, pow / 0.3) : lob ? lerp(15.5, 19.5, clamp(pow / 0.62, 0, 1)) : lerp(15, 33.5, Math.pow(pow, 0.9)) * (1 - 0.12 * Math.max(0, -spin)) * (1 - 0.25 * short);
   const speed = vk * st.pow * (0.6 + 0.4 * q);
   // Topspin grows with the swing's rise and a little with pace (a flat drive still turns over ~1000 rpm).
-  const rpm = (drop ? -2100 : spin >= 0 ? lerp(900, 3300, spin) + 400 * pow * (1 - spin) : -lerp(600, 2400, -spin)) * st.spin;
-  const sol = solveShot(o.from, o.side * xl, -o.side * dl, speed, rpm * RPM, { minNet: drop ? 0.1 : 0.3 });
+  const rpm = (drop ? -2100 : lob ? 1400 + 900 * pow : spin >= 0 ? lerp(900, 3300, spin) + 400 * pow * (1 - spin) + 900 * short : -lerp(600, 2400, -spin)) * st.spin;
+  const sol = solveShot(o.from, o.side * xl, -o.side * dl, speed, rpm * RPM, lob ? { minNet: 0.8, lo: 0.3, hi: 1.0 } : { minNet: drop ? 0.1 : 0.3 });
   return { sol, rpm, kind, tau: o.tau, q, power: pow, aim: aim.x, land: { x: xl, z: dl }, ex, ez, ballSide: bs, mx: o.mx || 0 };
 }
 
 // A person's serve. o: { from, side, court, second, power, a (as serveShot: 0..1 across the box, left to right as the
-// server sees it), q, S }.
+// server sees it), q, S, pad (a controller's serve: { shot: 'flat' | 'kick' | 'slice', risk, handed }) }.
+// G2: a kick serve is slower with heavy topspin (it dips in with more margin and kicks up), a slice curves away (right-
+// handers to their left) and lands where it was aimed; flat is the fastest, with the least margin.
+const SERVE_TYPE = {
+  flat: { kmh: 1, rpm: [2800, 800], depth: 0, sx: 1, sz: 1, net: 0.05 },
+  kick: { kmh: 0.84, rpm: [4600, 3600], depth: -0.3, sx: 0.85, sz: 0.7, net: 0.3 },
+  slice: { kmh: 0.92, rpm: [2000, 1200], depth: -0.1, sx: 0.95, sz: 0.85, net: 0.12, side: 2200 },
+};
 export function humanServe(o) {
   const S = o.S && o.S.serve ? o.S.serve : NEUTRAL.serve, a = clamp(o.a, 0, 1), q = clamp(o.q ?? 1, 0, 1);
+  const P = o.pad || null, T = (P && SERVE_TYPE[P.shot]) || SERVE_TYPE.flat;
   const power = clamp(o.second ? Math.min(o.power, 0.62) : o.power, 0.05, 1);
   // Inside the lines: 35 cm off the T, wide 55 cm inside the sideline, about a metre short of the service line.
-  const lx = o.court === 'deuce' ? lerp(-3.55, -0.35, a) : lerp(0.35, 3.55, a);
-  const dl = 5.3 + 0.35 * (power - 0.5);
-  const errK = (1 + 2.6 * (1 - q)) / (S.ctl || 1);
-  const sx = (0.14 + 0.42 * power * power) * errK, sz = (0.16 + 0.42 * power * power + 0.6 * sstep(0.8, 1, power)) * errK;
-  const kmh = (o.second ? lerp(105, 160, power) : lerp(115, 205, power)) * (S.pow || 1);
-  const rpm = lerp(2800, 800, power) * (o.second ? 1.25 : 1);
-  const sol = solveShot(o.from, o.side * (lx + gauss() * sx), -o.side * (dl + gauss() * sz), kmh / 3.6, rpm * RPM, { lo: -0.45, hi: 0.3, minNet: 0.05 });
+  // (R1 goes for the lines: 20 cm closer to the sideline and the T, and 45 cm deeper, at a bit more pace and more scatter.)
+  const rk = P && P.risk ? 1 : 0, wd = 3.55 + 0.2 * rk, tee = 0.35 - 0.15 * rk;
+  const lx = o.court === 'deuce' ? lerp(-wd, -tee, a) : lerp(tee, wd, a);
+  const dl = 5.3 + 0.35 * (power - 0.5) + T.depth + 0.45 * rk;
+  const errK = (1 + 2.6 * (1 - q)) / (S.ctl || 1) * (P ? PAD.err * (P.risk ? PAD.risk : 1) : 1);
+  const sx = (0.14 + 0.42 * power * power) * errK * T.sx, sz = (0.16 + 0.42 * power * power + 0.6 * sstep(0.8, 1, power)) * errK * T.sz;
+  const kmh = (o.second ? lerp(105, 160, power) : lerp(115, 205, power)) * (S.pow || 1) * T.kmh * (1 + 0.03 * rk);
+  const rpm = (P ? lerp(T.rpm[0], T.rpm[1], power) : lerp(2800, 800, power)) * (o.second ? 1.25 : 1);
+  const tx = o.side * (lx + gauss() * sx), tz = -o.side * (dl + gauss() * sz);
+  const sol = solveShot(o.from, tx, tz, kmh / 3.6, rpm * RPM, { lo: -0.45, hi: 0.3, minNet: T.net });
+  if (T.side) curve(o.from, sol, tx, (P.handed === 'L' ? -1 : 1) * T.side * RPM);
   return { sol, rpm, kind: o.second ? 'Second serve' : 'Serve', q, power };
+}
+// Sidespin (rad/s about the vertical, + curves a ball to its hitter's left) on a solved shot, with its sideways launch
+// corrected so it still lands at x = tx.
+function curve(from, sol, tx, wy) {
+  sol.w.y = wy;
+  for (let k = 0; k < 4; k++) {
+    const L = simLanding(from, sol.v, sol.w), dx = clamp(tx - L.x, -2, 2);
+    if (Math.abs(dx) < 0.02) break;
+    sol.v.x += dx / Math.max(0.2, L.t);
+  }
 }
