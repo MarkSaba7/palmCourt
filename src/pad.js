@@ -342,13 +342,13 @@ const Pad = {
 
   // ---- offering the controller when one turns up ----
   offer() {
-    if (this.offerNo || !this.id || Settings.control === 'pad' || UI.screen !== 'menu' || $('padOffer')) return;
+    if (this.offerNo || Settings.padDeclined || !this.id || Settings.control === 'pad' || UI.screen !== 'menu' || $('padOffer')) return;
     const acts = $('menu') && $('menu').querySelector('.actions');
     if (!acts) return;
     acts.insertAdjacentHTML('afterend', `<aside class="pad-offer" id="padOffer"><p><b>${LAYOUT_NAME[this.kind]} controller found.</b> Play with it? Hold ${this.glyphHTML('a')} ${this.glyphHTML('b')} ${this.glyphHTML('x')} or ${this.glyphHTML('y')} and let go as the ball arrives; the left stick aims.</p><div class="row"><button type="button" class="btn small primary" id="btnPadYes">Use the controller</button><button type="button" class="btn small ghost" id="btnPadNo">Not now</button></div></aside>`);
     this.glyphs($('padOffer'));
     $('btnPadYes').onclick = () => { UI.setControl('pad'); this.unoffer(); UI.menuNote(`Controller on. Test it (and see every button) under ${$('btnSetup').textContent}.`); $('btnPractice').focus({ preventScroll: true }); };
-    $('btnPadNo').onclick = () => { this.offerNo = true; this.unoffer(); $('btnPractice').focus({ preventScroll: true }); };
+    $('btnPadNo').onclick = () => { this.offerNo = true; Settings.padDeclined = true; Settings.save(); this.unoffer(); $('btnPractice').focus({ preventScroll: true }); };
     Nav.focus($('btnPadYes'));
   },
   unoffer() { const o = $('padOffer'); if (o) o.remove(); },
