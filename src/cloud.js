@@ -1,5 +1,5 @@
 // Palm Court: optional cloud save and leaderboards on Supabase, with plain fetch (no SDK). Dormant unless
-// CONFIG.cloud.enabled is true (or ?cloud=1 for testing). Local-first: the Profile in the browser is the real save;
+// CONFIG.cloud.enabled is true and the player has not turned it off in Settings (or ?cloud=1 for testing). Local-first: the Profile in the browser is the real save;
 // the cloud is a copy that follows it. The game never waits on the network: every call resolves (null / { ok: false })
 // instead of throwing when the cloud is off, offline or failing. Server rules: supabase/schema.sql.
 import { CONFIG } from './config.js';
@@ -18,8 +18,11 @@ const MIN_GAP = 10000, CHANGE_WAIT = 15000, REWARD_WAIT = 2500, TIMEOUT = 8000, 
 
 // ---- config: CONFIG.cloud plus test overrides (?cloud=1 / ?cloud=0, ?cloudUrl= for a local mock server only) ----
 const jwtRole = (k) => { try { return JSON.parse(atob(String(k).split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).role || ''; } catch (e) { return ''; } };
+// The player can turn online backup off in Settings (cloudSync: false, saved with the other settings).
+const optedOut = () => { try { return JSON.parse(globalThis.localStorage?.getItem('palmcourt.v1') || '{}').cloudSync === false; } catch (e) { return false; } };
 export function cloudConfig(base = CONFIG.cloud, search = globalThis.location?.search || '') {
   const c = { url: '', anonKey: '', enabled: false, ...(base || {}) };
+  if (optedOut()) c.enabled = false;
   try {
     const q = new URLSearchParams(search), u = q.get('cloudUrl');
     if (q.get('cloud') === '1') c.enabled = true;

@@ -30,10 +30,11 @@ Players get an anonymous account per browser. No email or password is needed.
 - In the dashboard, check **Table Editor**: you should see a row in `saves`, rows in `scores` and one in `players`.
 - In the browser console, `PalmCourt.Cloud.status` should say `ok`. `await PalmCourt.Cloud.sync()` syncs straight away.
 
-## 5. Switch it on
-In `src/config.js`, set `cloud: { url: …, anonKey: …, enabled: true }` and publish.
-To switch it off again, set `enabled: false`. Your data stays in Supabase. To turn it off for a single visit,
-add `?cloud=0` to the address.
+## 5. It is on for everyone
+`cloud.enabled` is `true` in `src/config.js`, so every player gets the online backup and the Leaderboards button.
+Players can turn it off in **Settings → Gameplay → Online backup & leaderboards** (it takes effect after a reload);
+`privacy.html` says so. To switch the whole thing off for everyone, set `enabled: false` and publish. To turn it off
+for a single visit, add `?cloud=0` to the address. Your data stays in Supabase either way.
 
 ## Keys
 `src/config.js` holds the project URL and the **publishable** key (`sb_publishable_…`). That key is made for

@@ -26,6 +26,7 @@ const TABS = [
     tog('timingMeter', 'Timing meter', 'The early / late bar after each shot.'),
     tog('replays', 'Instant replays', 'Replays of aces, winners and close line calls.'),
     tog('onlineGear', 'Gear stats online', 'Your gear’s stats count in online matches too. Off keeps online matches even.'),
+    tog('cloudSync', 'Online backup & leaderboards', 'Backs up your progress online and puts your best scores on the leaderboards. Off keeps everything on this device. Takes effect after you reload.'),
   ]],
   ['controls', 'Controls', [
     seg('control', 'Swing with', [['mouse', 'Mouse / keys'], ['phone', 'Phone'], ['hand', 'Hand cam'], ['paddle', 'Paddle cam'], ['pad', 'Controller']], 'Controller: a PlayStation, Xbox or Switch pad, with its own shot buttons. Its menus work with any of these.'),
@@ -61,7 +62,7 @@ const TABS = [
 ];
 const DEFAULTS = {
   level: 'club', format: 'short', surface: 'hard', handed: 'R', assist: true, timingMeter: true, replays: true, control: 'mouse', sens: 1, latency: 0.09,
-  volume: 0.8, sfxVol: 1, crowdVol: 1, voiceVol: 1, voice: true, gfx: 'auto', cam: 'player', showFps: false, reduceMotion: false, bigHud: false, cbSafe: false, onlineGear: false,
+  volume: 0.8, sfxVol: 1, crowdVol: 1, voiceVol: 1, voice: true, gfx: 'auto', cam: 'player', showFps: false, reduceMotion: false, bigHud: false, cbSafe: false, onlineGear: false, cloudSync: true,
   padScheme: 'buttons', padSwap: false, padMeter: true, padRumble: true,
 };
 // Screens' own way back, for Esc and controller B.

@@ -52,15 +52,16 @@
     <div class="box"><ul>
     <li>Camera frames are processed on your device and are never uploaded, recorded or stored.</li>
     <li>Your settings and progress are saved in your own browser, not on our servers.</li>
-    <li>Cloud saves are optional and off unless you turn them on.</li>
+    <li>Your progress is backed up online under a random player ID (no name, email or camera data). If you pick a leaderboard name, that name and your best scores are public. You can turn the backup off in Settings.</li>
     <li>Google and its partners use cookies to show and measure ads on this site. In the EEA, the UK and Switzerland they ask for your consent first.</li>
     </ul></div>
     <h2 id="camera">Camera</h2>
     <p>If you choose Hand or Paddle controls, the game asks your browser for the camera. Each frame is analysed in the page, on your device (hand tracking uses Google’s MediaPipe library running locally; paddle tracking is plain colour matching), and then thrown away. Frames are never sent over the network, recorded or saved. The only thing kept is the paddle colour you lock, as a colour value in your settings. You can revoke camera access at any time in your browser’s site settings.</p>
     <h2 id="device">Data saved on your device</h2>
     <p>Palm Court saves your settings (name, controls, graphics, sensitivity) and your progress (level, XP, Fuzz, unlocks, match history and stats) in your browser’s storage (IndexedDB, or local storage as a fallback). It stays in that browser on that device. Clearing the site’s data in your browser deletes it.</p>
-    <h2 id="cloud">Optional cloud saves</h2>
-    <p>Palm Court may offer cloud saves so your progress can follow you between devices. They are off by default. If you switch them on, a copy of your progress (the same data as above, stored under a random player ID, with no name, email or camera data) is kept with our database provider, <a href="https://supabase.com/privacy">Supabase</a>, and synchronised when you play. You can switch cloud saves off at any time, and ask us to delete the stored copy (see <a href="#contact">Contact</a>).</p>
+    <h2 id="cloud">Online backup and leaderboards</h2>
+    <p>Palm Court backs up your progress online, so it isn&rsquo;t lost if you clear your browser, and it runs leaderboards. This is on by default. You can turn it off in Settings (Gameplay, &ldquo;Online backup &amp; leaderboards&rdquo;); it takes effect after you reload the page.</p>
+    <p>When it is on, your browser creates an anonymous account with our database provider, <a href="https://supabase.com/privacy">Supabase</a>. It has a random player ID: no email, password or camera data. A copy of your progress (the same data as above) is stored under that ID and synchronised as you play, and your best scores (level, World Tour ranking points, longest win streak and fastest serve) are stored for the leaderboards. If you choose a leaderboard name, that name and your scores are visible to every player, so please don&rsquo;t use your real name or other personal details. The backup belongs to the browser it was made in; it can&rsquo;t follow you to another device. To have your stored data deleted, contact us (see <a href="#contact">Contact</a>) and include your leaderboard name if you set one.</p>
     <h2 id="online">Online play and the phone racket</h2>
     <p>To connect two browsers (a friend’s game, or your phone as a racket), the game uses the PeerJS public broker, which briefly sees both devices’ IP addresses to introduce them. After that the devices talk directly (WebRTC). Only game data is sent: swings, ball positions, scores and your display name. As with any direct connection, the other device can see your IP address.</p>
     <h2 id="ads">Advertising and cookies</h2>
@@ -80,11 +81,11 @@
     <h2 id="children">Children</h2>
     <p>Palm Court doesn’t ask for or knowingly collect personal information from anyone, children included. Ads on this site are served by Google under its policies. If you believe a child has sent us personal information, contact us and we will delete it.</p>
     <h2 id="rights">Your choices and rights</h2>
-    <p>Everything Palm Court stores is on your device, so you control it: clear the site’s data to delete it. Depending on where you live (for example under the GDPR in the EU and UK, or the CCPA in California), you have the right to access, correct or delete personal data held about you and to object to its use. For data held by an ad partner, use their privacy tools or contact them. For anything held by Palm Court (such as a cloud save), contact us.</p>
+    <p>Your progress is stored on your device, and, unless you turn it off in Settings, as a backup copy online: clear the site’s data to delete the copy on your device, and contact us to delete the online copy. Depending on where you live (for example under the GDPR in the EU and UK, or the CCPA in California), you have the right to access, correct or delete personal data held about you and to object to its use. For data held by an ad partner, use their privacy tools or contact them. For anything held by Palm Court (such as a cloud save), contact us.</p>
     <h2 id="contact">Contact and changes</h2>
     <p>Questions about this policy or your data: <a href="mailto:hello@palmcourt.example">hello@palmcourt.example</a>. If this policy changes, the new version is posted on this page with a new date.</p>
   </article>
-  <nav class="toc" aria-label="On this page"><b>On this page</b><ol><li><a href="#summary">In short</a></li><li><a href="#camera">Camera</a></li><li><a href="#device">Data on your device</a></li><li><a href="#cloud">Optional cloud saves</a></li><li><a href="#online">Online play</a></li><li><a href="#ads">Ads and cookies</a></li><li><a href="#other">Other services</a></li><li><a href="#children">Children</a></li><li><a href="#rights">Your rights</a></li><li><a href="#contact">Contact</a></li></ol></nav>
+  <nav class="toc" aria-label="On this page"><b>On this page</b><ol><li><a href="#summary">In short</a></li><li><a href="#camera">Camera</a></li><li><a href="#device">Data on your device</a></li><li><a href="#cloud">Online backup and leaderboards</a></li><li><a href="#online">Online play</a></li><li><a href="#ads">Ads and cookies</a></li><li><a href="#other">Other services</a></li><li><a href="#children">Children</a></li><li><a href="#rights">Your rights</a></li><li><a href="#contact">Contact</a></li></ol></nav>
 </div>
 </main>
 <script>

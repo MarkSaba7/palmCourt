@@ -10,8 +10,8 @@ const CONFIG = {
   portal: 'auto',
   steamUrl: STEAM_PLACEHOLDER,   // the Steam store page; the wishlist button stays hidden until this is a real URL
   // Cloud saves (Supabase). The publishable key is made for client code; never put any other Supabase key here.
-  // Dormant until the cloud feature is wired and `enabled` is set to true.
-  cloud: { url: 'https://dpzdvbhwrumoftjagukh.supabase.co', anonKey: 'sb_publishable_OvSeFiGjv6xvQlPPVGv-7Q_popyx3Zm', enabled: false },
+  // Online backup + leaderboards (Supabase). On for everyone; a player can turn it off in Settings (cloudSync).
+  cloud: { url: 'https://dpzdvbhwrumoftjagukh.supabase.co', anonKey: 'sb_publishable_OvSeFiGjv6xvQlPPVGv-7Q_popyx3Zm', enabled: true },
   ads: {
     interstitialEveryMatches: 2,   // at most one break per this many matches (never before the first match of a visit)
     minGapS: 150,                  // and never twice within this many seconds (portals cap on their side too)
