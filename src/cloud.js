@@ -295,7 +295,7 @@ export function createCloud({ config = cloudConfig(), profile = Profile, fetch: 
         this.name = typeof n === 'string' ? n : c.name;
         emit('name', this.name);
         return { ok: true, name: this.name };
-      } catch (e) { return { ok: false, error: e.status ? e.message : 'No connection: try again later' }; }
+      } catch (e) { return { ok: false, error: e.status ? e.message : (e.message === 'not signed in' && this.error) || 'No connection: try again later' }; }   // a failed sign-in says why (e.g. anonymous sign-ins are off in Supabase)
     },
 
     // ---- automatic sync: after matches (Profile 'reward'), after other changes (debounced), when back online ----
