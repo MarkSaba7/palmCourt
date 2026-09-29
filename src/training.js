@@ -27,10 +27,10 @@ const CONTROLS = [
   ['hand', 'Hand cam', 'Swing your hand at the webcam, like a racket.'],
   ['paddle', 'Paddle cam', 'Swing a brightly coloured ping-pong paddle at the webcam.'],
   ['phone', 'Phone racket', 'Your phone is the racket: scan a code to pair it.'],
+  ['pad', 'Controller', 'PlayStation, Xbox or Switch: hold a shot button, let go as the ball arrives; the stick aims.'],
 ];
-const CTL_NAME = { mouse: 'Mouse / keys', hand: 'Hand cam', paddle: 'Paddle cam', phone: 'Phone' };
+const CTL_NAME = { mouse: 'Mouse / keys', hand: 'Hand cam', paddle: 'Paddle cam', phone: 'Phone', pad: 'Controller' };
 const PHONE_STEPS = '<li><b>Hold your phone like a racket handle,</b> screen facing up, and swing it as you would a racket.</li><li><b>Tap or lift the phone</b> to toss when you serve.</li><li><b>Keep the game tab in front</b> on the computer; the phone page must stay open too.</li>';
-const PAD_STEPS = '<li><b>A controller works with any of these.</b> Press A (or flick the right stick) to swing; RT hits harder, LT slices.</li>';
 
 const CSS = `
 .tr-slab { width: min(900px, 100%); }
@@ -413,7 +413,7 @@ class Run {
   // The live hint for the control in use.
   hint() {
     const G = Game, me = this.me(), b = G.ball, now = Clock.now(), st = G.state;
-    const ctx = { control: Settings.control, pad: Pad.active, touch: touch(), glyph: Pad.glyph('a'), handed: me.handed, stroke: this.stroke, zone: this.zoneKey, feedback: null, phase: 'ready', serve: this.serving() };
+    const ctx = { control: Settings.control, pad: Pad.active, padScheme: Settings.padScheme, touch: touch(), glyph: Pad.glyph('a'), glyphs: { a: Pad.glyph('a'), b: Pad.glyph('b'), x: Pad.glyph('x'), y: Pad.glyph('y') }, handed: me.handed, stroke: this.stroke, zone: this.zoneKey, feedback: null, phase: 'ready', serve: this.serving() };
     const fresh = this.feedback && now - this.fbAt < (this.fbSticky ? 2.6 : 1.2) ? this.feedback : null;
     if (this.serving() && (st === 'serve' || st === 'toss')) ctx.phase = st;
     else if (st === 'rally' && me.plan && b.lastHitter !== 0 && me.hitFor !== b.rally) {
@@ -596,7 +596,7 @@ export const Training = {
     for (const r of $('trCtl').querySelectorAll('input')) r.checked = r.value === Settings.control;
     const cam = Settings.control === 'hand' || Settings.control === 'paddle';
     $('btnTrCheck').hidden = Settings.control === 'mouse';
-    $('btnTrCheck').textContent = Settings.control === 'phone' ? 'Connect phone' : 'Camera check';
+    $('btnTrCheck').textContent = Settings.control === 'phone' ? 'Connect phone' : Settings.control === 'pad' ? 'Test controller' : 'Camera check';
     // Both caps: Fuzz usually runs out before XP does.
     const [capX, capF] = TRAINING.daily, xp = Math.min(capX, T.day.xp || 0), fuzz = Math.min(capF, T.day.fuzz || 0);
     const full = xp >= capX && fuzz >= capF ? ' (done for today: matches still pay in full)' : fuzz >= capF ? ' (Fuzz done for today: drills still pay XP, matches pay in full)' : xp >= capX ? ' (XP done for today: drills still pay Fuzz, matches pay in full)' : '';
@@ -645,7 +645,7 @@ export const Training = {
     if (k === 'late') return `<b>Tip:</b> most misses were late. Start your swing as the ball bounces on your side${cam ? ', or lower Timing offset in Settings if your swings always land late' : ''}.`;
     if (k === 'early') return `<b>Tip:</b> most misses were early. Let the ball come to you, then swing${cam ? ' (raise Timing offset in Settings if your swings always land early)' : ''}.`;
     if (k === 'wrong') return '<b>Tip:</b> swing across your body: a forehand one way, a backhand the other. The arrow at the top shows which.';
-    if (k === 'miss') return `<b>Tip:</b> your player runs to the ball, so you only swing: ${cam ? 'a clear swing across your body' : 'one click or key press'} as it reaches you.`;
+    if (k === 'miss') return `<b>Tip:</b> your player runs to the ball, so you only swing: ${cam ? 'a clear swing across your body' : Settings.control === 'pad' && Settings.padScheme !== 'flick' ? 'hold a shot button and let go' : 'one click or key press'} as it reaches you.`;
     if (k === 'net') return '<b>Tip:</b> lots of balls in the net: swing low to high to lift them.';
     if (k === 'out') return '<b>Tip:</b> lots of balls out: a smoother, slower swing keeps them in.';
     return '';
@@ -704,9 +704,9 @@ export const Training = {
       $('btnTutCheck').onclick = () => { this.returnTo = 'tutorial'; UI.openControls('menu'); };
       $('btnTutMouse').onclick = () => { UI.setControl('mouse'); this.openTutorial('rally'); };
     } else {
-      const mode = Pad.active ? 'pad' : ctl, cam = ctl === 'hand' || ctl === 'paddle', hs = Settings.handed;
-      const how = (stroke) => cam ? `Swing across your body <b>${strokeArrow(stroke, hs)}</b> as the ball reaches you.` : ctl === 'phone' ? `Swing your phone <b>${strokeArrow(stroke, hs)}</b> as the ball reaches you.` : mode === 'pad' ? `Press <b>${esc(Pad.glyph('a'))}</b> as the ball reaches you.` : `${touch() ? 'Tap' : 'Click'} as the ball reaches you.`;
-      const serve = cam ? 'Raise your hand above the toss line to toss, then swing down through the ball.' : ctl === 'phone' ? 'Tap or lift your phone to toss, then swing.' : mode === 'pad' ? `${esc(Pad.glyph('a'))} to toss, ${esc(Pad.glyph('a'))} again to hit.` : `${touch() ? 'Tap' : 'Click'} to toss, then again as the ball drops.`;
+      const mode = Pad.active || ctl === 'pad' ? 'pad' : ctl, cam = ctl === 'hand' || ctl === 'paddle', hs = Settings.handed, btns = Settings.padScheme !== 'flick', G = (k) => `<b>${esc(Pad.glyph(k))}</b>`;
+      const how = (stroke) => cam ? `Swing across your body <b>${strokeArrow(stroke, hs)}</b> as the ball reaches you.` : ctl === 'phone' ? `Swing your phone <b>${strokeArrow(stroke, hs)}</b> as the ball reaches you.` : mode === 'pad' ? (btns ? `Hold ${G('b')} (topspin) or ${G('a')} (flat) and let go as the ball reaches you. The left stick aims.` : `Press ${G('a')} as the ball reaches you.`) : `${touch() ? 'Tap' : 'Click'} as the ball reaches you.`;
+      const serve = cam ? 'Raise your hand above the toss line to toss, then swing down through the ball.' : ctl === 'phone' ? 'Tap or lift your phone to toss, then swing.' : mode === 'pad' ? (btns ? `Press ${G('a')} to toss, hold it, and let go at the top of the toss.` : `${G('a')} to toss, ${G('a')} again to hit.`) : `${touch() ? 'Tap' : 'Click'} to toss, then again as the ball drops.`;
       const side = (stroke) => ((stroke === 'fh') === (hs !== 'L') ? 'right' : 'left');
       body.innerHTML = `${head(`Tutorial · ${cam || ctl === 'phone' ? '3' : '2'} of ${cam || ctl === 'phone' ? '3' : '2'}`, 'A guided rally')}
         <p class="tag" style="max-width:none">The ball machine feeds you a few balls. Your player runs to the ball: <b>you only swing</b>. The hint at the top of the screen tells you what to do, and when.</p>

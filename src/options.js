@@ -28,11 +28,15 @@ const TABS = [
     tog('onlineGear', 'Gear stats online', 'Your gear’s stats count in online matches too. Off keeps online matches even.'),
   ]],
   ['controls', 'Controls', [
-    seg('control', 'Swing with', [['mouse', 'Mouse / keys'], ['phone', 'Phone'], ['hand', 'Hand cam'], ['paddle', 'Paddle cam']], 'A controller works with any of these.'),
+    seg('control', 'Swing with', [['mouse', 'Mouse / keys'], ['phone', 'Phone'], ['hand', 'Hand cam'], ['paddle', 'Paddle cam'], ['pad', 'Controller']], 'Controller: a PlayStation, Xbox or Switch pad, with its own shot buttons. Its menus work with any of these.'),
     { t: 'check' },
     rng('sens', 'Sensitivity', 0.6, 1.6, 0.05, (v) => `${v.toFixed(2)}×`, 'How hard a camera swing has to be to count.'),
     rng('latency', 'Timing offset', -0.1, 0.25, 0.01, msFmt, 'Raise it if your camera swings land late, lower it if early.'),
     { t: 'pad' },
+    seg('padScheme', 'Controller scheme', [['buttons', 'Buttons'], ['flick', 'Stick flick']], 'Buttons: hold a shot button, let go as the ball arrives, aim with the left stick. Stick flick: flick the right stick to swing.'),
+    tog('padSwap', 'Swap sticks', 'Aim with the right stick (and flick with the left). For left-handed players.'),
+    tog('padMeter', 'Power meter', 'The charge meter by your player while you hold a shot button.'),
+    tog('padRumble', 'Vibration', 'Rumble when you hit: stronger on big hits, a tick on a perfectly timed one.'),
     { t: 'keys' },
   ]],
   ['audio', 'Audio', [
@@ -44,7 +48,7 @@ const TABS = [
   ]],
   ['graphics', 'Graphics', [
     seg('gfx', 'Quality', [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultra']], 'Auto picks a preset for your computer and adjusts it as you play.'),
-    seg('cam', 'Camera', [['player', 'Behind you'], ['tv', 'TV']], 'C (or controller Y) switches during a match.'),
+    seg('cam', 'Camera', [['player', 'Behind you'], ['tv', 'TV']], 'C (or the controller’s touchpad / View button) switches during a match.'),
     tog('showFps', 'Show frame rate'),
     reduceRow,
   ]],
@@ -58,6 +62,7 @@ const TABS = [
 const DEFAULTS = {
   level: 'club', format: 'short', surface: 'hard', handed: 'R', assist: true, timingMeter: true, replays: true, control: 'mouse', sens: 1, latency: 0.09,
   volume: 0.8, sfxVol: 1, crowdVol: 1, voiceVol: 1, voice: true, gfx: 'auto', cam: 'player', showFps: false, reduceMotion: false, bigHud: false, cbSafe: false, onlineGear: false,
+  padScheme: 'buttons', padSwap: false, padMeter: true, padRumble: true,
 };
 // Screens' own way back, for Esc and controller B.
 const BACK = { lobby: 'btnLobbyBack', phone: 'btnPhoneDone', setup: 'btnSetupDone', over: 'btnOverMenu' };
@@ -103,7 +108,7 @@ const Options = {
     const keys = document.querySelector('#pause .keys');
     if (keys) {
       for (const s of keys.children) s.classList.add('kb-hint');
-      keys.insertAdjacentHTML('beforeend', '<span class="pad-hint"><span class="pg" data-g="start"></span> resume</span><span class="pad-hint"><span class="pg" data-g="b"></span> resume</span><span class="pad-hint"><span class="pg" data-g="y"></span> TV / player camera</span>');
+      keys.insertAdjacentHTML('beforeend', '<span class="pad-hint"><span class="pg" data-g="start"></span> resume</span><span class="pad-hint"><span class="pg" data-g="b"></span> resume</span><span class="pad-hint"><span class="pg" data-g="back"></span> TV / player camera</span>');
     }
   },
 
@@ -159,7 +164,7 @@ const Options = {
     // lets the webcam go.
     if (this.from === 'pause' && inMatch() && Settings.control !== this.ctl0) {
       this.ctl0 = Settings.control; this.reopen = false;
-      if (Settings.control !== 'mouse') { UI.openControls('pause'); return; }
+      if (Settings.control !== 'mouse' && Settings.control !== 'pad') { UI.openControls('pause'); return; }
       UI.ensureControls();
     }
     UI.go(this.from);   // the menu puts the focus back on the button that opened Settings (or About)
@@ -251,8 +256,8 @@ const Options = {
     const fmt = Object.fromEntries(TABS.flatMap(([, , rows]) => rows.filter((r) => r.t === 'rng').map((r) => [r.key, r.fmt])));
     for (const o of root.querySelectorAll('[data-out]')) o.textContent = fmt[o.dataset.out](+(Settings[o.dataset.out] ?? DEFAULTS[o.dataset.out]));
     const c = Settings.control;
-    $('optCheck').textContent = c === 'phone' ? 'Connect phone' : c === 'mouse' ? 'Try the controls' : 'Camera check';
-    $('optCheckHint').textContent = c === 'phone' ? 'Pair your phone and test a swing.' : c === 'mouse' ? 'A practice pad to test clicks and keys.' : 'Light, framing, swing speed and timing, step by step.';
+    $('optCheck').textContent = c === 'phone' ? 'Connect phone' : c === 'mouse' ? 'Try the controls' : c === 'pad' ? 'Test the controller' : 'Camera check';
+    $('optCheckHint').textContent = c === 'phone' ? 'Pair your phone and test a swing.' : c === 'mouse' ? 'A practice pad to test clicks and keys.' : c === 'pad' ? 'Every button’s shot, with a live test of the charge and the aim.' : 'Light, framing, swing speed and timing, step by step.';
     $('padStatus').innerHTML = Pad.statusHTML();
     $('keyMap').innerHTML = this.keyMap();
     Pad.glyphs(root);
@@ -260,7 +265,10 @@ const Options = {
   keyMap() {
     const kb = [['Swing', '<kbd>Space</kbd> or click'], ['Harder', '<kbd>Shift</kbd>+<kbd>Space</kbd>, or flick the mouse first'], ['Slice', '<kbd>S</kbd>'], ['Serve', 'toss, then swing'], ['Camera view', '<kbd>C</kbd>'], ['Frame rate', '<kbd>F</kbd>'], ['Pause / back', '<kbd>Esc</kbd>']];
     const g = (k) => `<span class="pg" data-g="${k}"></span>`;
-    const pad = [['Swing', `flick ${g('rs')}: faster is harder, up for topspin, down for slice`], ['Swing / toss', g('a')], ['Drive / slice', `${g('rt')} / ${g('lt')}`], ['Slice', g('x')], ['Camera view', g('y')], ['Pause', g('start')], ['Menus', `D-pad, ${g('a')} select, ${g('b')} back`]];
+    const aimS = g(Settings.padSwap ? 'rs' : 'ls'), flickS = g(Settings.padSwap ? 'ls' : 'rs');
+    const pad = Settings.padScheme === 'flick'
+      ? [['Swing', `flick ${flickS}: faster is harder, up for topspin, down for slice`], ['Swing / toss', g('a')], ['Drive / slice', `${g('rt')} / ${g('lt')}`], ['Slice', g('x')], ['Aim', aimS], ['Camera view', `${g('back')} or ${g('y')}`], ['Pause', g('start')], ['Menus', `D-pad, ${g('a')} select, ${g('b')} back`]]
+      : [['Flat / topspin', `hold ${g('a')} / ${g('b')}, let go as the ball arrives`], ['Slice / lob', `${g('x')} / ${g('y')}`], ['Drop shot', `${g('lb')}+${g('x')}`], ['Power (riskier)', `hold ${g('rb')} too`], ['Aim', `${aimS}: sideways, up deep, down short angle`], ['Serve', `press to toss, let go at the top: ${g('a')} flat, ${g('b')} kick, ${g('x')} slice`], ['Camera view', g('back')], ['Pause', g('start')], ['Menus', `D-pad, ${g('a')} select, ${g('b')} back`]];
     const dl = (title, rows) => `<div><p class="km-title">${title}</p><dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl></div>`;
     return dl('Keyboard and mouse', kb) + dl('Controller', pad);
   },

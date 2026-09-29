@@ -105,36 +105,38 @@ export function feederPersona(tier) {
 export function strokeArrow(stroke, handed = 'R') { return (stroke === 'fh') === (handed !== 'L') ? '←' : '→'; }
 const STROKE = { fh: 'Forehand', bh: 'Backhand' };
 export function coachHint(ctx = {}) {
-  const c = ctx.control || 'mouse', mode = ctx.pad ? 'pad' : c, cam = mode === 'hand' || mode === 'paddle', phone = mode === 'phone';
+  const c = ctx.control || 'mouse', mode = ctx.pad || c === 'pad' ? 'pad' : c, cam = mode === 'hand' || mode === 'paddle', phone = mode === 'phone';
   const A = ctx.glyph || 'A', stroke = ctx.stroke === 'bh' ? 'bh' : 'fh', arrow = strokeArrow(stroke, ctx.handed);
+  // A controller's Buttons scheme (the default): hold a shot button, let go as the ball arrives.
+  const Gl = { a: A, b: 'B', x: 'X', y: 'Y', ...(ctx.glyphs || {}) }, btns = mode === 'pad' && ctx.padScheme !== 'flick';
   const thing = mode === 'paddle' ? 'the paddle' : mode === 'phone' ? 'your phone' : 'your hand';
-  const verb = mode === 'pad' ? `Press ${A}` : mode === 'mouse' ? (ctx.touch ? 'Tap' : 'Click (or press Space)') : cam ? `Swing ${thing} across your body ${arrow}` : `Swing your phone ${arrow}`;
+  const verb = btns ? `Hold ${Gl.b} and let go` : mode === 'pad' ? `Press ${A}` : mode === 'mouse' ? (ctx.touch ? 'Tap' : 'Click (or press Space)') : cam ? `Swing ${thing} across your body ${arrow}` : `Swing your phone ${arrow}`;
   const zone = ctx.zone && ZONES[ctx.zone];
   const aim = zone ? `${zone.name}: ${zone.tip}.` : '';
   const f = ctx.feedback;
   // What the last ball taught comes first, while the next one is on its way.
   if (f && (ctx.phase === 'ready' || ctx.phase === 'incoming')) {
-    if (f === 'early') return { arrow: '', head: 'A bit early', text: cam || phone ? 'Wait a moment longer: swing as the ball reaches your side.' : 'Wait for the ball to reach you, then swing.', tone: 'warn' };
-    if (f === 'late') return { arrow: '', head: 'A bit late', text: 'Swing earlier: start as the ball bounces on your side.', tone: 'warn' };
+    if (f === 'early') return { arrow: '', head: 'A bit early', text: cam || phone ? 'Wait a moment longer: swing as the ball reaches your side.' : btns ? 'Keep holding: let go as the ball reaches you.' : 'Wait for the ball to reach you, then swing.', tone: 'warn' };
+    if (f === 'late') return { arrow: '', head: 'A bit late', text: btns ? 'Let go a little sooner: just as the ball reaches you.' : 'Swing earlier: start as the ball bounces on your side.', tone: 'warn' };
     if (f === 'miss') return { arrow: cam || phone ? arrow : '', head: 'Swing!', text: `${verb} as the ball reaches you. Your player does the running.`, tone: 'warn' };
     if (f === 'wrong') return { arrow, head: 'Other way', text: `A ${STROKE[stroke].toLowerCase()} goes ${arrow}: swing across your body the other way.`, tone: 'warn' };
     if (ctx.serve && (f === 'out' || f === 'net')) return { arrow: '', head: f === 'net' ? 'Net' : 'Out', text: 'Hit it just as the ball starts to drop. The harder you swing, the more it can miss.', tone: 'warn' };
     if (ctx.serve && f === 'in') return { arrow: '', head: 'In!', text: 'A faster swing serves faster, and scores more.', tone: 'good' };
-    if (f === 'out') return { arrow: '', head: 'Out', text: 'A slower, smoother swing keeps it in. Timing aims it.', tone: 'warn' };
-    if (f === 'net') return { arrow: '', head: 'Net', text: mode === 'mouse' ? 'Flick the mouse upward as you click for topspin and height.' : 'Swing low to high to lift it over the net.', tone: 'warn' };
+    if (f === 'out') return { arrow: '', head: 'Out', text: btns ? 'A shorter hold hits softer; a centred stick plays a safer ball.' : 'A slower, smoother swing keeps it in. Timing aims it.', tone: 'warn' };
+    if (f === 'net') return { arrow: '', head: 'Net', text: mode === 'mouse' ? 'Flick the mouse upward as you click for topspin and height.' : btns ? `${Gl.b} topspin lifts it over; push the stick up for a deeper ball.` : 'Swing low to high to lift it over the net.', tone: 'warn' };
     if (f === 'clean') return { arrow: '', head: 'Clean timing!', text: aim || 'Just like that.', tone: 'good' };
     if (f === 'zone') return { arrow: '', head: 'On target!', text: aim || 'Keep it going.', tone: 'good' };
     if (f === 'good' || f === 'in') return { arrow: '', head: 'Good', text: aim || 'Keep it going.', tone: 'good' };
   }
   if (ctx.phase === 'serve') {
-    const text = mode === 'pad' ? `Press ${A} to toss the ball.` : mode === 'mouse' ? `${ctx.touch ? 'Tap' : 'Click (or press Space)'} to toss the ball.` : cam ? `Raise ${thing} above the toss line to toss.` : 'Tap your phone, or lift it, to toss.';
+    const text = btns ? `Press ${A} to toss (${Gl.b} kick, ${Gl.x} slice), hold it, let go at the top.` : mode === 'pad' ? `Press ${A} to toss the ball.` : mode === 'mouse' ? `${ctx.touch ? 'Tap' : 'Click (or press Space)'} to toss the ball.` : cam ? `Raise ${thing} above the toss line to toss.` : 'Tap your phone, or lift it, to toss.';
     return { arrow: cam ? '↑' : '', head: 'Serve', text, tone: '' };
   }
   if (ctx.phase === 'toss') {
-    const text = mode === 'pad' ? `Press ${A} again as the ball starts to drop.` : mode === 'mouse' ? `${ctx.touch ? 'Tap' : 'Click'} again as the ball starts to drop.` : cam ? `Swing ${thing} down through the ball as it starts to drop.` : 'Swing your phone overhead as the ball starts to drop.';
+    const text = btns ? 'Let go as the ball starts to drop.' : mode === 'pad' ? `Press ${A} again as the ball starts to drop.` : mode === 'mouse' ? `${ctx.touch ? 'Tap' : 'Click'} again as the ball starts to drop.` : cam ? `Swing ${thing} down through the ball as it starts to drop.` : 'Swing your phone overhead as the ball starts to drop.';
     return { arrow: cam ? '↓' : '', head: 'Hit it', text, tone: 'now' };
   }
-  if (ctx.phase === 'now') return { arrow: cam || phone ? arrow : '', head: 'Swing now!', text: aim || STROKE[stroke], tone: 'now' };
+  if (ctx.phase === 'now') return { arrow: cam || phone ? arrow : '', head: btns ? 'Let go now!' : 'Swing now!', text: aim || STROKE[stroke], tone: 'now' };
   if (ctx.phase === 'incoming') {
     const how = `${verb} as the ball reaches you.`;
     return { arrow: cam || phone ? arrow : '', head: STROKE[stroke], text: aim ? `${how} ${aim}` : how, tone: '' };
@@ -142,7 +144,7 @@ export function coachHint(ctx = {}) {
   // Waiting for the next ball: how this control works.
   const ready = {
     mouse: 'Your player runs to the ball: you only swing. Early pulls it cross-court, late sends it down the line.',
-    pad: `${A} or a flick of the right stick swings. RT hits harder, LT slices.`,
+    pad: btns ? `Hold ${Gl.b} topspin, ${A} flat or ${Gl.x} slice, let go as the ball arrives. The left stick aims.` : `${A} or a flick of the right stick swings. RT hits harder, LT slices.`,
     hand: 'Stand back so your hand stays in the picture on both sides. Your player does the running.',
     paddle: 'Keep the paddle in the picture on both sides. Your player does the running.',
     phone: 'Hold your phone like a racket handle. Your player does the running.',
