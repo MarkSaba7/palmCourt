@@ -143,7 +143,7 @@ export function readText(shot, kmh) {
 // aimGround's direction for the stick's sideways push; pushed up, deeper (nearer the baseline, so riskier); pulled down,
 // short: with a sideways push too, a sharp short angle toward the sideline. A centred stick plays a safe middle ball.
 // A lob goes up and deep, over a player at the net.
-export const PAD = { err: 1, risk: 1.25, wide: 0.35, deep: 0.8, angle: 6.1 };
+export const PAD = { err: 0.75, risk: 1.45, wide: 0.35, deep: 0.8, angle: 6.1 };
 export function padAim(aim, P, pow) {
   const up = Math.max(0, P.ay || 0), dn = Math.max(0, -(P.ay || 0)), side = Math.abs(P.ax || 0);
   if (side < 0.05) aim.x *= 0.5;
