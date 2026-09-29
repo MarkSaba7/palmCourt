@@ -146,25 +146,49 @@ const GRIP2 = new THREE.Vector3(0, -0.1, 0);        // a two-hander's top hand o
 const THROAT = new THREE.Vector3(0, -0.27, 0);      // the throat, where the free hand steadies the racket
 const PALM = new THREE.Vector3(0, -0.075, 0);       // palm centre, hand frame
 const LEAD = 1 / 40;                                // strokes are sampled this far ahead: the pose smoothing lags as much
+// A stroke (or serve) that has to meet the ball sooner than its natural pace allows (a click, a late swing) runs its
+// forward swing up to MAXR times faster rather than jumping ahead; one given more time than it needs slows to 0.4x.
+const MAXR = 3;
+// When the racket's path changes under it (a new stroke, a restart, the shot at the contact, a new plan), the racket
+// carries on from where it is, at its speed, and eases onto the new path over EASE_T.
+const EASE_T = 0.15;
 
 // Pose <-> flat arrays (splines run on flat keys).
 const PLEN = POSE_KEYS.reduce((n, k) => n + (Array.isArray(POSE.ready[k]) ? 3 : 1), 0);
-const KL = PLEN + 11;                               // + racket head h, axis a, face n, face weight, free-hand weight
+const NT = 11;                                      // racket target channels: head h, axis a, face n, face weight, free-hand weight
+const KL = PLEN + NT;
 function poseToArr(p, a) { let i = 0; for (const k of POSE_KEYS) { const v = p[k]; if (Array.isArray(v)) { a[i++] = v[0]; a[i++] = v[1]; a[i++] = v[2]; } else a[i++] = v; } return a; }
 function arrToPose(a, p) { let i = 0; for (const k of POSE_KEYS) { const v = p[k]; if (Array.isArray(v)) { v[0] = a[i++]; v[1] = a[i++]; v[2] = a[i++]; } else p[k] = a[i++]; } return p; }
 // Catmull-Rom through keys K at times kt (the first and last keys are rests); ks scales the speed through a key.
-function spline(K, kt, ks, tau, out) {
-  const n = kt.length;
-  if (tau <= kt[0]) { out.set(K[0]); return out; }
-  if (tau >= kt[n - 1]) { out.set(K[n - 1]); return out; }
+// Channels j0 .. j0 + out.length of the keys (all of them by default).
+function spline(K, kt, ks, tau, out, j0 = 0) {
+  const n = kt.length, m = out.length;
+  if (tau <= kt[0] || tau >= kt[n - 1]) { const E = K[tau <= kt[0] ? 0 : n - 1]; for (let j = 0; j < m; j++) out[j] = E[j0 + j]; return out; }
   let i = 0;
   while (tau > kt[i + 1]) i++;
   const h = kt[i + 1] - kt[i], s = (tau - kt[i]) / h, s2 = s * s, s3 = s2 * s;
   const h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
   const A = K[i], B = K[i + 1], Ap = K[Math.max(0, i - 1)], Bn = K[Math.min(n - 1, i + 2)];
   const ta = i > 0 ? (h / (kt[i + 1] - kt[i - 1])) * ks[i] : 0, tb = i + 2 < n ? (h / (kt[i + 2] - kt[i])) * ks[i + 1] : 0;
-  for (let j = 0; j < out.length; j++) out[j] = h00 * A[j] + h10 * ta * (B[j] - Ap[j]) + h01 * B[j] + h11 * tb * (Bn[j] - A[j]);
+  for (let j = 0; j < m; j++) { const q = j0 + j; out[j] = h00 * A[q] + h10 * ta * (B[q] - Ap[q]) + h01 * B[q] + h11 * tb * (Bn[q] - A[q]); }
   return out;
+}
+// How fast a stroke's clock runs to cover `need` seconds of it in `rem` seconds of real time.
+const warp = (need, rem) => (rem > 1e-3 ? clamp(need / rem, 0.4, MAXR) : MAXR);
+// A clock reading t on key times kOld, as the same place between the keys on kNew (keys move when the shot becomes known:
+// the pose then stays put instead of jumping).
+function remap(t, kOld, kNew, n) {
+  if (t <= kOld[0]) return kNew[0] + (t - kOld[0]);
+  if (t >= kOld[n - 1]) return kNew[n - 1] + (t - kOld[n - 1]);
+  let i = 0;
+  while (t > kOld[i + 1]) i++;
+  const d = kOld[i + 1] - kOld[i];
+  return kNew[i] + (d > 1e-6 ? (t - kOld[i]) / d : 0) * (kNew[i + 1] - kNew[i]);
+}
+// Make S[i..i+2] a unit vector (an eased direction), or take R's if the ease has all but cancelled it.
+function unit(S, i, R) {
+  const l = Math.hypot(S[i], S[i + 1], S[i + 2]);
+  if (l > 0.25) { S[i] /= l; S[i + 1] /= l; S[i + 2] /= l; } else { S[i] = R[i]; S[i + 1] = R[i + 1]; S[i + 2] = R[i + 2]; }
 }
 // Hip height (py) that keeps the lower foot on the court for these leg angles, for the 1.83 m build.
 const legLen = (hip, kn) => (0.43 * Math.cos(hip[0]) + 0.44 * Math.cos(hip[0] + kn)) * Math.cos(hip[2]);
@@ -208,8 +232,7 @@ const BK = {
 
 // ---- IK: damped least squares on a few joint angles, pulled gently toward the keyed pose ----
 const _J = new Float64Array(9 * 7), _f0 = new Float64Array(9), _f1 = new Float64Array(9), _A = new Float64Array(7 * 8);
-function solveIK(q, seed, lo, hi, n, fk, t, w, m, iters) {
-  const mu = 0.012, lam = 0.006;
+function solveIK(q, seed, lo, hi, n, fk, t, w, m, iters, mu = 0.012, lam = 0.006) {
   for (let it = 0; it < iters; it++) {
     fk(q, _f0);
     for (let j = 0; j < n; j++) {
@@ -269,6 +292,7 @@ const _p0 = new THREE.Vector3(), _v0 = new THREE.Vector3();
 // The serve's reach. The toss is met on the strings a little above the head's centre (higher on a big serve), with
 // the arm and racket straight up at it and a small jump: SV_JUMP is the jump game.js tosses for (serveHeight). SV_SLACK:
 // the arm solve stops a few cm short of dead straight and the body lags its keys a little, so it jumps that much more.
+const SV_USUAL = 0.66;   // when the toss is usually met (game.js TOSS_V): the racket waits dropped for the contact until it's known
 const SV_JUMP = 0.08, SV_SLACK = 0.03, svOn = (pow) => lerp(0.04, 0, pow);
 const _sM = new THREE.Matrix4(), _sL = new THREE.Matrix4(), _sE = new THREE.Euler(), _sS = new THREE.Vector3(), _svP = clonePose(POSE.ready);
 
@@ -304,6 +328,19 @@ export class Avatar {
     this.skt = new Float64Array(7); this.skt3 = new Float64Array(3); this.sks = [1, 1, 1, 1, 1, 1, 1]; this.svPow = 0.7; this.toss = null;
     this.c = new THREE.Vector3(0.8, 0.95, -0.3); this.cFor = -1;
     this.ikQ = null; this.ikL = null; this.lGrip = GRIP2;
+    // Smooth motion: the stroke's and the serve's own clocks (tau: 0 at the contact; ss: from the toss) and how fast they
+    // run; a second stage for the pose filter (so joints ease in and out: no velocity jumps); the shown pose (the
+    // filtered one with the racket arm solved on it); the arm solve's weight, eased in and out; the take-back, eased.
+    this.tau = null; this.ss = null; this.rate = 1; this.hitT = null;
+    this.pose1 = clonePose(POSE.stand); this.show = clonePose(POSE.stand);
+    this.ikW = 0; this.prepS = 0; this.load = 0; this.et = EASE_T;
+    this.kPrev = new Float64Array(5); this.sPrev = new Float64Array(7); this.kOK = this.sOK = false;
+    // The racket's target (body frame, NT channels): the path's (tgR), the one used (tgS), and the ease from where the
+    // racket was when the path changed (x0, v0 over EASE_T, from bt). rk / rkv: where the racket is shown and its velocity.
+    this.tgR = new Float32Array(NT); this.tgS = new Float32Array(NT); this.tgT = new Float32Array(NT);
+    this.bx0 = new Float32Array(NT); this.bv0 = new Float32Array(NT); this.bt = 9; this.ev = 0;
+    this.rk = null; this.rkv = new Float32Array(9); this.rkT = 0;
+    this.tgP = new Float32Array(NT); this.tgVv = new Float32Array(NT); this.tgOK = false;   // last frame's target and its velocity
     this.fkR = (q, f) => this.armFK(q, f);
     this.fkL = (q, f) => this.leftFK(q, f);
     this.blur = new SwingBlur();
@@ -341,8 +378,11 @@ export class Avatar {
   setStyle(style) { this.style = { ...(style || {}) }; }
   // A stroke whose racket meets the ball at contactT. read: what the swing asked for ({ pow, spin, drop, dirX }, from
   // Input.read) when a person swung; without it the stroke is guessed from how this player plays until hit() says.
-  swing(stroke, contactT, read) {
-    this.mode = 'swing'; this.stroke = stroke; this.contactT = contactT;
+  // A new call for the same stroke before its contact only re-times it (the stroke's clock speeds up or slows down to
+  // meet the new moment); anything else starts a fresh stroke from its take-back, eased from wherever the racket is.
+  swing(stroke, contactT, read, hitT) {
+    if (!(this.mode === 'swing' && this.stroke === stroke && this.tau != null && this.tau < 0.02)) { this.tau = null; this.kOK = false; }
+    this.mode = 'swing'; this.stroke = stroke; this.contactT = contactT; this.hitT = hitT ?? null; this.ss = null; this.ev = 1; this.prepS = 0;
     const s = this.sh;
     s.known = !!read;
     if (read) {
@@ -353,6 +393,7 @@ export class Avatar {
   }
   // The ball has been struck (game.js applyHit): the rest of the stroke follows the shot that was actually played.
   hit(shot, v, volley) {
+    this.ev = 1;
     if (this.mode === 'serve') { this.svPow = shot.power ?? this.svPow; return; }
     const s = this.sh, rpm = shot.rpm || 0;
     s.known = true; s.pow = clamp(shot.power ?? 0.6, 0, 1); s.volley = !!volley;
@@ -365,11 +406,11 @@ export class Avatar {
     }
   }
   // The toss (p, v: where the ball leaves the hand, world) lets the racket meet the ball at the top.
-  serveToss(t, p, v) { this.mode = 'serve'; this.tossT = t; this.contactT = 0; this.toss = p && v ? { p: { ...p }, v: { ...v } } : null; this.svPow = 0.7; }
+  serveToss(t, p, v) { this.mode = 'serve'; this.tossT = t; this.contactT = 0; this.toss = p && v ? { p: { ...p }, v: { ...v } } : null; this.svPow = 0.7; this.ss = this.tau = null; this.sOK = false; this.ev = 1; this.prepS = 0; }
   // The serve's keys: timed from the toss, and around the contact once it's known (the trophy is held until then).
   buildServe(pl) {
     const pow = clamp(this.svPow ?? 0.7, 0, 1), st = this.style.serve || 'classic', known = this.contactT > 0;
-    const cT = known ? Math.max(0.25, this.contactT - this.tossT) : 9, Td = lerp(0.3, 0.17, pow), kt = this.skt;
+    const cT = known ? Math.max(0.25, this.contactT - this.tossT) : SV_USUAL, Td = lerp(0.3, 0.17, pow), kt = this.skt;
     kt[4] = cT; kt[3] = cT - 0.45 * Td; kt[5] = cT + 0.1; kt[6] = cT + lerp(0.52, 0.4, pow);
     kt[2] = Math.min(st === 'high-toss' ? 0.58 : st === 'compact' ? 0.4 : 0.5, kt[3] - 0.08);
     kt[1] = Math.min(st === 'compact' ? 0.16 : 0.24, kt[2] - 0.08); kt[0] = Math.min(0, kt[1] - 0.08);
@@ -405,7 +446,7 @@ export class Avatar {
         K[PLEN + 6] = nx / nl; K[PLEN + 7] = ny / nl; K[PLEN + 8] = nz / nl;   // (the face square to it, toward the court)
       }
     }
-    return known ? this.SK : this.SK3;
+    return this.SK;
   }
   // How high the racket-head centre reaches (body frame, feet on the court) at a ball at c, with the body in pose p:
   // the hitting shoulder from the rest bone offsets, then the arm and racket in a straight line to the ball. Moves no bones.
@@ -424,12 +465,28 @@ export class Avatar {
     lerpPose(SV[4], SV[4], 0, _svP);
     return this.reachY(_svP, { x: 0.14, z: -0.42 }) + SV_JUMP + svOn(0.7);
   }
-  serveHit(t, pow) { this.mode = 'serve'; this.contactT = t; if (pow != null) this.svPow = pow; for (const o of ALL) if (o !== this) o.splitStep(t - 0.2); }
-  idle(standing) { this.mode = standing ? 'stand' : 'ready'; this.sh.known = false; this.cFor = -1; }
+  // The serve's contact is known (t): the serve's clock runs on to meet it (faster when it's due at once, as on a click).
+  serveHit(t, pow) {
+    if (this.mode !== 'serve') { this.ss = null; this.sOK = false; }
+    this.mode = 'serve'; this.contactT = t; this.tau = null; this.ev = 1;
+    if (pow != null) this.svPow = pow;
+    for (const o of ALL) if (o !== this) o.splitStep(t - 0.2);
+  }
+  // How long the serve's racket takes from the drop to the ball at its own pace: what a click's serve is given (game.js humanServe).
+  serveLead(pow) { return 0.45 * lerp(0.3, 0.17, clamp(pow ?? this.svPow ?? 0.7, 0, 1)); }
+  idle(standing) { this.mode = standing ? 'stand' : 'ready'; this.sh.known = false; this.cFor = -1; this.tau = this.ss = null; }
+  // Seconds from now until the racket is at the ball. Nothing when the stroke is in step with the ball; a swing that had
+  // to be hurried (a late click) arrives a little after the ball is struck, and the game holds the drawn ball for it.
+  late(now) {
+    let need = 0;
+    if (this.mode === 'swing') need = -(this.tau != null ? this.tau : Math.min(now - this.contactT, this.kt[0]));
+    else if (this.mode === 'serve' && this.contactT > 0) need = this.skt[4] - (this.ss != null ? this.ss : Math.max(0, now - this.tossT));
+    return need > 0 ? Math.max(this.contactT - now, need / MAXR) : 0;
+  }
   // A split step: a small hop timed to land as the opponent strikes. A second call for the same stroke is ignored.
   splitStep(t) { if (Math.abs(t - this.hop) > 0.6) this.hop = t; }
   // amp: how big the point was (game.js announcePoint: 0.3 an ordinary point, 0.5+ an ace or a winner, 1 the match).
-  react(kind, now, amp = 0.5) { this.reactKind = kind; this.reactUntil = now + 1.6; this.mode = 'react'; this.reactAmp = amp; }
+  react(kind, now, amp = 0.5) { this.reactKind = kind; this.reactUntil = now + 1.6; this.mode = 'react'; this.reactAmp = amp; this.tau = this.ss = null; }
   // Winning a point: a small fist on an ordinary one; on a big one this player's own celebration (style.celebrate).
   // All generic gestures (these pros are fictional): a fist, a two-fisted pump, a hand on the chest then pointing up,
   // both arms up to the crowd, or a calm raise of the racket. t = seconds since the point ended.
@@ -496,7 +553,18 @@ export class Avatar {
   contactPoint(pl) {
     const plan = pl && pl.plan;
     if (plan && Number.isFinite(plan.y) && Number.isFinite(plan.x)) {
-      this.toBody(plan.x, plan.y, plan.z, pl, this.c);
+      let x = plan.x, y = plan.y, z = plan.z;
+      // A person's swing meets the ball when they swing (a little early, a little late), not at the planned moment:
+      // where the ball is at that time, from the path it is flying.
+      const path = pl.path, tb = this.hitT ?? this.contactT, dt = tb - plan.t;
+      if (this.mode === 'swing' && path && path.length && Math.abs(dt) > 0.01 && Math.abs(dt) < 0.3) {
+        let s = path[0];
+        for (const q of path) if (Math.abs(q.t - tb) < Math.abs(s.t - tb)) s = q;
+        const d = tb - s.t;
+        if (Math.abs(d) < 0.3 && s.b === (plan.volley ? 0 : 1)) { x = s.x + s.vx * d; y = Math.max(0.1, s.y + s.vy * d - 4.9 * d * d); z = s.z + s.vz * d; }
+      }
+      this.toBody(x, y, z, pl, this.c);
+      if (this.cFor >= 0 && plan.t !== this.cFor) this.ev = 1;   // a new plan: the racket eases over to it
       this.cFor = plan.t;
     } else if (this.cFor < 0) this.c.set(this.stroke === 'bh' ? -0.8 : 0.8, 0.95, -0.3);
     return this.c;
@@ -556,8 +624,14 @@ export class Avatar {
       if (i === 2) { [nx, nz] = [ca * nx + sa * nz, -sa * nx + ca * nz]; }
       const al2 = Math.hypot(ax, ay, az) || 1, nl = Math.hypot(nx, ny, nz) || 1;
       ax /= al2; ay /= al2; az /= al2;
-      if (i === 2) { K[PLEN] = c.x - kp.px; K[PLEN + 1] = c.y; K[PLEN + 2] = c.z - kp.pz; }   // (the ball, from where the step takes the body)
-      else { K[PLEN] = Wx + RH * ax; K[PLEN + 1] = Wy + RH * ay; K[PLEN + 2] = Wz + RH * az; }
+      if (i === 2) {   // the ball, from where the step takes the body; one out of reach is swung at, not strained after
+        let x = c.x - kp.px, y = c.y, z = c.z - kp.pz;
+        this.reachY(kp, c);
+        const S = _sS, R = 0.96 * (this.B.foreR.position.length() + this.B.handR.position.length() + RH);
+        const dx = x - S.x, dy = y - S.y - kp.py, dz = z - S.z, d = Math.hypot(dx, dy, dz);
+        if (d > R) { const f = R / d; x = S.x + dx * f; y = S.y + kp.py + dy * f; z = S.z + dz * f; }
+        K[PLEN] = x; K[PLEN + 1] = y; K[PLEN + 2] = z;
+      } else { K[PLEN] = Wx + RH * ax; K[PLEN + 1] = Wy + RH * ay; K[PLEN + 2] = Wz + RH * az; }
       K[PLEN + 3] = ax; K[PLEN + 4] = ay; K[PLEN + 5] = az; K[PLEN + 6] = nx / nl; K[PLEN + 7] = ny / nl; K[PLEN + 8] = nz / nl; K[PLEN + 9] = r(9);
       // The free hand: a two-hander's on the grip through the stroke, a one-hander's on the throat at the take-back.
       K[PLEN + 10] = bh ? (one ? [0.9, 0.5, 0, 0, 0][i] : [1, 1, 1, 1, 0.85][i]) : 0;
@@ -576,22 +650,40 @@ export class Avatar {
     this.yaw = damp(this.yaw, yawT, 8, dt);
     this.root.position.set(pl.x, 0, pl.z);
     this.root.rotation.y = (pl.side > 0 ? 0 : Math.PI) + this.yaw;
-    let k = 14, ik = 0;
+    let k = 14, ik = 0, src = 0, clk = 0, done = false;   // src: the racket follows the stroke (1), the serve (2) or the take-back (3); clk: its clock
+    if (this.mode !== 'swing' && this.mode !== 'serve') this.rate = 1;
     if (this.mode === 'swing') {
-      const tau = now - this.contactT;
-      if (tau < 0) this.guess(pl);
-      this.buildKeys(tau < 0 ? this.contactPoint(pl) : this.c);
-      arrToPose(spline(this.K, this.kt, this.ks, tau + LEAD, this.kv), T);   // the body (smoothed below, so a little ahead)
-      spline(this.K, this.kt, this.ks, tau, this.kv);                         // the racket, exactly now
-      ik = 1; k = 40;
-      if (tau > this.kt[4] + 0.12) { this.mode = 'ready'; this.cFor = -1; this.sh.known = false; }
+      const kt = this.kt, pre = this.tau == null || this.tau < 0;
+      if (pre) this.guess(pl);
+      this.buildKeys(pre ? this.contactPoint(pl) : this.c);
+      // The stroke's clock (0 at the contact): in step with the ball when there's time, else from the racket's own start
+      // (the take-back, or the slot when it was already dropping into it) with the forward swing hurried to meet the ball
+      // (a click, a late swing). It stops on the contact for a frame, never skips it.
+      const first = this.tau == null;
+      if (first) { this.tau = Math.min(now - this.contactT, kt[0] + (kt[1] - kt[0]) * this.load); this.rate = 1; this.load = 0; }
+      else if (this.kOK) this.tau = remap(this.tau, this.kPrev, kt, 5);
+      this.kPrev.set(kt); this.kOK = true;
+      if (first) { /* (this frame shows the start) */ }
+      else if (this.tau < 0) { this.rate = warp(-this.tau, this.contactT - now + dt); this.tau = Math.min(0, this.tau + dt * this.rate); }
+      else { this.rate = 1 + (this.rate - 1) * Math.exp(-dt / 0.05); this.tau += dt * this.rate; }   // (a hurried swing eases back to its own pace after the contact)
+      arrToPose(spline(this.K, kt, this.ks, this.tau + LEAD * this.rate, this.kv), T);   // the body (smoothed below, so a little ahead)
+      ik = 1; k = 40; src = 1; clk = this.tau;
+      done = this.tau > kt[4] + 0.12;
     } else if (this.mode === 'serve') {
-      const ts = now - this.tossT, K = this.buildServe(pl), kt = K === this.SK ? this.skt : this.skt3;
-      if (K === this.SK3) this.skt3.set(this.skt.subarray(0, 3));
-      arrToPose(spline(K, kt, this.sks, ts + LEAD, this.kv), T);
-      spline(K, kt, this.sks, ts, this.kv);
-      ik = 1; k = 30;
-      if (this.contactT && now > this.contactT + 0.7) this.mode = 'ready';
+      const K = this.sK = this.buildServe(pl), known = this.contactT > 0, kt = this.sKt = this.skt;
+      // The serve's clock (from the toss): the racket goes on to the drop and waits there for the contact to be known
+      // (a person's click), then runs on to meet it (hurried when it's due at once).
+      const first = this.ss == null;
+      if (first) { this.ss = Math.max(0, now - this.tossT); this.rate = 1; }
+      else if (this.sOK) this.ss = remap(this.ss, this.sPrev, kt, 7);
+      this.sPrev.set(kt); this.sOK = true;
+      if (first) { /* (this frame shows the start) */ }
+      else if (!known) { this.rate = this.ss < kt[3] ? 1 : 0; this.ss = Math.min(this.ss + dt, Math.max(this.ss, kt[3])); }
+      else if (this.ss < kt[4]) { this.rate = warp(kt[4] - this.ss, this.contactT - now + dt); this.ss = Math.min(kt[4], this.ss + dt * this.rate); }
+      else { this.rate = 1 + (this.rate - 1) * Math.exp(-dt / 0.05); this.ss += dt * this.rate; }
+      arrToPose(spline(K, kt, this.sks, this.ss + LEAD * this.rate, this.kv), T);
+      ik = 1; k = 30; src = 2; clk = this.ss;
+      done = known && this.ss > kt[6] + 0.15;
     } else if (this.mode === 'react') {
       lerpPose(POSE.stand, POSE[this.reactKind] || POSE.stand, 1, T);
       if (this.reactKind === 'win') this.celebrate(T, now - (this.reactUntil - 1.95), now);
@@ -599,14 +691,22 @@ export class Avatar {
       if (now > this.reactUntil) { this.mode = 'stand'; this.ritualT = now; }
     } else {
       lerpPose(POSE.ready, POSE.stand, this.mode === 'stand' ? 1 : 0, T);
-      if (this.prep > 0) {
-        // Taking the racket back as the ball comes: the take-back of the stroke it will be.
+      // Taking the racket back as the ball comes: the take-back of the stroke it will be. Eased, so a sudden change
+      // of mind (a camera wind-up, the ball let go) doesn't snap the racket back or forward.
+      this.prepS += clamp(clamp(this.prep || 0, 0, 1) - this.prepS, -3 * dt, 4 * dt);
+      const pe = this.prepS * this.prepS * (3 - 2 * this.prepS) * 0.85;
+      if (pe > 0.002) {
+        if (this.stroke !== this.prepStroke) this.ev = 1;
         this.stroke = this.prepStroke; this.guess(pl);
         this.buildKeys(this.contactPoint(pl));
-        this.kv.set(this.K[0]); arrToPose(this.kv, this.tmpPose);
-        lerpPose(T, this.tmpPose, this.prep * 0.85, T);
-        ik = this.prep * 0.85;
-      } else this.cFor = -1;
+        // As the ball arrives the racket drops from the take-back into the slot, ready to swing forward (a person's swing
+        // then starts from there, so it needn't be hurried far).
+        const tt = pl.plan ? pl.plan.t - now : 9, ld = this.load = sstep(0.26, 0.06, tt) * Math.min(1, pe / 0.85), K0 = this.K[0], K1 = this.K[1], kk = this.kv;
+        for (let j = 0; j < KL; j++) kk[j] = K0[j] + (K1[j] - K0[j]) * ld;
+        arrToPose(kk, this.tmpPose);
+        lerpPose(T, this.tmpPose, pe, T);
+        ik = pe; src = 3;
+      } else { this.cFor = -1; this.load = 0; }
       const r = clamp(speed / 5, 0, 1) * (1 - this.shuf), gait = this.style.gait, g = gait === 'bouncy' ? 1.8 : gait === 'glide' ? 0.5 : 1;
       if (r > 0.02) {
         this.runPhase += dt * (5 + speed * 1.7);
@@ -635,14 +735,82 @@ export class Avatar {
       if (now - (this.ritualT ?? -9) < 1.1 && r < 0.3) this.ritual(T, now - this.ritualT);
       T.shR[0] += this.armLift;
     }
-    lerpPose(this.pose, T, 1 - Math.exp(-k * dt), this.pose);
+    // Two filter stages, each twice as quick (the same lag as one): joints ease into and out of every change of target.
+    const a = 1 - Math.exp(-2 * k * dt);
+    lerpPose(this.pose1, T, a, this.pose1); lerpPose(this.pose, this.pose1, a, this.pose);
     // A lunge's step moves the whole figure (body frame px / pz; the root, so replays keep it too).
     const th = this.root.rotation.y, ox = this.pose.px * this.body.scale.x, oz = this.pose.pz;
     this.root.position.set(pl.x + Math.cos(th) * ox + Math.sin(th) * oz, 0, pl.z - Math.sin(th) * ox + Math.cos(th) * oz);
+    // The racket's target, and how much the arm follows it: eased in as a stroke starts, out after it (the target then
+    // stays where the finish left it).
+    this.ikW = ik > this.ikW ? Math.min(ik, this.ikW + 7 * dt) : Math.max(ik, this.ikW - 4 * dt);
+    if (src && src !== this.src) { this.ev = 1; this.src = src; }
+    this.bt += dt;
+    if (this.ikW > 1e-3) {
+      const R = this.tgR, S = this.tgS;
+      if (src === 1) spline(this.K, this.kt, this.ks, clk, R, PLEN);
+      else if (src === 2) spline(this.sK, this.sKt, this.sks, clk, R, PLEN);
+      else if (src === 3) for (let j = 0; j < NT; j++) R[j] = this.kv[PLEN + j];
+      if (this.ev && this.rk) this.ease(src, clk, now, dt);
+      const E = this.et, u = Math.min(1, this.bt / E), h0 = (2 * u - 3) * u * u + 1, h1 = ((u - 2) * u + 1) * u * E;
+      for (let j = 0; j < NT; j++) S[j] = R[j] + h0 * this.bx0[j] + h1 * this.bv0[j];
+      unit(S, 3, R); unit(S, 6, R);
+      const P = this.tgP, Vv = this.tgVv;
+      for (let j = 0; j < NT; j++) { Vv[j] = this.tgOK && dt > 1e-4 ? clamp((S[j] - P[j]) / dt, -80, 80) : 0; P[j] = S[j]; }
+      this.tgOK = true;
+    } else this.tgOK = false;
+    this.ev = 0;
+    if (done) {   // the stroke or serve is over: the arm goes back to the ready pose (the target stays where it finished)
+      if (this.mode === 'swing') { this.cFor = -1; this.sh.known = false; this.tau = null; } else this.ss = null;
+      this.mode = 'ready';
+    }
     // The racket arm is solved on the smoothed body, so the head is where the path says (and on the ball at contact).
-    if (ik > 0.01) this.aim(this.pose, ik, dt); else this.ikQ = this.ikL = null;
-    this.applyPose(this.pose, dt, pl);
+    const P = lerpPose(this.pose, this.pose, 0, this.show);
+    if (this.ikW > 1e-3) this.aim(P, this.ikW, dt); else this.ikQ = this.ikL = null;
+    this.applyPose(P, dt, pl);
     if (this.twirl) { this.B.handR.rotation.y += this.twirl; this.twirl = 0; }
+    this.trackRacket(dt);
+  }
+  // The racket's path changed (a new stroke or plan, the shot, a serve's contact): it carries on from where it is shown,
+  // at its speed, and eases onto the new path over EASE_T (a cubic from that offset and velocity to none).
+  ease(src, clk, now, dt) {
+    const R = this.tgR, V = this.tgT, rk = this.rk, rv = this.rkv, X = this.bx0, W = this.bv0, d = 0.01;
+    // The ease is over well before the racket is due at the ball, so the contact itself is on the path.
+    let rem = 9;
+    if (src === 1 && clk < 0) rem = Math.max(this.contactT - now, -clk / MAXR);
+    else if (src === 2 && this.contactT > 0 && clk < this.sKt[4]) rem = Math.max(this.contactT - now, (this.sKt[4] - clk) / MAXR);
+    this.et = clamp(0.6 * rem, 0.03, EASE_T);
+    if (src === 1 || src === 2) {   // the new path's own velocity
+      if (src === 1) spline(this.K, this.kt, this.ks, clk - d * this.rate, V, PLEN); else spline(this.sK, this.sKt, this.sks, clk - d * this.rate, V, PLEN);
+      for (let j = 0; j < NT; j++) V[j] = (R[j] - V[j]) / d;
+    } else V.fill(0);
+    // Where the path was heading: last frame's target when the arm was following it (the arm's own lag then stays free to
+    // close up), else the racket as shown.
+    const T0 = this.ikW > 0.5 && this.tgOK, po = T0 ? this.tgP : rk, vo = T0 ? this.tgVv : rv;
+    const f = po[6] * R[6] + po[7] * R[7] + po[8] * R[8] < 0 ? -1 : 1;   // (either side of the strings will do)
+    for (let j = 0; j < 9; j++) { const s = j >= 6 ? f : 1; X[j] = s * (po[j] + vo[j] * dt) - R[j]; W[j] = s * vo[j] - V[j]; }
+    const was = this.ikW > 0.05;   // (the weights ease from the last ones only if the arm was following them)
+    for (let j = 9; j < NT; j++) { X[j] = was ? this.tgS[j] - R[j] : 0; W[j] = 0; }
+    // Carry on only a little way: a racket flying off the other way turns back rather than sailing on.
+    for (let g = 0; g < 9; g += 3) {
+      const x = Math.hypot(X[g], X[g + 1], X[g + 2]), v = Math.hypot(W[g], W[g + 1], W[g + 2]) * this.et, m = 1.2 * x + 0.1;
+      if (v > m) for (let j = g; j < g + 3; j++) W[j] *= m / v;
+    }
+    this.bt = 0;
+  }
+  // Where the racket is shown (body frame: head centre, axis, face) and how fast that changes.
+  trackRacket(dt) {
+    this.racket.updateWorldMatrix(true, false);
+    _M.copy(this.body.matrixWorld).invert().multiply(this.racket.matrixWorld);
+    const first = !this.rk, r = this.rk || (this.rk = new Float32Array(9)), v = this.rkv;
+    const h = _w.copy(HEADC).applyMatrix4(_M), x0 = h.x, y0 = h.y, z0 = h.z;
+    _v.set(0, -1, 0).transformDirection(_M); _c.set(0, 0, 1).transformDirection(_M);
+    const nw = [x0, y0, z0, _v.x, _v.y, _v.z, _c.x, _c.y, _c.z];
+    for (let j = 0; j < 9; j++) {
+      if (!first && dt > 1e-4) v[j] = clamp((nw[j] - r[j]) / dt, j < 3 ? -60 : -80, j < 3 ? 60 : 80);
+      else if (first) v[j] = 0;
+      r[j] = nw[j];
+    }
   }
   // Racket arm FK for angles q = [shoulder xyz, elbow, wrist xyz]: world racket-head centre, axis and (for the string
   // face) the face normal crossed with the wanted one, so either side of the strings will do.
@@ -668,7 +836,7 @@ export class Avatar {
   // Solve the racket arm (and a two-hander's other hand) for this frame's racket target; blend it in by w. T is the
   // smoothed pose about to be shown: its arm angles seed the solve and are replaced.
   aim(T, w, dt) {
-    const B = this.B, kv = this.kv, P0 = PLEN;
+    const B = this.B, tg = this.tgS;
     // The body the arms hang from.
     B.hips.position.set(this.rest.hips.x, this.rest.hips.y + T.py, this.rest.hips.z);
     B.spine.rotation.set(T.sp[0] * 0.45, T.sp[1] * 0.45, T.sp[2] * 0.5);
@@ -677,21 +845,31 @@ export class Avatar {
     B.clavL.rotation.set(0, 0, -0.22 * Math.max(0, -T.shL[2] - 1.0) - 0.1 * Math.max(0, T.shL[0] - 2.0));
     B.clavR.updateWorldMatrix(true, false); B.clavL.updateWorldMatrix(false, false);
     const bw = this.body.matrixWorld;
-    _tH.set(kv[P0], kv[P0 + 1], kv[P0 + 2]).applyMatrix4(bw);
-    _tA.set(kv[P0 + 3], kv[P0 + 4], kv[P0 + 5]).transformDirection(bw);
-    _tN.set(kv[P0 + 6], kv[P0 + 7], kv[P0 + 8]).transformDirection(bw);
+    _tH.set(tg[0], tg[1], tg[2]).applyMatrix4(bw);
+    _tA.set(tg[3], tg[4], tg[5]).transformDirection(bw);
+    _tN.set(tg[6], tg[7], tg[8]).transformDirection(bw);
     _t[0] = _tH.x; _t[1] = _tH.y; _t[2] = _tH.z; _t[3] = _tA.x; _t[4] = _tA.y; _t[5] = _tA.z; _t[6] = _t[7] = _t[8] = 0;
-    W_R[6] = W_R[7] = W_R[8] = 0.25 * kv[P0 + 9]; W_R[3] = W_R[4] = W_R[5] = 0.3 - 0.18 * kv[P0 + 9];   // at the contact, the head on the ball first
+    W_R[6] = W_R[7] = W_R[8] = 0.25 * tg[9]; W_R[3] = W_R[4] = W_R[5] = 0.3 - 0.18 * tg[9];   // at the contact, the head on the ball first
     _sd[0] = T.shR[0]; _sd[1] = T.shR[1]; _sd[2] = T.shR[2]; _sd[3] = T.elR; _sd[4] = T.wrR[0]; _sd[5] = T.wrR[1]; _sd[6] = T.wrR[2];
     const fresh = !this.ikQ, q = this.ikQ || (this.ikQ = Float64Array.from(_sd)), A = this.armPrev || (this.armPrev = new Float64Array(11));
     if (fresh) A.set(_sd);
-    solveIK(q, _sd, LO_R, HI_R, 7, this.fkR, _t, W_R, 9, fresh ? 10 : 3);
-    // No jumps when a stroke starts late: a joint turns at most ~45 rad/s.
-    const cap = 45 * Math.max(dt || 0.016, 0.004), put = (j, v) => (A[j] = clamp(v, A[j] - cap, A[j] + cap));
+    // The arm is pulled toward where it was last frame (not the keyed posture, which only seeds the first solve), so the
+    // solution carries on smoothly and settles right on the target.
+    let its = 10;
+    if (!fresh) {
+      _sd.set(q);
+      // A few steps a frame while the racket keeps up; more when it has fallen behind (a fast or hurried swing).
+      this.fkR(q, _f0);
+      const e = Math.hypot(_f0[0] - _t[0], _f0[1] - _t[1], _f0[2] - _t[2]);
+      its = e > 0.12 ? 9 : e > 0.03 ? 6 : 3;
+    }
+    solveIK(q, _sd, LO_R, HI_R, 7, this.fkR, _t, W_R, 9, its, 0.07, 0.01);
+    // A last guard against jumps: a joint turns at most ~45 rad/s (more in a hurried forward swing).
+    const cap = 45 * Math.max(1, this.rate) * Math.max(dt || 0.016, 0.004), put = (j, v) => (A[j] = clamp(v, A[j] - cap, A[j] + cap));
     T.shR[0] = put(0, lerp(T.shR[0], q[0], w)); T.shR[1] = put(1, lerp(T.shR[1], q[1], w)); T.shR[2] = put(2, lerp(T.shR[2], q[2], w)); T.elR = put(3, lerp(T.elR, q[3], w));
     T.wrR[0] = put(4, lerp(T.wrR[0], q[4], w)); T.wrR[1] = put(5, lerp(T.wrR[1], q[5], w)); T.wrR[2] = put(6, lerp(T.wrR[2], q[6], w));
     // The other hand on the racket: where the grip is with the arm as shown.
-    const wl = w * kv[P0 + 10];
+    const wl = w * tg[10];
     if (wl < 0.01) { this.ikL = null; return; }
     _sd[0] = T.shR[0]; _sd[1] = T.shR[1]; _sd[2] = T.shR[2]; _sd[3] = T.elR; _sd[4] = T.wrR[0]; _sd[5] = T.wrR[1]; _sd[6] = T.wrR[2];
     this.armFK(_sd, _f1);
