@@ -6,7 +6,7 @@
 // Bump VERSION with every change to controller.html or this file: the new worker installs a fresh copy of the shell,
 // takes over at once and deletes the old copy. (The page is also refreshed in the background on each launch, so a
 // forgotten bump only delays an update by one launch.)
-const VERSION = 'palmcourt-racket-v1';
+const VERSION = 'palmcourt-racket-v2';
 const SHELL = ['controller.html', 'racket.webmanifest', 'site/racket-icon.svg', 'site/racket-icon-192.png'];
 const LIB = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js';   // versioned, never changes
 const PAGE = new URL('controller.html', self.location).href;

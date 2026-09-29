@@ -10,8 +10,9 @@ const SCRIPT = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].pop()[1];
 const HZ = 60, G = 9.81, OFFSET = 5000;   // the game clock runs 5 s ahead of the phone's
 
 // One phone page, linked to the game through the (fake) serve.py relay, Start tapped, grip already set up.
-async function phone({ fhSign = 1 } = {}) {
+async function phone({ fhSign = 1, orient = { angle: 0, w: 390, h: 844 } } = {}) {
   let now = 1000, tid = 0;
+  const cls = new Set(), locks = [];   // the page's <html> classes, and every orientation lock it asked for
   const timers = [];
   const setTimeout = (fn, ms) => { timers.push({ id: ++tid, at: now + (ms || 0), fn }); return tid; };
   const setInterval = (fn, ms) => { timers.push({ id: ++tid, at: now + ms, fn, every: ms }); return tid; };
@@ -44,7 +45,10 @@ async function phone({ fhSign = 1 } = {}) {
     console, Math, JSON, Promise, URLSearchParams, Object, Number, String, Array,
     setTimeout, setInterval, clearTimeout: clear, clearInterval: clear,
     performance: { now: () => now },
-    document: { getElementById: el, createElement: () => el('x' + ++tid), body: { append() {} }, visibilityState: 'visible', addEventListener() {} },
+    document: { getElementById: el, createElement: () => el('x' + ++tid), body: { append() {} }, visibilityState: 'visible', addEventListener() {},
+      documentElement: { classList: { toggle(c, on) { if (on) cls.add(c); else cls.delete(c); } }, requestFullscreen: async () => {} } },
+    matchMedia: () => ({ matches: orient.w > orient.h, addEventListener() {} }), innerWidth: orient.w, innerHeight: orient.h,
+    screen: { orientation: { angle: orient.angle, lock: async (m) => { locks.push(m); }, addEventListener() {} } },
     navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome', platform: 'Linux', maxTouchPoints: 5, vibrate: () => true },
     location: { protocol: 'https:', host: 'pc:8766', search: '?c=ABCDE', hash: '' },
     history: { replaceState() {} },
@@ -87,12 +91,22 @@ async function phone({ fhSign = 1 } = {}) {
   };
   // Any hold: w = rotation (deg/s, phone axes), up = which way is up in phone axes.
   const raw = (w, up) => listeners.devicemotion({ rotationRate: { alpha: w.z, beta: w.x, gamma: w.y }, accelerationIncludingGravity: { x: up.x * G, y: up.y * G, z: up.z * G }, acceleration: { x: 0, y: 0, z: 0 } });
-  return { ctx, out, game, advance, still, swing, sample, raw, pong, hooks, later: setTimeout, get now() { return now; }, els };
+  return { ctx, out, game, advance, still, swing, sample, raw, pong, hooks, later: setTimeout, get now() { return now; }, els, classes: () => [...cls].sort().join(' '), locks };
 }
 const sent = (p, type) => p.out.filter((m) => m.type === type);
 
 let pass = 0;
 async function test(name, fn) { await fn(); pass++; console.log('ok -', name); }
+
+await test('the page stays upright: it asks for a portrait lock, and a phone that turns sideways gets turned back', async () => {
+  for (const [angle, want] of [[0, ''], [90, 'pl pl90'], [270, 'pl pl270']]) {
+    const p = await phone({ orient: { angle, w: angle ? 844 : 390, h: angle ? 390 : 844 } });
+    assert.equal(p.classes(), want, `angle ${angle}`);
+    assert.ok(p.locks.includes('portrait'), 'asked the browser to lock portrait');
+  }
+  const desktop = await phone({ orient: { angle: 0, w: 1280, h: 720 } });   // a wide window that is not a turned phone
+  assert.equal(desktop.classes(), '', 'a wide desktop window is left alone');
+});
 
 await test('a rally swing is sent just past its peak, not when it ends', async () => {
   for (const [R, F, most] of [[150, 220, 34], [130, 130, 34], [120, 300, 51]]) {   // most: ms after the peak (2-3 samples)

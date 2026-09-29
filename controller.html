@@ -49,7 +49,7 @@ button:disabled { cursor: default; }
 svg { display: block; }
 p { margin: 0; }
 
-#app { min-height: 100vh; min-height: 100dvh; max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px;
+#app { min-height: var(--H); max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px;
   padding: calc(8px + env(safe-area-inset-top, 0px)) calc(18px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) calc(18px + env(safe-area-inset-left, 0px)); }
 .bar { display: flex; align-items: center; gap: 10px; min-height: 48px; }
 .brand { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; font: 900 1.3rem/1 var(--display); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
@@ -66,7 +66,7 @@ p { margin: 0; }
 
 .screen { flex: 1; display: flex; flex-direction: column; gap: 14px; }
 .eyebrow { font: 700 .75rem/1 var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
-h1 { margin: 0; font: 900 clamp(2.6rem, 13vw, 4.2rem)/.88 var(--display); text-transform: uppercase; text-wrap: balance; }
+h1 { margin: 0; font: 900 clamp(2.6rem, calc(13 * var(--vw1)), 4.2rem)/.88 var(--display); text-transform: uppercase; text-wrap: balance; }
 h2 { margin: 0; font: 900 2rem/1 var(--display); text-transform: uppercase; }
 .lede { color: var(--mist); font-size: 1.06rem; }
 .fine { color: var(--mist); font-size: .9rem; }
@@ -118,7 +118,7 @@ label.field input::placeholder { color: var(--mist); opacity: .35; }
 
 /* illustrations */
 .art { margin: 0; display: grid; place-items: center; }
-.art svg { width: min(62vw, 250px); height: auto; overflow: visible; }
+.art svg { width: min(calc(62 * var(--vw1)), 250px); height: auto; overflow: visible; }
 .art .ink { stroke: var(--chalk); }
 .art .mist { stroke: var(--mist); }
 .art .acc { fill: var(--accent); }
@@ -136,7 +136,7 @@ label.field input::placeholder { color: var(--mist); opacity: .35; }
 .step.done b { background: rgba(0,0,0,.18); color: #05140c; }
 .demo { margin: 0; border-radius: var(--r); background: linear-gradient(180deg, rgba(44,93,158,.35), rgba(44,93,158,.12)); border: 1px solid var(--edge); padding: 8px 8px 2px; }
 html.sun .demo { background: #e9eef6; }
-.demo svg { width: 100%; height: auto; max-height: 30vh; }
+.demo svg { width: 100%; height: auto; max-height: calc(30 * var(--vh1)); }
 .demo .flip { transform-box: view-box; transform-origin: 150px 0; }
 .demo[data-flip="1"] .flip { transform: scaleX(-1); }
 .d-net { stroke: var(--chalk); stroke-width: 3; stroke-dasharray: 2 6; stroke-linecap: round; opacity: .7; }
@@ -200,7 +200,7 @@ html.sun .demo { background: #e9eef6; }
 .reconnect { position: fixed; inset: 0; z-index: 8; display: grid; place-items: center; padding: 24px; background: rgba(9,19,29,.82); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 html.sun .reconnect { background: rgba(255,255,255,.9); }
 .reconnect .card { width: 100%; max-width: 420px; min-width: 0; display: grid; gap: 12px; justify-items: center; text-align: center; padding: 24px 20px; background: var(--ink-2); }
-.reconnect b { max-width: 100%; font: 900 clamp(1.5rem, 7.4vw, 2.4rem)/1 var(--display); text-transform: uppercase; white-space: nowrap; }
+.reconnect b { max-width: 100%; font: 900 clamp(1.5rem, calc(7.4 * var(--vw1)), 2.4rem)/1 var(--display); text-transform: uppercase; white-space: nowrap; }
 .reconnect span { color: var(--mist); }
 .reconnect .row { width: 100%; }
 .spin { width: 54px; height: 54px; border-radius: 50%; border: 5px solid var(--edge); border-top-color: var(--accent); animation: spin 1s linear infinite; }
@@ -214,13 +214,13 @@ html.sun .reconnect { background: rgba(255,255,255,.9); }
   padding: calc(16px + env(safe-area-inset-top, 0px)) 18px calc(18px + env(safe-area-inset-bottom, 0px)); }
 .scan .view { position: relative; overflow: hidden; border-radius: 22px; background: #000; }
 .scan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.scan .aim { position: absolute; left: 50%; top: 50%; width: min(64vw, 280px); aspect-ratio: 1; transform: translate(-50%, -50%); border: 4px solid #d6f04a; border-radius: 22px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
+.scan .aim { position: absolute; left: 50%; top: 50%; width: min(calc(64 * var(--vw1)), 280px); aspect-ratio: 1; transform: translate(-50%, -50%); border: 4px solid #d6f04a; border-radius: 22px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
 .scan p { text-align: center; font-weight: 700; font-size: 1.05rem; }
 .scan .ghost { color: #f2f5ee; border-color: rgba(242,245,238,.3); background: rgba(242,245,238,.08); }
 
 /* settings sheet */
 .sheet { position: fixed; inset: 0; z-index: 9; display: flex; align-items: flex-end; justify-content: center; background: rgba(0,0,0,.55); }
-.sheet .panel { width: min(100%, 520px); max-height: 92vh; overflow: auto; display: grid; gap: 10px; padding: 20px 18px calc(18px + env(safe-area-inset-bottom, 0px)); border-radius: 24px 24px 0 0; background: var(--ink-2); border: 1px solid var(--edge); border-bottom: 0; }
+.sheet .panel { width: min(100%, 520px); max-height: calc(92 * var(--vh1)); overflow: auto; display: grid; gap: 10px; padding: 20px 18px calc(18px + env(safe-area-inset-bottom, 0px)); border-radius: 24px 24px 0 0; background: var(--ink-2); border: 1px solid var(--edge); border-bottom: 0; }
 .toggle { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 14px; border-radius: 14px; background: var(--card); border: 1.5px solid var(--edge); text-align: left; }
 .toggle span { flex: 1; }
 .toggle b { display: block; font-size: 1.02rem; }
@@ -242,7 +242,16 @@ html.sun .reconnect { background: rgba(255,255,255,.9); }
 html.calm *, html.calm *::before, html.calm *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition: none !important; }
 html.calm .d-arm { transform: rotate(-35deg); }
 html.calm #hitFlash.go { animation: none !important; }
-@media (max-height: 700px) { .hero .logo { width: 64px; height: 64px; border-radius: 16px; } .art svg { width: min(46vw, 180px); } .demo svg { max-height: 24vh; } .shot { min-height: 100px; } }
+@media (max-height: 700px) { html:not(.pl) .hero .logo { width: 64px; height: 64px; border-radius: 16px; } html:not(.pl) .art svg { width: min(calc(46 * var(--vw1)), 180px); } html:not(.pl) .demo svg { max-height: calc(24 * var(--vh1)); } html:not(.pl) .shot { min-height: 100px; } }
+@media (max-width: 700px) { html.pl .hero .logo { width: 64px; height: 64px; border-radius: 16px; } html.pl .art svg { width: min(calc(46 * var(--vw1)), 180px); } html.pl .demo svg { max-height: calc(24 * var(--vh1)); } html.pl .shot { min-height: 100px; } }
+/* Kept upright while the phone is swung. An installed app is locked by its manifest; in a browser the script below asks
+   the Screen Orientation API; and if the phone turns the page sideways anyway (iPhones can't be locked), these rules turn
+   it back, so the layout stays in the phone's own upright frame (--vw1 / --vh1 / --H are that frame's width, height). */
+:root { --vw1: 1vw; --vh1: 1vh; --H: 100dvh; }
+html.pl { --vw1: 1vh; --vh1: 1vw; --H: 100dvw; overflow: hidden; }
+html.pl body { position: fixed; top: 0; left: 0; width: 100vh; height: 100vw; width: 100dvh; height: 100dvw; min-height: 0; overflow: auto; overscroll-behavior: contain; transform-origin: 0 0; }
+html.pl90 body { transform: translateY(100vh) rotate(-90deg); transform: translateY(100dvh) rotate(-90deg); }
+html.pl270 body { transform: translateX(100vw) rotate(90deg); transform: translateX(100dvw) rotate(90deg); }
 </style>
 </head>
 <body>
@@ -769,12 +778,39 @@ function onData(m) {
   }
 }
 
+// ---------- keep the screen upright while the phone is swung ----------
+// Swinging turns the phone, and auto-rotate would flip the page sideways mid-rally. hold() (called from a tap) asks the
+// browser to lock portrait: Chrome wants fullscreen for that, which a controller can happily use, and an installed app
+// is locked by its manifest anyway. iPhones can't be locked at all, so sync() also turns the page back with CSS (the
+// html.pl90 / html.pl270 rules above) whenever the phone reports being sideways.
+const upright = (() => {
+  try {
+  const scr = window.screen, root = document.documentElement, mq = matchMedia('(orientation: landscape)');
+  const angle = () => { const a = scr.orientation && typeof scr.orientation.angle === 'number' ? scr.orientation.angle : (window.orientation || 0); return ((a % 360) + 360) % 360; };
+  const sync = () => {
+    const a = angle(), sideways = mq.matches && innerWidth > innerHeight && (a === 90 || a === 270);
+    root.classList.toggle('pl', sideways); root.classList.toggle('pl90', sideways && a === 90); root.classList.toggle('pl270', sideways && a === 270);
+  };
+  const lock = () => { try { const p = scr.orientation && scr.orientation.lock && scr.orientation.lock('portrait'); if (p && p.catch) p.catch(() => { /* this browser won't lock */ }); } catch (e) { /* not lockable here */ } };
+  const hold = async () => {
+    lock();
+    if (!document.fullscreenElement && root.requestFullscreen) { try { await root.requestFullscreen({ navigationUI: 'hide' }); lock(); } catch (e) { /* refused: the CSS fallback still keeps it upright */ } }
+  };
+  if (mq.addEventListener) mq.addEventListener('change', sync);
+  addEventListener('resize', sync); addEventListener('orientationchange', sync);
+  if (scr.orientation && scr.orientation.addEventListener) scr.orientation.addEventListener('change', sync);
+  sync(); lock();
+  return { sync, hold };
+  } catch (e) { return { sync() {}, hold() {} }; }   // an odd browser: the page still works, it just may turn sideways
+})();
+
 // ---------- starting up: one tap unlocks motion, vibration, sound and keeping the screen on ----------
 // iPhones ask before sharing motion, and only inside a tap. The first time, the Allow motion screen says why first;
 // once allowed, the Start tap asks straight away (iOS then answers without a prompt).
 let motionIssue = '';
 const needsAsk = () => typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function';
 async function startSensors() {
+  upright.hold();   // this runs from a tap, which the fullscreen / orientation-lock requests need
   if (sensorsOn) return true;
   if (typeof DeviceMotionEvent === 'undefined') { motionIssue = window.isSecureContext === false ? 'insecure' : 'none'; return false; }
   if (typeof DeviceMotionEvent.requestPermission === 'function') {
