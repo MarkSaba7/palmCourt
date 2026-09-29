@@ -19,7 +19,7 @@ import { Pad } from './pad.js';
 // =====================================================================
 const $ = (id) => document.getElementById(id);
 const SEGS = [
-  ['control', 'Controls', [['phone', 'Phone'], ['hand', 'Hand cam'], ['paddle', 'Paddle cam'], ['mouse', 'Mouse']]],
+  ['control', 'Controls', [['phone', 'Phone'], ['hand', 'Hand cam'], ['paddle', 'Paddle cam'], ['mouse', 'Mouse'], ['pad', 'Controller']]],
   ['handed', 'Plays', [['R', 'Right'], ['L', 'Left']]],
   ['surface', 'Surface', [['hard', 'Hard'], ['clay', 'Clay'], ['grass', 'Grass']]],
   ['format', 'Match', [['tiebreak', 'Tiebreak'], ['short', 'Short set'], ['full', 'Full set']]],
@@ -104,13 +104,13 @@ const UI = {
   },
   onSetting(key) {
     if (key === 'surface' && Game.mode === 'attract') World.setSurface(Settings.surface);
-    if (key === 'control') { this.menuNote(''); this.syncControlButtons(); if (Settings.control === 'phone') Phone.ensure(); }
+    if (key === 'control') { this.menuNote(''); this.syncControlButtons(); if (Settings.control === 'phone') Phone.ensure(); Pad.status(); }
     if (key === 'gfx') Perf.apply();
     if (key === 'tod' && (Game.mode === 'attract' || Game.mode === 'cpu')) Env.setTimeOfDay(Settings.tod);
   },
   setControl(v) { Settings.control = v; Settings.save(); const r = $('opt-control-' + v); if (r) r.checked = true; this.syncControlButtons(); },
   syncControlButtons() {
-    const label = Settings.control === 'phone' ? 'Connect phone' : Settings.control === 'mouse' ? 'Controls' : 'Camera check';
+    const label = Settings.control === 'phone' ? 'Connect phone' : Settings.control === 'mouse' ? 'Controls' : Settings.control === 'pad' ? 'Controller' : 'Camera check';
     $('btnSetup').textContent = label; $('btnSetup2').textContent = label;
   },
   openControls(from) { if (Settings.control === 'phone') this.openPhone(from); else this.openSetup(from); },
@@ -150,6 +150,7 @@ const UI = {
   },
   async ensureControls(then) {
     if (Settings.control === 'mouse') { Tracker.stop(); return true; }
+    if (Settings.control === 'pad') { Tracker.stop(); if (!Pad.id) this.menuNote('No controller found yet: plug one in (or turn it on) and press any button. Keys work meanwhile.', 'err'); return true; }
     if (Settings.control === 'phone') {
       Tracker.stop();
       Phone.ensure();
@@ -503,22 +504,23 @@ const UI = {
     this.wireSetup();
     if (this.camCheck) this.leaveStep();
     this.go('setup');
-    const mode = Settings.control, cam = mode !== 'mouse';
+    const mode = Settings.control, pad = mode === 'pad', cam = mode !== 'mouse' && !pad;
     const c = (this.camCheck = { mode, cam, plan: cam ? this.calPlan(mode) : [], step: null, done: {}, list: [], camErr: '', light: null, on: null, t: 0, lightT: 0, good: 0, next: 0 });
     $('setup').dataset.mode = mode;
-    $('setupEyebrow').textContent = cam ? `Camera check · ${mode === 'hand' ? 'hand' : 'paddle'}` : 'Controls · mouse and keyboard';
-    $('setupTitle').textContent = cam ? 'Set up your swing' : 'Test your swing';
+    $('setupEyebrow').textContent = cam ? `Camera check · ${mode === 'hand' ? 'hand' : 'paddle'}` : pad ? 'Controls · controller' : 'Controls · mouse and keyboard';
+    $('setupTitle').textContent = cam ? 'Set up your swing' : pad ? 'Test your controller' : 'Test your swing';
     $('setupSteps').innerHTML = STEPS[mode];
     for (const r of document.getElementsByName('setup-control')) r.checked = r.value === mode;
     $('setupTipsBox').open = !cam;
     for (const id of ['calSteps', 'stepCard', 'tuning', 'camHealth', 'cueCanvas']) $(id).hidden = !cam;
-    $('mousePad').hidden = cam;
+    $('mousePad').hidden = cam || pad;
     $('camOff').hidden = $('camCount').hidden = true;
     $('swingList').replaceChildren(); $('camTip').textContent = '';
     $('swingLog').textContent = cam ? 'Swing to test it.' : 'Your swings show up here.';
     $('optSens').value = Settings.sens; $('optLatency').value = Settings.latency; this.syncSliders();
     this.renderSwatches();
-    if (!cam) { Tracker.stop(); this.placeCam(); $('mousePad').focus({ preventScroll: true }); return; }
+    Pad.check(pad);   // the controller's button map and live test
+    if (!cam) { Tracker.stop(); this.placeCam(); if (!pad) $('mousePad').focus({ preventScroll: true }); return; }
     $('calSteps').replaceChildren(...c.plan.map(([k, label], j) => {
       const li = document.createElement('li'), b = document.createElement('button'), n = document.createElement('i');
       b.type = 'button'; b.dataset.step = k; n.textContent = String(j + 1);
@@ -1336,7 +1338,7 @@ const UI = {
     let t = '';
     if (me && m && (Game.mode === 'cpu' || Game.mode === 'online') && this.screen === null) {
       const serving = m.currentServer === me.idx;
-      if (Game.state === 'serve' && serving) t = Pad.active ? `Press ${Pad.glyph('a')} to toss` : Settings.control === 'mouse' ? (matchMedia('(pointer: coarse)').matches ? 'Tap to toss' : 'Click (or press Space) to toss') : Settings.control === 'phone' ? 'Tap or lift your phone to toss' : 'Raise your hand above the toss line to toss';
+      if (Game.state === 'serve' && serving) t = Pad.active || Settings.control === 'pad' ? Pad.servePrompt() : Settings.control === 'mouse' ? (matchMedia('(pointer: coarse)').matches ? 'Tap to toss' : 'Click (or press Space) to toss') : Settings.control === 'phone' ? 'Tap or lift your phone to toss' : 'Raise your hand above the toss line to toss';
       else if (Game.state === 'toss' && serving) t = 'Swing!';
       else if (Game.state === 'serve' && Game.mode === 'online') t = `${Game.names[m.currentServer]} to serve`;
     }
@@ -1434,7 +1436,7 @@ const UI = {
   frame() {
     const now = performance.now();
     if (this.screen === 'setup') {
-      const full = 4 / Settings.sens, cam = Settings.control !== 'mouse';
+      const full = 4 / Settings.sens, cam = Settings.control !== 'mouse' && Settings.control !== 'pad';
       $('swingBar').style.width = `${clamp(Input.speed / full, 0, 1) * 100}%`;
       $('swingVal').textContent = Input.valid ? Input.speed.toFixed(1) : '–';
       this.checkTick(now);
@@ -1456,7 +1458,7 @@ const UI = {
     // body; it lights up when it's time to swing.
     const me = Game.me(), b = Game.ball;
     let hint = '';
-    if (playing && me && me.ctl === 'human' && s === 'rally' && me.plan && b.lastHitter >= 0 && b.lastHitter !== me.idx && me.hitFor !== b.rally && Settings.control !== 'mouse') {
+    if (playing && me && me.ctl === 'human' && s === 'rally' && me.plan && b.lastHitter >= 0 && b.lastHitter !== me.idx && me.hitFor !== b.rally && Settings.control !== 'mouse' && Settings.control !== 'pad') {
       hint = me.plan.stroke + (me.plan.t - Clock.now() < 0.22 ? ' now' : '');
     }
     if (hint !== this.hintNow) {

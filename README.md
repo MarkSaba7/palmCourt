@@ -9,7 +9,7 @@ It's a static website: the landing and content pages at the root (`index.html`, 
 - **Easiest:** double-click `play.cmd`. It starts a tiny local server with Python and opens the game at <http://localhost:8765/play/>.
 - **Or** play it online once it's on GitHub Pages (see below). Opening `play/index.html` straight from a folder doesn't work: browsers block the game's modules on `file://` pages.
 
-Pick your controls in the menu (**Phone**, **Hand cam**, **Paddle cam** or **Mouse**; Mouse is the default), who you play as and which CPU pro you face, then **Practice vs CPU**.
+Pick your controls in the menu (**Phone**, **Hand cam**, **Paddle cam**, **Mouse** or **Controller**; Mouse is the default), who you play as and which CPU pro you face, then **Practice vs CPU**. Plug in a controller and press a button and the menu offers **Controller** for you.
 
 The browser will ask for the camera the first time you choose **Hand cam** or **Paddle cam**. Without a camera (or if you block it) the game says why and uses the mouse. The hand tracker (about 8 MB) downloads on first use, then your browser caches it.
 
@@ -20,6 +20,31 @@ Choose **Phone**, then **Practice vs CPU** (or **Connect phone**): the game show
 The racket page is an installable app, **Palm Court Racket**: open it once from the site's address (GitHub Pages, https), then on Android tap **Install** on the card it shows (or ⋮ → Install app), on iPhone tap **Share → Add to Home Screen**. It opens full screen, starts instantly (its service worker, `racket-sw.js`, keeps only the racket page's shell and only looks after `controller.html`), remembers your last game for a one-tap **Reconnect**, keeps the screen awake while you play, and reconnects by itself when the phone locks or the Wi-Fi drops. On the phone you also get the score, whose serve it is, the link and its lag, **Pause**, **Rematch**, **Swap FH/BH**, the game's read of each hit, and settings for sunlight (high contrast), large text, reduced motion and vibration. Changed the racket's page, manifest or icons? Bump `VERSION` in `racket-sw.js`: an installed phone then switches to the new version as it opens (without a bump it still gets a changed page, one launch later). (Pages from `play.cmd` use a self-signed certificate, so phones won't install them as an app; they still work in the browser.)
 
 Swing the phone like a racket. Power is relative to your own usual swing (it learns it from your first few hits): swing harder than usual for pace, softer for a rally ball. Low to high adds topspin, high to low slices, and a soft swing coming down is a drop shot. Direction is read at the moment of contact, so nothing waits for your follow-through: sweep across your body for cross-court, a shorter push toward the screen for straight. Timing nudges it too (early pulls the ball across, late pushes it the other way). With an older phone page that doesn't send the turn of the phone, timing alone aims.
+
+### Controller (PlayStation, Xbox, Switch)
+
+Any pad the browser reports in the standard layout works: DualSense and DualShock 4, Xbox, Switch Pro, Steam Deck. Menus work with any of the controls (D-pad or left stick moves, ✕/A picks, ○/B goes back, L1/R1 switch Settings tabs, Options/Start pauses); pick **Controller** under Swing with for the shot buttons below. Button names follow the pad: ✕ ○ □ △ L1 R1 on a PlayStation pad, A B X Y LB RB on an Xbox one.
+
+Your player runs to the ball. **Hold a shot button to charge it and let go as the ball arrives**: the release is your swing, so an early or late release pulls the ball across or pushes it the other way, like a mouse click. A quick tap is a solid medium ball; a full charge (about 0.8 s) is flat out. A small meter by your player shows the charge, the shot and where the stick is sending it.
+
+| Button | Shot |
+| --- | --- |
+| ✕ (A) | Flat drive |
+| ○ (B) | Topspin |
+| □ (X) | Slice / backspin |
+| △ (Y) | Lob |
+| L1 (LB) + □ | Drop shot |
+| R1 (RB) held with a shot | Power version: harder, aimed nearer the lines, so it misses more |
+| Touchpad / Share / View | Switch the camera view |
+| Options / Start | Pause |
+
+**The left stick aims** where you let go. Left or right steers the direction (across the court, or down the line, depending on your side and stroke), up hits deeper, down plays a shorter, sharper angle, and centred plays a safe ball through the middle. Aiming close to the lines at full power misses more.
+
+**Serve:** press a shot button to toss, keep holding it, and let go near the top of the toss. ✕ is a flat serve, ○ a kick, □ a slice; the left stick aims wide, at the body or at the T (R1 goes flat out for the lines). **Vibration:** contact rumbles, harder on big hits, with a small tick when the release was perfectly timed.
+
+Settings › Controls has **Controller scheme** (**Buttons**, the default, or **Stick flick**, the older scheme where you flick the right stick to swing, RT drives, LT slices), **Swap sticks** for left-handed players (aim with the right stick), **Power meter** and **Vibration**. The controller's test card (Settings › Controls › Test the controller, or the Controller button on the main menu) shows the map with a live charge and aim. The in-match hints for new players go away after your first 25 hits.
+
+In Firefox a PlayStation pad can be reported in its raw layout instead of the standard one. Palm Court remaps it by its id, and says so in Settings › Controls; if a button still does the wrong thing, play in Chrome or Edge. `node test/pad.test.mjs` checks the mapping, the shot buttons and the pad shot model with no browser.
 
 ### Camera controls
 
@@ -37,7 +62,7 @@ Swing the phone like a racket. Power is relative to your own usual swing (it lea
 
 After every shot the bar under the court says what the game read, for example **On time · ← Cross · topspin · 118 km/h**, so you can see what your swing did. On time with a normal swing lands in nearly every time; misses come from mistiming, hard pressure, flat-out swings and going for the lines.
 
-No camera? Pick **Mouse** (the default): click (or tap) to swing. Flick the mouse just before clicking: a faster flick hits harder, up adds topspin, down slices, left or right aims that way, and a gentle downward flick plays a drop shot. Keyboard: Space swings (Shift+Space harder), hold ← or → to aim, ↑ for topspin, S slices, D plays a drop shot. Press C to switch between the player camera and the TV camera, and Esc to pause.
+No camera or controller? Pick **Mouse** (the default): click (or tap) to swing. Flick the mouse just before clicking: a faster flick hits harder, up adds topspin, down slices, left or right aims that way, and a gentle downward flick plays a drop shot. Keyboard: Space swings (Shift+Space harder), hold ← or → to aim, ↑ for topspin, S slices, D plays a drop shot. Press C to switch between the player camera and the TV camera, and Esc to pause.
 
 Use **Camera check** first. It lists every swing it sees (FH or BH, speed, and how far behind the camera it was), dims the wind-ups it ignores, and asks for a forehand, then a backhand, so you can see both register. It lets you adjust:
 
@@ -125,6 +150,7 @@ To test without editing the file, add URL parameters: `?portal=poki`, `?edition=
 | `match.js` | Scoring, umpire calls, synthesized sound (no audio files) |
 | `render/` | three.js scene: court, stadium, crowd, scenery, sky and lighting, characters and their animation, rackets, ball, cameras |
 | `input.js`, `camswing.js` | Hand tracking (MediaPipe in a worker), paddle color tracking, swing detection, mouse and keyboard, all turned into swing events |
+| `pad.js`, `padmap.js` | Game controllers: menus, the shot buttons and their power meter, rumble; the button layouts, shot map and stick aim (pure, tested in `test/pad.test.mjs`) |
 | `game.js` | Players, CPU AI, serve and rally flow, line calls, latency compensation (a late webcam swing rewinds the ball to when you actually swung) |
 | `phone.js`, `controller.html` | The phone racket: the phone page detects swings itself and sends them over serve.py's Wi-Fi relay or PeerJS |
 | `net.js` | Online play: PeerJS connection, clock sync, messages |
