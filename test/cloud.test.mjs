@@ -79,6 +79,19 @@ await test('scores come from the save', () => {
 });
 
 // ---- config + names ----
+await test('config: a player who turned online backup off in Settings stays off (unless ?cloud=1)', () => {
+  const base = { url: 'https://abc.supabase.co', anonKey: 'sb_publishable_x', enabled: true };
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: () => JSON.stringify({ cloudSync: false }) } });
+  try {
+    assert.equal(cloudConfig(base, '').enabled, false);
+    assert.equal(cloudConfig(base, '?cloud=1').enabled, true);
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: () => JSON.stringify({ cloudSync: true }) } });
+    assert.equal(cloudConfig(base, '').enabled, true);
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: () => 'not json' } });
+    assert.equal(cloudConfig(base, '').enabled, true);
+  } finally { if (had) Object.defineProperty(globalThis, 'localStorage', had); else delete globalThis.localStorage; }
+});
 await test('config: off by default, ?cloud=1 turns it on, only localhost mocks may replace the URL, secret keys refused', () => {
   const base = { url: 'https://abc.supabase.co', anonKey: 'sb_publishable_x', enabled: false };
   assert.equal(cloudConfig(base, '').enabled, false);

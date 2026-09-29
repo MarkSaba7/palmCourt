@@ -114,7 +114,7 @@ Every release setting is in `src/config.js`. There is one build for every editio
 | `portal` | Which ad SDK to load: `'auto'` (the default), `'none'`, `'crazygames'`, `'poki'`, `'gd'` (GameDistribution) or `'adsense'` (Google H5 Games Ads). `'auto'` uses AdSense on the web edition once `adsense.client` is set, and otherwise shows no ads. The page only loads the SDK you pick. |
 | `steamUrl` | Your Steam store page, e.g. `https://store.steampowered.com/app/1234560/Palm_Court/`. While it still holds the `YOUR_APP_ID` placeholder, the wishlist buttons (main menu and match-over screen) stay hidden. |
 | `ads` | `interstitialEveryMatches` (default 2) and `minGapS` (150) pace the breaks. `rewardedDoubleFuzz` turns the optional "watch an ad to double your Fuzz" offer on or off. |
-| `cloud` | Supabase cloud saves. Only the publishable key goes here, never any other Supabase key. Cloud saves stay off until `enabled: true`. |
+| `cloud` | Supabase cloud saves. Only the publishable key goes here, never any other Supabase key. Online backup and leaderboards are on (`enabled: true`); a player can switch them off in Settings (`cloudSync`). |
 
 To test without editing the file, add URL parameters: `?portal=poki`, `?edition=steam`, `?showWishlist=1` (shows the wishlist button while the URL is still the placeholder), `?adEvery=1` (a break before every match after the first), `?consent=ask` (always show the ad-consent prompt), and `?adTest=1&adClient=ca-pub-…` (AdSense test ads).
 
@@ -129,7 +129,7 @@ To test without editing the file, add URL parameters: `?portal=poki`, `?edition=
 - **External links:** the wishlist button, the Privacy page and the Credits page open in a new tab. Some portals restrict links to other stores, so read their link policy and set `showWishlist`/`steamUrl` to suit.
 - **Steam:** set `edition: 'steam'`. It forces `portal: 'none'`, so there are no ads and no wishlist button.
 
-**Legal pages.** `privacy.html` covers the camera (frames never leave the device), local save data, optional cloud saves, online play, Google's ads and cookies, and the contact address (`CONTACT_EMAIL` in `site/config.mjs`). `credits.html` lists the open-source licences (three.js MIT, MediaPipe Apache-2.0, PeerJS MIT, the fonts under OFL). Both are linked from the main menu, and the Pages workflow publishes them with the rest of the website (`about.html`, `how-to-play.html`, `faq.html`, `terms.html`, `contact.html`, `sitemap.xml`, `robots.txt`, `ads.txt`).
+**Legal pages.** `privacy.html` covers the camera (frames never leave the device), local save data, the online backup and leaderboards, online play, Google's ads and cookies, and the contact address (`CONTACT_EMAIL` in `site/config.mjs`). `credits.html` lists the open-source licences (three.js MIT, MediaPipe Apache-2.0, PeerJS MIT, the fonts under OFL). Both are linked from the main menu, and the Pages workflow publishes them with the rest of the website (`about.html`, `how-to-play.html`, `faq.html`, `terms.html`, `contact.html`, `sitemap.xml`, `robots.txt`, `ads.txt`).
 
 ## What makes it realistic
 
