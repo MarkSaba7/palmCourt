@@ -645,6 +645,7 @@ const Game = {
     const kmh = Math.round(Math.hypot(b.v.x, b.v.y, b.v.z) * 3.6);
     shot.read = r;
     UI.shot(pl, { kmh, rpm: shot.rpm, kind: shot.kind, tau: shot.tau, q: shot.q, aim: shot.aim, serve: false, read: Shot.readText(shot, kmh) });
+    if (pl.ctl === 'human') Phone.send({ type: 'read' }, { shot, kmh });   // (P2: the phone shows the re-aimed read too)
   },
   // ==== end S1 aiming ====
   // ==== S1 aiming: gear stats (G1's src/stats.js, once game.js imports Stats); neutral (all 1.0) until then ====
@@ -843,7 +844,7 @@ const Game = {
     if (this.mode !== 'attract') Sound.hit(shot.power ?? 0.6, this.camDist(b.p), shot.q ?? 1, !!b.serve);
     if (b.serve) this.match.stats.fastest[pl.idx] = Math.max(this.match.stats.fastest[pl.idx], kmh);
     UI.shot(pl, { kmh, rpm: shot.rpm, kind: shot.kind, tau: shot.tau, q: shot.q, aim: shot.aim, serve: !!b.serve, read: shot.read ? Shot.readText(shot, kmh) : null });
-    if (pl.ctl === 'human') Phone.send({ type: 'hit', power: shot.power ?? 0.6 });
+    if (pl.ctl === 'human') Phone.send({ type: 'hit', power: shot.power ?? 0.6 }, { shot, kmh, serve: !!b.serve });   // (P2: + the shot read for the phone)
     if (this.mode === 'online' && pl.ctl === 'human') {
       Net.send({ type: 'hit', t: b.simT, p: b.p, v: b.v, w: b.w, serve: b.serve, rally: b.rally, kmh, rpm: shot.rpm, kind: shot.kind, stroke: (pl.plan && pl.plan.stroke) || 'fh' });
     }

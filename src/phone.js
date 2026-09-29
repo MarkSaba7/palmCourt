@@ -5,6 +5,7 @@ import { Net } from './net.js';
 import { UI } from './ui.js';
 import { QR } from './qr.js';
 import { routeName, selectedPair } from './phonelink.js';
+import { readText } from './shot.js';
 
 // =====================================================================
 // PHONE: your phone as the racket. controller.html runs on the phone, reads its gyroscope, spots each
@@ -173,6 +174,8 @@ const Phone = {
       case 'calib': this.calibrated = !!m.done; break;
       case 'swing': this.lastSwing = m; this.hookSwings(); Input.phoneSwing(m); UI.phoneSwing(m); break;
       case 'swingEnd': this.swingEnd(m); return;
+      case 'pause': this.remotePause(m.on); return;
+      case 'rematch': if (Game.state === 'over' && UI.screen === 'over') UI.rematch(); return;
       default: return;
     }
     UI.renderPhone(); UI.phoneChip();
@@ -201,10 +204,27 @@ const Phone = {
     for (const k of ['yawPost', 'yawFrac']) if (Number.isFinite(+m[k])) s[k] = +m[k];
     Input.emit({ type: 'swingEnd', swing: s });
   },
-  send(m) {
+  send(m, hit) {
     // A hit also says which stroke it was, so an uncalibrated phone can learn forehand from backhand as you play.
     if (m && m.type === 'hit' && !m.stroke) { const me = Game.me(); if (me && me.plan) m = { ...m, stroke: me.plan.stroke }; }
+    // ...and, for the phone's big shot read, where it went and how ('hit', or 'read' when a follow-through re-aims it).
+    if (hit && this.connected()) { try { m = { ...m, read: this.hitRead(hit) }; } catch (e) { /* the hit goes without it */ } }
     try { if (this.connected()) this.conn.send(m); } catch (e) { /* link dropped */ }
+  },
+  // { where: '← Cross', how: 'topspin', kmh: 92, when: 'On time', tone: 'good' | 'warn' | 'bad' | '' } for the phone.
+  hitRead({ shot, kmh, serve }) {
+    kmh = Math.round(kmh || 0);
+    if (serve) return { where: `${Game.match && Game.match.serveNo === 2 ? '2nd' : '1st'} serve`, how: '', kmh, when: '', tone: '' };
+    const [where, how] = shot.read ? readText(shot, kmh).split(' · ') : [shot.aim == null ? 'Hit' : shot.aim < -0.9 ? '← Left' : shot.aim > 0.9 ? 'Right →' : '↑ Middle', shot.rpm < -150 ? 'slice' : shot.rpm >= 2000 ? 'topspin' : 'flat'];
+    const tau = shot.tau, a = Math.abs(tau);
+    if (tau == null || !Number.isFinite(a)) return { where, how, kmh, when: '', tone: '' };
+    return { where, how, kmh, when: a < 0.35 ? 'On time' : a > 1 ? (tau < 0 ? 'Very early' : 'Very late') : tau < 0 ? 'Early' : 'Late', tone: a < 0.35 ? 'good' : a > 1 ? 'bad' : 'warn' };
+  },
+  // The phone's Pause / Resume button: the same as Esc on the PC.
+  remotePause(on) {
+    if (!(Game.mode === 'cpu' || Game.mode === 'online')) return;
+    if (on === false) { if (UI.screen === 'pause') UI.resume(); }
+    else if (UI.screen === null && Game.state !== 'over') UI.pause();
   },
   // What the phone should show: your serve, which stroke is coming, or nothing much.
   pushState() {
@@ -217,6 +237,16 @@ const Phone = {
       s = { inMatch: true, serving, tossed: serving && Game.state === 'toss', stroke: incoming ? me.plan.stroke : null };
       if (s.tossed) s.tossT = Math.round(Game.tossT * 1000);   // game time of the toss: a hard swing well after it is the serve
     }
+    // For the phone's play screen (older racket pages ignore them): the score, whose serve, paused, over, the route.
+    if (me && m && (Game.mode === 'cpu' || Game.mode === 'online')) {
+      const i = me.idx, o = 1 - i, pl = m.pointLabels();
+      s.srv = m.currentServer === i ? 'me' : 'them';
+      s.phase = Game.state;
+      s.score = { g: [m.games[i], m.games[o]], p: [pl[i], pl[o]], tb: !!m.tb, opp: UI.shortName ? UI.shortName(o) : Game.names[o] };
+      if (UI.screen === 'pause') s.paused = true;
+      if (Game.state === 'over') { s.over = true; s.won = m.winner === i; }
+    }
+    if (this.route) s.route = this.route;
     const key = JSON.stringify(s);
     if (key === this.lastStateKey) return;
     this.lastStateKey = key;

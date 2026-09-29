@@ -557,6 +557,14 @@ def relay():
 # ---------- the web servers ----------
 class Handler(http.server.SimpleHTTPRequestHandler):
     timeout = 300                      # let go of idle keep-alive connections
+    # Fixed types for what the game and the phone app need. Windows takes them from the registry otherwise, where .js
+    # is sometimes text/plain (modules and the racket's service worker then refuse to load) and .webmanifest unknown.
+    extensions_map = {
+        **http.server.SimpleHTTPRequestHandler.extensions_map,
+        '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
+        '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.webmanifest': 'application/manifest+json',
+        '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.wasm': 'application/wasm',
+    }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)

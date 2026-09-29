@@ -4,129 +4,404 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#09131d">
+<meta name="description" content="Your phone is the racket: swing it to play Palm Court on your PC or TV.">
 <title>Palm Court Racket</title>
+<link rel="manifest" href="racket.webmanifest">
+<link rel="icon" href="site/racket-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="site/racket-apple-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Palm Racket">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Barlow:wght@400;600;700&display=swap">
+<!-- fonts load without holding up the first paint (the app starts instantly, offline too) -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Barlow:wght@400;600;700&display=swap" media="print" onload="this.media='all'" crossorigin="anonymous">
 <style>
 :root {
-  --ink: #09131d; --ink-2: #13263a; --edge: rgba(242,245,238,.14); --chalk: #f2f5ee; --mist: #93a7bb;
-  --optic: #d6f04a; --optic-ink: #1b2300; --coral: #ff7a62; --good: #7fe0a8; --sky: #7fd3ff;
-  --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --ink: #09131d; --ink-2: #102235; --ink-3: #18324b; --card: rgba(242,245,238,.06); --edge: rgba(242,245,238,.16);
+  --chalk: #f2f5ee; --mist: #a3b6c8; --accent: #d6f04a; --btn: #d6f04a; --btn-ink: #1b2300; --glow: rgba(214,240,74,.45);
+  --coral: #ff7a62; --good: #7fe0a8; --warn: #ffc857; --sky: #7fd3ff; --flash: #d6f04a;
+  --display: "Big Shoulders Display", "Roboto Condensed", sans-serif-condensed, "Avenir Next Condensed", "Arial Narrow", Impact, sans-serif;
   --body: "Barlow", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --r: 18px; --fs: 16px;
   color-scheme: dark;
 }
+/* Sunlight: a light, high-contrast theme that stays readable outdoors. */
+html.sun {
+  --ink: #ffffff; --ink-2: #eef1e8; --ink-3: #dde3d4; --card: #f2f4ee; --edge: #0b0f14;
+  --chalk: #05080b; --mist: #1f2c38; --accent: #3a4a00; --btn: #05080b; --btn-ink: #e4ff3a; --glow: transparent;
+  --coral: #b3261e; --good: #0b6b3a; --warn: #7a4a00; --sky: #0a4f8a; --flash: #05080b;
+  color-scheme: light;
+}
+html.big { --fs: 19px; }
+@media (prefers-contrast: more) { html:not(.sun) { --mist: #d4dee8; --edge: rgba(242,245,238,.5); --card: rgba(242,245,238,.1); } }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; height: 100%; background: var(--ink); color: var(--chalk); font: 16px/1.45 var(--body); }
-body { overscroll-behavior: none; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+html { font-size: var(--fs); -webkit-text-size-adjust: 100%; }
+html, body { margin: 0; min-height: 100%; background: var(--ink); color: var(--chalk); font-family: var(--body); line-height: 1.45; }
+body { overflow-x: hidden; overscroll-behavior: none; touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(120% 60% at 50% -10%, var(--ink-3), transparent 70%), var(--ink); }
 [hidden] { display: none !important; }
-#app { min-height: 100dvh; display: flex; flex-direction: column;
-  padding: calc(14px + env(safe-area-inset-top, 0px)) 18px calc(18px + env(safe-area-inset-bottom, 0px)); gap: 18px; }
-.bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.brand { font: 900 22px/1 var(--display); letter-spacing: .04em; text-transform: uppercase; }
-.brand b { color: var(--optic); }
-.net { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; color: var(--mist); }
-.net i { width: 9px; height: 9px; border-radius: 50%; background: var(--coral); }
-.net.on i { background: var(--good); }
-.screen { flex: 1; display: flex; flex-direction: column; gap: 16px; }
-.eyebrow { margin: 0; font: 700 12px/1 var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--optic); }
-h1 { margin: 0; font: 900 clamp(46px, 14vw, 72px)/.86 var(--display); text-transform: uppercase; text-wrap: balance; }
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
+button:disabled { cursor: default; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+svg { display: block; }
 p { margin: 0; }
-.lede { color: var(--mist); font-size: 17px; }
-.tips { margin: 0; padding-left: 20px; display: grid; gap: 8px; color: var(--mist); }
-.tips b { color: var(--chalk); font-weight: 600; }
-.grip { margin: 4px 0; display: flex; justify-content: center; }
-.grip svg { width: min(58vw, 230px); height: auto; }
-label.field { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--mist); }
-label.field input { font: 900 34px/1 var(--display); letter-spacing: .3em; text-transform: uppercase; color: var(--chalk); text-align: center;
-  background: rgba(242,245,238,.06); border: 1px solid var(--edge); padding: 12px; width: 100%; }
-button { font: inherit; color: inherit; cursor: pointer; border: 0; }
-.big { width: 100%; padding: 20px 18px; background: var(--optic); color: var(--optic-ink); font: 900 30px/1 var(--display); text-transform: uppercase; letter-spacing: .03em; }
-.big:active { transform: translateY(1px); filter: brightness(1.08); }
-.big:disabled { opacity: .5; }
-.toss { flex: 1; min-height: 38dvh; font-size: 48px; }
-.ghost { background: transparent; border: 1px solid var(--edge); padding: 11px 14px; font-weight: 700; font-size: 14px; color: var(--chalk); }
-.row { display: flex; gap: 10px; flex-wrap: wrap; }
-.row .ghost { flex: 1; }
-.msg { min-height: 1.4em; color: var(--mist); font-weight: 600; }
+
+#app { min-height: 100vh; min-height: 100dvh; max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) calc(18px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) calc(18px + env(safe-area-inset-left, 0px)); }
+.bar { display: flex; align-items: center; gap: 10px; min-height: 48px; }
+.brand { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; font: 900 1.3rem/1 var(--display); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.brand img { flex: none; width: 30px; height: 30px; border-radius: 8px; }
+.brand span { overflow: hidden; text-overflow: ellipsis; }
+.brand b { color: var(--accent); }
+.net { flex: none; display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 12px; border-radius: 99px;
+  background: var(--card); border: 1px solid var(--edge); font-size: .8rem; font-weight: 700; color: var(--mist); white-space: nowrap; }
+.net i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--coral); }
+.net.on i { background: var(--good); }
+.net.on { color: var(--chalk); }
+.iconbtn { flex: none; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; color: var(--chalk); }
+.iconbtn svg { width: 24px; height: 24px; }
+
+.screen { flex: 1; display: flex; flex-direction: column; gap: 14px; }
+.eyebrow { font: 700 .75rem/1 var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 0; font: 900 clamp(2.6rem, 13vw, 4.2rem)/.88 var(--display); text-transform: uppercase; text-wrap: balance; }
+h2 { margin: 0; font: 900 2rem/1 var(--display); text-transform: uppercase; }
+.lede { color: var(--mist); font-size: 1.06rem; }
+.fine { color: var(--mist); font-size: .9rem; }
+.spacer { flex: 1; }
+.msg { min-height: 1.45em; color: var(--mist); font-weight: 600; }
 .msg.err { color: var(--coral); }
 .msg.ok { color: var(--good); }
+.card { background: var(--card); border: 1px solid var(--edge); border-radius: var(--r); padding: 16px; }
+
+/* buttons: one big primary per screen, the rest calm */
+.big { width: 100%; min-height: 70px; padding: 16px 18px; border-radius: 18px; background: var(--btn); color: var(--btn-ink);
+  font: 900 2rem/1 var(--display); text-transform: uppercase; letter-spacing: .03em; box-shadow: 0 12px 34px -14px var(--glow); }
+.big small { display: block; margin-top: 5px; font: 700 .85rem/1.25 var(--body); letter-spacing: 0; text-transform: none; opacity: .78; }
+.big:active:not(:disabled) { transform: translateY(1px) scale(.99); filter: brightness(1.06); }
+.big:disabled { opacity: .45; box-shadow: none; }
+.ghost { min-height: 52px; padding: 10px 14px; border-radius: 14px; border: 1.5px solid var(--edge); background: var(--card); font-weight: 700; font-size: 1rem; color: var(--chalk); }
+.ghost:active { background: var(--ink-3); }
+.link { align-self: center; min-height: 44px; padding: 8px 12px; font-weight: 700; color: var(--mist); text-decoration: underline; text-underline-offset: .2em; }
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+
+/* pair */
+.hero { display: grid; justify-items: start; gap: 12px; padding-top: 6px; }
+.hero .logo { width: 88px; height: 88px; border-radius: 22px; box-shadow: 0 16px 40px -18px rgba(214,240,74,.6); }
+.how { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; counter-reset: how; }
+.how li { position: relative; padding-left: 40px; color: var(--mist); min-height: 28px; }
+.how li::before { counter-increment: how; content: counter(how); position: absolute; left: 0; top: -2px; width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--ink-3); color: var(--chalk); font-weight: 700; font-size: .85rem; border: 1px solid var(--edge); }
+.how b { color: var(--chalk); }
+label.field { display: grid; gap: 6px; font-size: .85rem; font-weight: 700; color: var(--mist); }
+label.field input { width: 100%; padding: 12px 8px; border-radius: 16px; border: 2px solid var(--edge); background: var(--card); color: var(--chalk);
+  font: 900 2.6rem/1 var(--display); letter-spacing: .34em; text-indent: .34em; text-transform: uppercase; text-align: center; -webkit-user-select: text; user-select: text; }
+label.field input:focus { outline: none; border-color: var(--accent); }
+label.field input::placeholder { color: var(--mist); opacity: .35; }
+.game { display: grid; gap: 8px; }
+.game .code { font: 900 3rem/1 var(--display); letter-spacing: .14em; }
+.game .state { display: flex; align-items: center; gap: 8px; color: var(--mist); font-weight: 600; }
+.dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--warn); }
+.dot.on { background: var(--good); }
+.dot.off { background: var(--coral); }
+.install { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; position: relative; }
+.install img { width: 44px; height: 44px; border-radius: 11px; }
+.install b { display: block; font-size: .98rem; }
+.install span { display: block; color: var(--mist); font-size: .88rem; line-height: 1.35; }
+.install .share { display: inline-block; width: 18px; height: 18px; vertical-align: -3px; margin: 0 1px; }
+.pill { min-height: 44px; padding: 0 16px; border-radius: 99px; background: var(--btn); color: var(--btn-ink); font-weight: 700; }
+.x { position: absolute; top: -10px; right: -8px; width: 44px; height: 44px; display: grid; place-items: center; color: var(--mist); font-size: 1.4rem; }
+.x span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--ink-3); border: 1px solid var(--edge); font-size: 1rem; line-height: 1; }
+
+/* illustrations */
+.art { margin: 0; display: grid; place-items: center; }
+.art svg { width: min(62vw, 250px); height: auto; overflow: visible; }
+.art .ink { stroke: var(--chalk); }
+.art .mist { stroke: var(--mist); }
+.art .acc { fill: var(--accent); }
+.art .accs { stroke: var(--accent); }
+.rock { transform-box: fill-box; transform-origin: 50% 60%; animation: rock 1.8s ease-in-out infinite alternate; }
+@keyframes rock { from { transform: rotate(-16deg); } to { transform: rotate(16deg); } }
+.help { margin: 0; padding: 14px 16px 14px 36px; display: grid; gap: 8px; background: var(--card); border: 1px solid var(--edge); border-radius: var(--r); color: var(--chalk); }
+
+/* calibration */
 .steps { display: flex; gap: 10px; }
-.step { flex: 1; padding: 12px; border: 1px solid var(--edge); color: var(--mist); font-weight: 700; text-align: center; }
-.step.now { border-color: var(--optic); color: var(--chalk); }
-.step.done { background: var(--good); border-color: var(--good); color: var(--ink); }
-.meter { height: 12px; background: rgba(242,245,238,.1); position: relative; overflow: hidden; }
-.meter i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--optic); }
-.last { font: 900 44px/1 var(--display); text-transform: uppercase; letter-spacing: .02em; min-height: 1em; }
-.last.fh { color: var(--optic); }
+.step { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border-radius: 14px; border: 1.5px solid var(--edge); color: var(--mist); font-weight: 700; }
+.step b { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--ink-3); color: var(--chalk); font-size: .8rem; }
+.step.now { border-color: var(--accent); color: var(--chalk); }
+.step.done { background: var(--good); border-color: var(--good); color: #05140c; }
+.step.done b { background: rgba(0,0,0,.18); color: #05140c; }
+.demo { margin: 0; border-radius: var(--r); background: linear-gradient(180deg, rgba(44,93,158,.35), rgba(44,93,158,.12)); border: 1px solid var(--edge); padding: 8px 8px 2px; }
+html.sun .demo { background: #e9eef6; }
+.demo svg { width: 100%; height: auto; max-height: 30vh; }
+.demo .flip { transform-box: view-box; transform-origin: 150px 0; }
+.demo[data-flip="1"] .flip { transform: scaleX(-1); }
+.d-net { stroke: var(--chalk); stroke-width: 3; stroke-dasharray: 2 6; stroke-linecap: round; opacity: .7; }
+.d-lbl { fill: var(--mist); font: 700 11px var(--body); letter-spacing: .14em; text-transform: uppercase; }
+.d-arc { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 7 7; opacity: .8; }
+.d-body { fill: var(--ink-3); stroke: var(--chalk); stroke-width: 3; }
+.d-head { fill: var(--chalk); }
+.d-arm { transform-box: view-box; transform-origin: 180px 140px; animation: swing 2.4s cubic-bezier(.55,0,.35,1) infinite; }
+.d-armline { stroke: var(--chalk); stroke-width: 7; stroke-linecap: round; }
+.d-phone { fill: var(--ink); stroke: var(--chalk); stroke-width: 3; }
+.d-screen { fill: var(--accent); }
+.d-ball { fill: #d6f04a; stroke: #7f9912; stroke-width: 1.5; transform-box: fill-box; transform-origin: center; animation: ball 2.4s linear infinite; }
+@keyframes swing { 0%, 16% { transform: rotate(55deg); } 50%, 68% { transform: rotate(-155deg); } 100% { transform: rotate(55deg); } }
+@keyframes ball { 0%, 31% { transform: none; opacity: 1; } 34% { transform: scale(1.35); opacity: 1; } 48% { transform: translate(-30px, -64px) scale(.7); opacity: 0; } 60%, 100% { transform: none; opacity: 0; } 61% { opacity: 1; } }
+.meter { height: 12px; border-radius: 99px; background: var(--card); border: 1px solid var(--edge); position: relative; overflow: hidden; }
+.meter i { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 99px; background: var(--accent); }
+
+/* play */
+.linkcard { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+.linkcard .ico { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--ink-3); color: var(--good); }
+.linkcard .ico svg { width: 24px; height: 24px; }
+.linkcard[data-q="ok"] .ico { color: var(--warn); }
+.linkcard[data-q="slow"] .ico { color: var(--coral); }
+.linkcard .via { flex: 1; min-width: 0; }
+.linkcard .via small { display: block; font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--mist); }
+.linkcard .via b { display: block; font-size: 1.15rem; line-height: 1.2; }
+.linkcard .lag { text-align: right; font: 900 2.2rem/1 var(--display); }
+.linkcard .lag small { font: 700 .8rem var(--body); color: var(--mist); margin-left: 3px; }
+.score { padding: 8px 16px 6px; display: grid; }
+.srow { display: grid; grid-template-columns: 14px 1fr 3rem 3.2rem; align-items: center; gap: 10px; min-height: 42px; }
+.srow + .srow { border-top: 1px solid var(--edge); }
+.srow.head { min-height: 0; padding-bottom: 4px; font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--mist); text-align: center; }
+.srow.head + .srow { border-top: 0; }
+.srow .srv { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); visibility: hidden; }
+.srow.serving .srv { visibility: visible; }
+.srow .who { font-weight: 700; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .g { font: 900 1.7rem/1 var(--display); text-align: center; color: var(--mist); }
+.srow .p { font: 900 1.9rem/1 var(--display); text-align: center; padding: 4px 0; border-radius: 8px; background: var(--ink-3); }
+.state { display: grid; gap: 8px; }
+.shot { display: grid; gap: 10px; align-content: start; padding: 14px 16px; min-height: 124px; }
+.last { font: 900 2.6rem/1 var(--display); text-transform: uppercase; letter-spacing: .02em; overflow-wrap: anywhere; }
+.last.idle { font-size: 1.5rem; color: var(--mist); }
+.last.idle small { color: var(--mist); font-weight: 600; }
+.last.fh, .last.read { color: var(--accent); }
 .last.bh { color: var(--sky); }
-.last small { display: block; font: 600 14px/1.4 var(--body); letter-spacing: 0; text-transform: none; color: var(--mist); margin-top: 6px; }
-.spacer { flex: 1; }
-.flash { animation: flash .35s ease-out; }
-@keyframes flash { from { background: rgba(214,240,74,.28); } to { background: transparent; } }
-#hitFlash { position: fixed; inset: 0; pointer-events: none; background: var(--optic); opacity: 0; z-index: 5; }
+.last small { display: block; margin-top: 7px; font: 700 1.05rem/1.35 var(--body); letter-spacing: 0; text-transform: none; color: var(--chalk); }
+.chip { justify-self: start; padding: 6px 12px; border-radius: 99px; font-weight: 700; font-size: .95rem; background: var(--ink-3); color: var(--chalk); border: 1.5px solid currentColor; }
+.chip.good { color: var(--good); }
+.chip.warn { color: var(--warn); }
+.chip.bad { color: var(--coral); }
+.toss { flex: 1; min-height: 150px; font-size: 3.4rem; }
+#screenPlay.tossing .shot, #screenPlay.tossing .meter, #screenPlay.tossing .spacer { display: none; }
+.quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.quick button { min-height: 78px; border-radius: 16px; border: 1.5px solid var(--edge); background: var(--card); display: grid; place-items: center; align-content: center; gap: 6px; padding: 8px 4px; font-weight: 700; font-size: .9rem; line-height: 1.15; }
+.quick button svg { width: 26px; height: 26px; }
+.quick button:disabled { opacity: .38; }
+.quick button:active:not(:disabled) { background: var(--ink-3); }
+.row.small .ghost { min-height: 46px; font-size: .92rem; }
+
+/* reconnecting: over the play screen */
+.reconnect { position: fixed; inset: 0; z-index: 8; display: grid; place-items: center; padding: 24px; background: rgba(9,19,29,.82); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+html.sun .reconnect { background: rgba(255,255,255,.9); }
+.reconnect .card { width: 100%; max-width: 420px; min-width: 0; display: grid; gap: 12px; justify-items: center; text-align: center; padding: 24px 20px; background: var(--ink-2); }
+.reconnect b { max-width: 100%; font: 900 clamp(1.5rem, 7.4vw, 2.4rem)/1 var(--display); text-transform: uppercase; white-space: nowrap; }
+.reconnect span { color: var(--mist); }
+.reconnect .row { width: 100%; }
+.spin { width: 54px; height: 54px; border-radius: 50%; border: 5px solid var(--edge); border-top-color: var(--accent); animation: spin 1s linear infinite; }
+.spin.stop { animation: none; border-color: var(--coral); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* scanning the QR code in the app */
+.scanbtn { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.scanbtn svg { width: 24px; height: 24px; }
+.scan { position: fixed; inset: 0; z-index: 9; display: grid; grid-template-rows: 1fr auto auto; gap: 14px; background: #05080b; color: #f2f5ee;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 18px calc(18px + env(safe-area-inset-bottom, 0px)); }
+.scan .view { position: relative; overflow: hidden; border-radius: 22px; background: #000; }
+.scan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.scan .aim { position: absolute; left: 50%; top: 50%; width: min(64vw, 280px); aspect-ratio: 1; transform: translate(-50%, -50%); border: 4px solid #d6f04a; border-radius: 22px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
+.scan p { text-align: center; font-weight: 700; font-size: 1.05rem; }
+.scan .ghost { color: #f2f5ee; border-color: rgba(242,245,238,.3); background: rgba(242,245,238,.08); }
+
+/* settings sheet */
+.sheet { position: fixed; inset: 0; z-index: 9; display: flex; align-items: flex-end; justify-content: center; background: rgba(0,0,0,.55); }
+.sheet .panel { width: min(100%, 520px); max-height: 92vh; overflow: auto; display: grid; gap: 10px; padding: 20px 18px calc(18px + env(safe-area-inset-bottom, 0px)); border-radius: 24px 24px 0 0; background: var(--ink-2); border: 1px solid var(--edge); border-bottom: 0; }
+.toggle { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 14px; border-radius: 14px; background: var(--card); border: 1.5px solid var(--edge); text-align: left; }
+.toggle span { flex: 1; }
+.toggle b { display: block; font-size: 1.02rem; }
+.toggle small { display: block; color: var(--mist); font-size: .85rem; }
+.toggle i { flex: none; width: 50px; height: 30px; border-radius: 99px; background: var(--ink-3); border: 1.5px solid var(--edge); position: relative; }
+.toggle i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 21px; height: 21px; border-radius: 50%; background: var(--mist); transition: transform .15s; }
+.toggle[aria-pressed="true"] i { background: var(--btn); border-color: var(--btn); }
+.toggle[aria-pressed="true"] i::after { transform: translateX(20px); background: var(--btn-ink); }
+
+.flash { animation: flash .4s ease-out; }
+@keyframes flash { from { background: rgba(214,240,74,.3); } to { background: var(--card); } }
+#hitFlash { position: fixed; inset: 0; pointer-events: none; background: var(--flash); opacity: 0; z-index: 5; }
 #hitFlash.go { animation: hit .28s ease-out; }
 @keyframes hit { from { opacity: .45; } to { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .flash { animation: none; } #hitFlash.go { animation-duration: .12s; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+  .d-arm { transform: rotate(-35deg); } #hitFlash.go { animation: none !important; }
+}
+html.calm *, html.calm *::before, html.calm *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+html.calm .d-arm { transform: rotate(-35deg); }
+html.calm #hitFlash.go { animation: none !important; }
+@media (max-height: 700px) { .hero .logo { width: 64px; height: 64px; border-radius: 16px; } .art svg { width: min(46vw, 180px); } .demo svg { max-height: 24vh; } .shot { min-height: 100px; } }
 </style>
 </head>
 <body>
 <div id="app">
   <header class="bar">
-    <span class="brand">Palm Court <b>Racket</b></span>
-    <span class="net" id="net"><i></i><span id="netText">Not connected</span></span>
+    <span class="brand"><img src="site/racket-icon.svg" alt="" width="30" height="30"><span>Palm Court <b>Racket</b></span></span>
+    <span class="net" id="net" role="status"><i></i><span id="netText">Not linked</span></span>
+    <button class="iconbtn" id="btnSettings" aria-label="Settings" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h9M18 7h2M4 17h3M12 17h8"/><circle cx="15.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/></svg>
+    </button>
   </header>
 
+  <!-- 1. Pair with the game -->
   <section class="screen" id="screenConnect">
-    <h1>Your phone is the racket</h1>
-    <figure class="grip" aria-hidden="true">
-      <svg viewBox="0 0 220 170" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M30 130 C 70 40, 150 40, 190 130" stroke="#93a7bb" stroke-width="3" stroke-dasharray="6 8"/>
-        <path d="M182 116 L190 130 L175 131" stroke="#93a7bb" stroke-width="3"/>
-        <rect x="92" y="34" width="36" height="72" rx="7" stroke="#f2f5ee" stroke-width="4"/>
-        <rect x="99" y="44" width="22" height="46" rx="2" fill="#d6f04a" opacity=".85"/>
-        <path d="M86 100 C 80 118, 88 134, 110 136 C 132 134, 140 118, 134 100" stroke="#f2f5ee" stroke-width="4"/>
-        <path d="M88 108 H 132 M90 118 H 130" stroke="#f2f5ee" stroke-width="3" opacity=".7"/>
-      </svg>
-    </figure>
-    <ol class="tips">
-      <li><b>Hold it like a racket handle,</b> screen facing sideways.</li>
-      <li><b>Grip it firmly</b> and use a wrist strap if your case has one.</li>
-      <li><b>Give yourself room.</b> Keep clear of people, lamps and TVs.</li>
-    </ol>
-    <label class="field" for="code">Code on the game screen<input id="code" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
-    <button class="big" id="btnConnect">Start</button>
-    <p class="msg" id="connectMsg" role="status"></p>
+    <div class="hero">
+      <img class="logo" src="site/racket-icon.svg" alt="" width="88" height="88">
+      <h1>Your phone is the racket</h1>
+      <p class="lede" id="pairLede">Pair it with Palm Court on your PC or TV, then swing.</p>
+    </div>
+    <div class="card game" id="foundCard" hidden>
+      <span class="eyebrow">Game code</span>
+      <b class="code" id="foundCode">-----</b>
+      <span class="state"><i class="dot" id="foundDot"></i><span id="foundState">Looking for your game…</span></span>
+    </div>
+    <button class="big" id="btnReconnect" hidden>Reconnect<small id="reconnectInfo"></small></button>
+    <div id="codeBox">
+      <ol class="how">
+        <li><b>On the PC:</b> pick Phone under Controls, then Connect phone.</li>
+        <li><b>Scan the QR code</b> with this phone’s camera, or type the code below.</li>
+      </ol>
+    </div>
+    <label class="field" for="code" id="codeField">Game code<input id="code" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCDE" enterkeyhint="go"></label>
+    <button class="big" id="btnConnect">Connect</button>
+    <button class="ghost scanbtn" id="btnScan" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/></svg>Scan the QR code</button>
+    <button class="link" id="btnOther" hidden>Pair a different game</button>
+    <p class="msg" id="connectMsg" role="status" aria-live="polite"></p>
+    <div class="spacer"></div>
+    <aside class="card install" id="installCard" hidden>
+      <img src="site/racket-icon.svg" alt="" width="44" height="44">
+      <div><b>Add it to your home screen</b>
+        <span id="installAndroid">Opens full screen and starts instantly.</span>
+        <span id="installIos" hidden>Tap Share <svg class="share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Share"><path d="M12 3v12M8 7l4-4 4 4M6 11H5v10h14V11h-1"/></svg>, then <b style="display:inline">Add to Home Screen</b>.</span>
+      </div>
+      <button class="pill" id="btnInstall">Install</button>
+      <button class="x" id="btnInstallClose" aria-label="Not now"><span>×</span></button>
+    </aside>
   </section>
 
+  <!-- 2. Motion sensors -->
+  <section class="screen" id="screenMotion" hidden>
+    <p class="eyebrow">One more thing</p>
+    <figure class="art" aria-hidden="true">
+      <svg viewBox="0 0 220 170" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path class="mist" d="M52 118 A70 70 0 0 1 60 42" stroke-width="4"/><path class="mist" d="M48 50 L60 42 L66 56" stroke-width="4"/>
+        <path class="mist" d="M168 52 A70 70 0 0 1 160 128" stroke-width="4"/><path class="mist" d="M172 120 L160 128 L154 114" stroke-width="4"/>
+        <g class="rock"><rect class="ink" x="86" y="28" width="48" height="96" rx="10" stroke-width="5" fill="#09131d"/><rect class="acc" x="94" y="40" width="32" height="68" rx="3" stroke="none"/></g>
+      </svg>
+    </figure>
+    <h1 id="motionTitle">Allow motion</h1>
+    <p class="lede" id="motionText">Your racket feels each swing through the phone’s motion sensors. Nothing else is read or sent. Tap Allow when your phone asks.</p>
+    <ol class="help" id="motionHelp" hidden></ol>
+    <div class="spacer"></div>
+    <button class="big" id="btnMotion">Allow motion</button>
+    <p class="msg" id="motionMsg" role="status" aria-live="polite"></p>
+    <button class="ghost" id="btnMotionBack">Back</button>
+  </section>
+
+  <!-- 3. Grip setup -->
   <section class="screen" id="screenCalib" hidden>
     <p class="eyebrow">Quick setup · learns your grip</p>
+    <div class="steps"><span class="step now" id="stepFh"><b>1</b>Forehand</span><span class="step" id="stepBh"><b>2</b>Backhand</span></div>
+    <figure class="demo" id="calDemo" data-flip="0" aria-hidden="true">
+      <svg viewBox="0 0 300 220">
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d6f04a"/></marker></defs>
+        <path class="d-net" d="M16 22 H284"/><text class="d-lbl" x="150" y="44" text-anchor="middle">Net</text><text class="d-lbl" x="150" y="178" text-anchor="middle">You</text>
+        <g class="flip">
+          <path class="d-arc" d="M228.8 209.6 A85 85 0 1 0 103 104.1" marker-end="url(#ah)"/>
+          <circle class="d-ball" cx="276" cy="72" r="10"/>
+          <rect class="d-body" x="110" y="132" width="80" height="20" rx="10"/>
+          <circle class="d-head" cx="150" cy="134" r="13"/>
+          <g class="d-arm"><path class="d-armline" d="M180 140 H236"/><rect class="d-phone" x="234" y="130" width="46" height="20" rx="5"/><rect class="d-screen" x="240" y="134" width="34" height="12" rx="2"/></g>
+        </g>
+      </svg>
+    </figure>
     <h1 id="calibTitle">Swing a forehand</h1>
-    <p class="lede" id="calibText">A normal side-to-side forehand, like you're hitting a ball.</p>
-    <div class="steps"><span class="step now" id="stepFh">Forehand</span><span class="step" id="stepBh">Backhand</span></div>
+    <p class="lede" id="calibText">A normal side-to-side forehand, like you’re hitting a ball.</p>
     <div class="meter"><i id="calMeter"></i></div>
-    <p class="msg" id="calibMsg" role="status"></p>
+    <p class="msg" id="calibMsg" role="status" aria-live="polite"></p>
     <div class="spacer"></div>
+    <p class="fine">Hold it like a racket handle, screen facing sideways. Grip firmly (use a strap if you have one) and keep clear of people and lamps.</p>
     <div class="row">
       <button class="ghost" id="btnCalibRestart">Start over</button>
       <button class="ghost" id="btnCalibSkip">Skip</button>
     </div>
   </section>
 
+  <!-- 4. Play -->
   <section class="screen" id="screenPlay" hidden>
-    <p class="eyebrow" id="playEyebrow">Connected</p>
-    <h1 id="playTitle">Ready</h1>
-    <p class="lede" id="playText">Start a match on the game screen.</p>
+    <div class="card linkcard" id="linkCard" data-q="good">
+      <span class="ico" id="linkIco" aria-hidden="true"></span>
+      <span class="via"><small>Connected via</small><b id="linkRoute">…</b></span>
+      <span class="lag" id="linkLagBox"><span id="linkLag">–</span><small>ms</small></span>
+    </div>
+    <div class="card score" id="scoreCard" hidden>
+      <div class="srow head" aria-hidden="true"><span></span><span></span><span>Games</span><span id="ptsHead">Points</span></div>
+      <div class="srow" id="rowMe"><i class="srv"></i><span class="who">You</span><b class="g" id="gMe">0</b><b class="p" id="pMe">0</b></div>
+      <div class="srow" id="rowThem"><i class="srv"></i><span class="who" id="oppName">Opponent</span><b class="g" id="gThem">0</b><b class="p" id="pThem">0</b></div>    </div>
+    <div class="state">
+      <p class="eyebrow" id="playEyebrow">Connected</p>
+      <h1 id="playTitle">Ready</h1>
+      <p class="lede" id="playText">Start a match on the game screen.</p>
+    </div>
+    <div class="card shot" id="shotCard" aria-live="polite">
+      <p class="last idle" id="lastSwing">Swing to test<small>Your swings, and how the game read each hit, show up here.</small></p>
+      <span class="chip" id="shotWhen" hidden></span>
+    </div>
     <div class="meter"><i id="meter"></i></div>
-    <p class="last" id="lastSwing">Swing to test<small>Your swings show up here.</small></p>
-    <p class="msg" id="gripNote"></p>
-    <button class="big toss" id="btnToss" hidden>Tap to toss</button>
+    <button class="big toss" id="btnToss" hidden>Toss<small>or lift the phone</small></button>
+    <p class="msg" id="gripNote" role="status" aria-live="polite"></p>
     <div class="spacer"></div>
-    <div class="row">
-      <button class="ghost" id="btnRecal">Forehand/backhand setup</button>
+    <div class="quick">
+      <button id="btnPause" disabled><span id="pauseIco"></span><span id="pauseLabel">Pause</span></button>
+      <button id="btnRematch" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/></svg><span>Rematch</span></button>
+      <button id="btnSwap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h15l-4-4M20 16H5l4 4"/></svg><span id="swapLabel">Swap FH/BH</span></button>
+    </div>
+    <div class="row small">
+      <button class="ghost" id="btnRecal">Grip setup</button>
       <button class="ghost" id="btnLeave">Disconnect</button>
     </div>
   </section>
+</div>
+
+<div class="reconnect" id="reconnect" hidden role="alert">
+  <div class="card">
+    <div class="spin" id="recoSpin"></div>
+    <b id="recoTitle">Reconnecting…</b>
+    <span id="recoText">The link to the game dropped.</span>
+    <div class="row"><button class="ghost" id="btnRetryNow">Try now</button><button class="ghost" id="btnRecoLeave">Change game</button></div>
+  </div>
+</div>
+
+<div class="scan" id="scanBox" hidden role="dialog" aria-modal="true" aria-label="Scan the QR code">
+  <div class="view"><video id="scanVideo" playsinline muted></video><i class="aim"></i></div>
+  <p>Point the camera at the QR code on the game screen.</p>
+  <button class="ghost" id="btnScanClose">Cancel</button>
+</div>
+
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="panel">
+    <h2 id="sheetTitle">Settings</h2>
+    <button class="toggle" id="optSun" aria-pressed="false"><span><b>Sunlight mode</b><small>Black on white, easy to read outdoors</small></span><i></i></button>
+    <button class="toggle" id="optBig" aria-pressed="false"><span><b>Large text</b><small>Bigger words everywhere</small></span><i></i></button>
+    <button class="toggle" id="optCalm" aria-pressed="false"><span><b>Reduce motion</b><small>No animations or screen flashes</small></span><i></i></button>
+    <button class="toggle" id="optBuzz" aria-pressed="true"><span><b>Vibrate on hits</b><small>Feel the ball on your racket</small></span><i></i></button>
+    <button class="ghost" id="btnSheetInstall" hidden>Add to home screen</button>
+    <p class="fine" id="sheetIos" hidden>Add it to your home screen: tap Share, then <b>Add to Home Screen</b>. It opens full screen and starts instantly.</p>
+    <p class="fine" id="appInfo">Palm Court Racket</p>
+    <button class="big" id="btnSheetClose">Done</button>
+  </div>
 </div>
 <div id="hitFlash" aria-hidden="true"></div>
 
@@ -137,6 +412,8 @@ const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const PREFIX = 'palmcourt-rk-';
 const CAL_KEY = 'palmcourt.racket.v1';
+const LAST_KEY = 'palmcourt.racket.last';    // the last game this phone paired with: code, player name, route, when
+const PREF_KEY = 'palmcourt.racket.prefs';   // sunlight, large text, reduced motion, vibration, install hint, motion allowed
 const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const SID = Math.random().toString(36).slice(2, 10);   // this page load: lets the game tell a route change from another phone
 const params = new URLSearchParams(location.search);
@@ -148,17 +425,46 @@ let cal = { fhSign: 0, learned: false };
 try { cal = Object.assign(cal, JSON.parse(localStorage.getItem(CAL_KEY) || '{}')); } catch (e) { /* storage blocked */ }
 function saveCal() { try { localStorage.setItem(CAL_KEY, JSON.stringify(cal)); } catch (e) { /* storage blocked */ } }
 
+// ---------- the last game and this phone's settings ----------
+const load = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } };
+const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } };
+let last = load(LAST_KEY);
+if (!/^[A-Z0-9]{5}$/.test(last.code || '')) last = {};
+const prefs = Object.assign({ sun: false, big: false, calm: false, buzz: true, motionOk: false, installNo: 0, installed: false }, load(PREF_KEY));
+const savePrefs = () => store(PREF_KEY, prefs);
+function applyPrefs() {
+  const root = document.documentElement;
+  if (root && root.classList) for (const k of ['sun', 'big', 'calm']) root.classList.toggle(k, !!prefs[k]);
+  const meta = document.querySelector && document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', prefs.sun ? '#ffffff' : '#09131d');
+  for (const [id, k] of [['optSun', 'sun'], ['optBig', 'big'], ['optCalm', 'calm'], ['optBuzz', 'buzz']]) $(id).setAttribute('aria-pressed', String(!!prefs[k]));
+}
+applyPrefs();
+
 // ---------- screens ----------
 let screen = 'connect';
 function show(name) {
   screen = name;
   $('screenConnect').hidden = name !== 'connect';
+  $('screenMotion').hidden = name !== 'motion';
   $('screenCalib').hidden = name !== 'calib';
   $('screenPlay').hidden = name !== 'play';
-  if (name === 'play') gripNote();
+  if (name === 'play') { gripNote(); playState(null); }
+  if (name === 'connect') renderPair();
+  renderLink();
+  try { window.scrollTo(0, 0); } catch (e) { /* no window scroll */ }
 }
 function msg(el, text, kind) { const m = $(el); m.textContent = text; m.className = 'msg' + (kind ? ' ' + kind : ''); }
-function setNet(on, text) { $('net').classList.toggle('on', on); $('netText').textContent = text; }
+let netText = 'Not connected';
+// The header pill says it short ("18 ms", "Reconnecting"); screen readers get the whole sentence.
+function setNet(on, text) {
+  netText = text;
+  $('net').classList.toggle('on', on);
+  $('net').setAttribute('aria-label', text);
+  $('netText').textContent = on ? (lag ? `${lag} ms` : 'Linked') : (/^(Reconnecting|Connecting|Waiting)/.exec(text) || ['Not linked'])[0];
+  renderLink();
+  if (screen === 'connect') renderPair();
+}
 
 // ---------- swing detection ----------
 // The gyroscope rate is projected onto gravity, so the sweep around the vertical axis tells a forehand
@@ -215,7 +521,7 @@ function onMotion(e) {
 // Lift to toss: raising the phone briskly without much rotation tosses the ball when it's your serve.
 let lastLiftToss = 0;
 function checkLiftToss(t, w) {
-  if (!lastState || !lastState.serving || lastState.tossed || screen !== 'play') return;
+  if (!lastState || !lastState.serving || lastState.tossed || lastState.paused || screen !== 'play') return;
   if (S.state === 'idle' && w < 220 && S.vIdle > 0.9 && t - lastLiftToss > 1200) { lastLiftToss = t; S.vIdle = 0; doToss(); }
 }
 
@@ -251,7 +557,7 @@ function finishSwing(t) {
 // Two routes. When this page came from the PC running the game (play.cmd), its server relays our messages
 // over the Wi-Fi: no internet needed. Otherwise, or if that fails, a direct link through the PeerJS server.
 let code = '', link = '', ws = null, peer = null, pconn = null, fast = null, lanInfo;
-let offset = 0, samples = [], rtt = 0, pingTimer = 0, retryTimer = 0, retries = 0, wakeLock = null, sensorsOn = false, armed = false, leaving = false;
+let offset = 0, samples = [], rtt = 0, lag = 0, pingTimer = 0, retryTimer = 0, retries = 0, nextTry = 0, gaveUp = false, everUp = false, wakeLock = null, sensorsOn = false, armed = false, leaving = false;
 let game = { handed: 'R', name: '' };
 
 // how: 'fast' for swings: over WebRTC they also go, twice, on a second channel that's unordered and never resends
@@ -299,7 +605,7 @@ async function relayAvailable() {
 function connect() {
   clearTimeout(retryTimer);
   if (!code || leaving || link) return;
-  setNet(false, 'Connecting…');
+  setNet(false, retries ? 'Reconnecting…' : 'Connecting…');
   relayAvailable().then((ok) => { if (link || leaving) return; if (ok) startRelay(); else startP2P(); });
 }
 
@@ -355,11 +661,25 @@ function onPeerError(e) {
   retry();
 }
 
+// Tries again with a growing wait (about 0.5, 1, 2, 4, then 8 s, jittered) for about ten minutes. Coming back to the
+// app, the phone getting its network back or "Try now" starts again at once.
+const RETRY = { FIRST_MS: 500, MAX_MS: 8000, TRIES: 90 };
 function retry() {
   clearTimeout(retryTimer);
   if (link || leaving) return;
-  if (retries++ < 40) retryTimer = setTimeout(() => { if (ws) { if (peer && peer.open) dial(); else startP2P(); } else connect(); }, 2000);
-  else { setNet(false, 'Not connected'); linkMsg('Lost the game. Check the PC is on and tap Start.', 'err'); }
+  if (retries < RETRY.TRIES) {
+    const ms = Math.round(Math.min(RETRY.MAX_MS, RETRY.FIRST_MS * 2 ** Math.min(retries, 4)) * (0.8 + 0.4 * Math.random()));
+    retries++; gaveUp = false; nextTry = performance.now() + ms;
+    retryTimer = setTimeout(() => { if (ws) { if (peer && peer.open) dial(); else startP2P(); } else connect(); }, ms);
+  } else { gaveUp = true; setNet(false, 'Not connected'); linkMsg('Lost the game. Check the PC is on and tap Connect.', 'err'); }
+  renderLink();
+}
+function retryNow() {
+  if (link || !code) return;
+  leaving = false; retries = 0; gaveUp = false;
+  clearTimeout(retryTimer);
+  if (ws) { if (peer && peer.open) dial(); else startP2P(); } else connect();
+  renderLink();
 }
 
 function stopP2P() {
@@ -380,7 +700,8 @@ function stopAll() {
 
 function linkUp(kind) {
   if (link && link !== kind) return;
-  link = kind; retries = 0; samples = [];
+  const back = everUp;
+  link = kind; retries = 0; gaveUp = false; samples = []; everUp = true;
   clearTimeout(retryTimer);
   if (kind === 'relay') stopP2P();
   else if (ws) { const w = ws; ws = null; try { w.close(); } catch (e) { /* closed */ } }
@@ -391,9 +712,12 @@ function linkUp(kind) {
   const ping = () => send({ type: 'ping', t: performance.now() });
   ping();
   pingTimer = setInterval(() => { ping(); if (++n === 12) { clearInterval(pingTimer); pingTimer = setInterval(ping, 1500); } }, 300);
+  saveLast();
   if (armed) afterStart();
-  else linkMsg('Connected to the game. Tap Start.', 'ok');
+  else linkMsg('');   // (the game card says it's found)
+  if (back && screen === 'play') { gripNote('Reconnected.', 'ok'); buzz([20, 40, 20]); }
   keepAlive();
+  renderPair();
 }
 
 function linkDown(waitForGame) {
@@ -422,11 +746,12 @@ function onData(m) {
     samples.push({ r, off: m.g + r / 2 - now });
     if (samples.length > 10) samples.shift();
     const best = samples.reduce((a, s) => (s.r < a.r ? s : a));
-    offset = best.off; rtt = r;
-    setNet(true, `Connected · ${Math.round(r)} ms`);
+    offset = best.off; rtt = r; lag = Math.round(best.r);
+    setNet(true, `${routeText()} · ${lag} ms`);
     send({ type: 'rtt', rtt: Math.round(best.r) });
   } else if (m.type === 'welcome') {
     game = { handed: m.handed === 'L' ? 'L' : 'R', name: String(m.name || '').slice(0, 12) };
+    saveLast(); calDemo();
   } else if (m.type === 'resync') {
     // The game clock jumped (pause, new match): drop old timing samples and measure again quickly. For a couple of
     // seconds: a game that has just set up a match is busy, and a ping it answers late skews the offset (the
@@ -434,7 +759,8 @@ function onData(m) {
     samples = [];
     for (let i = 0; i < 16; i++) setTimeout(() => send({ type: 'ping', t: performance.now() }), i * 150);
   } else if (m.type === 'state') playState(m);
-  else if (m.type === 'hit') { hitCue(m.power); learnFromHit(m.stroke); }
+  else if (m.type === 'hit') { hitCue(m.power); learnFromHit(m.stroke); if (m.read) showRead(m.read); }
+  else if (m.type === 'read') { if (m.read) showRead(m.read, true); }
   else if (m.type === 'point') pointNote(m);
   else if (m.type === 'replaced' || m.type === 'busy') {
     leaving = true; stopAll(); armed = false;
@@ -444,62 +770,168 @@ function onData(m) {
 }
 
 // ---------- starting up: one tap unlocks motion, vibration, sound and keeping the screen on ----------
+// iPhones ask before sharing motion, and only inside a tap. The first time, the Allow motion screen says why first;
+// once allowed, the Start tap asks straight away (iOS then answers without a prompt).
+let motionIssue = '';
+const needsAsk = () => typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function';
 async function startSensors() {
   if (sensorsOn) return true;
-  if (typeof DeviceMotionEvent === 'undefined') { msg('connectMsg', 'This browser has no motion sensors. Open this page on a phone.', 'err'); return false; }
+  if (typeof DeviceMotionEvent === 'undefined') { motionIssue = window.isSecureContext === false ? 'insecure' : 'none'; return false; }
   if (typeof DeviceMotionEvent.requestPermission === 'function') {
     let r;
     try { r = await DeviceMotionEvent.requestPermission(); } catch (e) { r = 'needs-tap'; }
-    if (r !== 'granted') {
-      msg('connectMsg', r === 'needs-tap' ? 'Tap Start again to allow motion access.'
-        : IOS ? 'Motion access is off for this page. Close this tab, scan the code again and tap Allow when asked.'
-        : 'Motion sensors are blocked for this site. Tap the icon beside the address, then Permissions (or Site settings) → Motion sensors → Allow, and reload.', 'err');
-      return false;
-    }
+    if (r !== 'granted') { motionIssue = r === 'needs-tap' ? 'tap' : 'denied'; if (r !== 'needs-tap') { prefs.motionOk = false; savePrefs(); } return false; }
+    if (!prefs.motionOk) { prefs.motionOk = true; savePrefs(); }
   }
   window.addEventListener('devicemotion', onMotion, { passive: true });
-  sensorsOn = true;
+  sensorsOn = true; motionIssue = '';
   setTimeout(() => {
     if (S.events) return;
-    const text = window.isSecureContext ? 'No motion data is arriving. This needs a phone with a gyroscope.' : 'No motion data: this page must be opened with https.';
-    msg(screen === 'calib' ? 'calibMsg' : screen === 'play' ? 'gripNote' : 'connectMsg', text, 'err');
-  }, 2000);
+    if (screen === 'play') msg('gripNote', window.isSecureContext ? 'No motion data is arriving. This needs a phone with a gyroscope.' : 'No motion data: this page must be opened with https.', 'err');
+    else showMotion(window.isSecureContext ? 'nodata' : 'insecure');
+  }, 2500);
   return true;
 }
 
-async function keepAwake() {
-  try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) { /* not allowed right now */ }
+// The motion screen: why it's needed, or what to do when it's blocked or missing.
+const MOTION = {
+  ask: ['Allow motion', 'Your racket feels each swing through the phone’s motion sensors. Nothing else is read or sent. Tap Allow when your phone asks.', 'Allow motion', null],
+  tap: ['Allow motion', 'Your phone wants one more tap before it shares motion.', 'Allow motion', null],
+  denied: ['Motion is off', 'This page isn’t allowed to read the motion sensors, so it can’t feel your swings. To turn it on:', 'Try again', IOS
+    ? ['Close this page or app completely (swipe it away), open it again, tap Allow motion, then Allow.', 'No question this time? On the iPhone: Settings → Apps → Safari (or Settings → Safari) → Advanced → Website Data, delete this site, and try again.', 'Home screen app: remove it and add it again.']
+    : ['Tap the icon left of the address bar (or ⋮ → Settings → Site settings).', 'Motion sensors → Allow.', 'Come back here and tap Try again.']],
+  none: ['No motion sensors', 'This browser doesn’t share motion sensors, so it can’t be a racket.', 'Try again', ['Open this page on a phone: Chrome on Android, Safari on iPhone.', 'Scan the QR code on the game screen with the phone’s camera.']],
+  insecure: ['Needs a secure link', 'Phones only share their motion sensors with secure (https) pages.', 'Try again', ['Scan the QR code on the game screen again, or type the https:// address it shows.', 'Your phone may warn the link isn’t private: that’s your own PC. Android: Advanced → Proceed. iPhone: Show Details → visit this website.']],
+  nodata: ['No motion data', 'Motion is allowed, but nothing is arriving from the sensors.', 'Try again', ['This needs a phone with a gyroscope (almost every phone has one).', 'Close other apps that use motion, then open this page again.']],
+};
+function showMotion(kind) {
+  const d = MOTION[kind] || MOTION.ask;
+  $('motionTitle').textContent = d[0]; $('motionText').textContent = d[1]; $('btnMotion').textContent = d[2];
+  const help = $('motionHelp');
+  help.hidden = !d[3];
+  if (d[3]) { help.textContent = ''; for (const s of d[3]) { const li = document.createElement('li'); li.textContent = s; help.append(li); } }
+  msg('motionMsg', '');
+  if (screen !== 'motion') show('motion');
 }
+async function allowMotion() {
+  const motion = startSensors();   // inside the tap, before anything else
+  unlockCues();
+  keepAwake();
+  armed = await motion;
+  sendStatus();
+  if (!armed) { showMotion(motionIssue || 'denied'); msg('motionMsg', motionIssue === 'tap' ? '' : 'Still off. Follow the steps above.', motionIssue === 'tap' ? '' : 'err'); return; }
+  if (link) afterStart();
+  else { show('connect'); msg('connectMsg', 'Motion is on. Connecting to the game…'); if (!ws && !peer) connect(); }
+}
+
+async function keepAwake() {
+  try { if ('wakeLock' in navigator && !wakeLock && document.visibilityState === 'visible') { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) { /* not allowed right now */ }
+}
+function letSleep() { const w = wakeLock; wakeLock = null; try { if (w) w.release(); } catch (e) { /* released */ } }
+// Back from the lock screen or another app: the screen lock is gone, and the link may be too. Get both back at once.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
-  if (link) { keepAwake(); keepAlive(); }
+  if (document.visibilityState !== 'visible') { if (scanStream) stopScan(); return; }
+  if (armed && !leaving) keepAwake();
+  if (link) keepAlive();
   else if (code && !leaving) { retries = 0; connect(); }    // the phone slept: get the link back straight away
 });
+window.addEventListener('online', () => { if (!link && code && !leaving && armed) retryNow(); });
 
 async function startClicked() {
   const c = $('code').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (!/^[A-Z0-9]{5}$/.test(c)) { msg('connectMsg', 'Type the 5-character code shown on the game screen.', 'err'); return; }
-  const motion = startSensors();   // iOS wants the permission request inside the tap, before anything else
+  if (!/^[A-Z0-9]{5}$/.test(c)) { msg('connectMsg', 'Type the 5-letter code shown on the game screen.', 'err'); return; }
+  const ask = needsAsk() && !sensorsOn && !prefs.motionOk;
+  const motion = ask ? null : startSensors();   // iOS wants the permission request inside the tap, before anything else
   unlockCues();
   keepAwake();
   if (c !== code) {
     stopAll(); code = c;
     try { history.replaceState(null, '', '?c=' + code); } catch (e) { /* ignore */ }
   }
-  leaving = false; retries = 0;
+  leaving = false; retries = 0; gaveUp = false; pairNew = false;
+  if (ask) { if (!link) connect(); showMotion('ask'); return; }
   armed = await motion;
   sendStatus();
-  if (!armed) return;
+  if (!armed) { if (!link) connect(); showMotion(motionIssue || 'denied'); return; }
   if (link) afterStart();
   else { msg('connectMsg', 'Connecting to the game…'); connect(); }
 }
 
 function afterStart() {
-  if (screen !== 'connect') return;
-  if (!cal.fhSign) startCalib(); else { show('play'); playState(null); }
+  if (screen !== 'connect' && screen !== 'motion') return;
+  if (!cal.fhSign) startCalib(); else show('play');
 }
 
 function sendStatus() { send({ type: 'status', armed, calibrated: !!cal.fhSign }); }
+
+// ---------- pairing: the code from the QR link, the last game, or typed in ----------
+let pairNew = false;
+function saveLast() {
+  if (!code) return;
+  last = { code, name: game.name || (last.code === code ? last.name : '') || '', route: link ? routeText() : last.route || '', at: Date.now() };
+  store(LAST_KEY, last);
+}
+function ago(t) {
+  const m = Math.round((Date.now() - (+t || 0)) / 60000);
+  return !t ? '' : m < 2 ? 'just now' : m < 60 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
+}
+function renderPair() {
+  const preset = !!code && !pairNew, saved = !preset && !pairNew && !!last.code;
+  $('foundCard').hidden = !preset;
+  $('btnReconnect').hidden = !saved;
+  $('codeBox').hidden = preset || saved;
+  $('codeField').hidden = preset || saved;
+  $('btnConnect').hidden = saved;
+  $('btnConnect').textContent = preset ? 'Start' : 'Connect';
+  $('btnOther').hidden = !(preset || saved);
+  $('btnScan').hidden = preset || saved || !canScan();
+  $('pairLede').textContent = preset ? 'Your game is on the PC screen. Tap Start, then swing.' : saved ? 'Welcome back. One tap and you’re in.' : 'Pair it with Palm Court on your PC or TV, then swing.';
+  if (preset) {
+    $('foundCode').textContent = code;
+    const up = !!link, waiting = /^Waiting/.test(netText);
+    $('foundDot').className = 'dot' + (up ? ' on' : gaveUp || leaving ? ' off' : '');
+    $('foundState').textContent = up ? 'Game found: ready when you are' : leaving ? 'Disconnected. Tap Start to link up again.' : waiting ? 'PC found, waiting for the game page…' : gaveUp ? 'Can’t find the game yet' : 'Looking for your game…';
+  }
+  if (saved) $('reconnectInfo').textContent = [last.code, last.name, last.route, ago(last.at)].filter(Boolean).join(' · ');
+  renderInstall();
+}
+function reconnectClicked() { $('code').value = last.code; startClicked(); }
+
+// Scanning the game's QR code inside the app (the installed app has no address bar to open it with). Where the browser
+// can read QR codes (Chrome on Android); elsewhere the phone's camera app opens the link instead.
+let scanStream = null, scanTimer = 0;
+const canScan = () => typeof window.BarcodeDetector === 'function' && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+function codeFrom(text) {
+  const s = String(text || '').trim(), m = /[?&#](?:c|code)=([A-Za-z0-9]{5})\b/.exec(s) || /^([A-Za-z0-9]{5})$/.exec(s);
+  return m ? m[1].toUpperCase() : '';
+}
+async function startScan() {
+  let det;
+  try { det = new window.BarcodeDetector({ formats: ['qr_code'] }); } catch (e) { return; }
+  try { scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); }
+  catch (e) { msg('connectMsg', 'The camera isn’t available here. Type the code instead.', 'err'); return; }
+  const v = $('scanVideo');
+  v.srcObject = scanStream; $('scanBox').hidden = false;
+  try { await v.play(); } catch (e) { /* plays once it has a frame */ }
+  const look = async () => {
+    if (!scanStream) return;
+    try {
+      for (const b of await det.detect(v)) {
+        const c = codeFrom(b.rawValue);
+        if (c) { stopScan(); $('code').value = c; buzz(30); startClicked(); return; }
+      }
+    } catch (e) { /* no frame yet */ }
+    scanTimer = setTimeout(look, 180);
+  };
+  look();
+}
+function stopScan() {
+  clearTimeout(scanTimer);
+  const s = scanStream;
+  scanStream = null;
+  if (s) for (const t of s.getTracks()) t.stop();
+  $('scanVideo').srcObject = null; $('scanBox').hidden = true;
+}
 
 // ---------- feeling each hit ----------
 // Android vibrates. iPhones give web pages no vibration, so they get a click (sound unlocked by the Start tap),
@@ -522,7 +954,7 @@ function unlockCues() {
   }
   buzz(20);
 }
-function buzz(p) { try { if (navigator.vibrate && navigator.vibrate(p)) { cues.vibrate++; return true; } } catch (e) { /* no vibration */ } return false; }
+function buzz(p) { if (!prefs.buzz) return true; try { if (navigator.vibrate && navigator.vibrate(p)) { cues.vibrate++; return true; } } catch (e) { /* no vibration */ } return false; }
 function click(power) {
   if (!audio || audio.state !== 'running') return;
   const t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
@@ -534,6 +966,7 @@ function click(power) {
   cues.click++;
 }
 function flash() {
+  if (prefs.calm) return;
   const f = $('hitFlash');
   f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
   cues.flash++;
@@ -564,30 +997,48 @@ function learnFromHit(stroke) {
     if (votes.length >= 3 && agree(s) >= votes.length - (votes.length >= 5 ? 1 : 0)) {
       cal.fhSign = s; cal.learned = true; saveCal(); votes = []; sendStatus();
       gripNote('Learned your forehand and backhand from your hits.', 'ok');
+      renderQuick();
     }
   } else if (votes.length >= 5 && agree(-cal.fhSign) >= votes.length - 1) {
     cal.fhSign = -cal.fhSign; cal.learned = true; saveCal(); votes = [];
     gripNote('Swapped forehand and backhand to match your hits.', 'ok');
   }
 }
+let noteTimer = 0;
 function gripNote(text, kind) {
-  if (text) { msg('gripNote', text, kind); return; }
-  msg('gripNote', cal.fhSign ? '' : 'Forehand or backhand? Not set up yet: it learns from your hits, or tap the setup button.');
+  clearTimeout(noteTimer);
+  if (text) { msg('gripNote', text, kind); if (kind === 'ok') noteTimer = setTimeout(() => gripNote(), 4000); return; }
+  msg('gripNote', cal.fhSign ? '' : 'Forehand or backhand? Not set up yet: it learns from your hits, or tap Grip setup.');
+}
+// Swap which way counts as a forehand (a phone held the other way round), or set it up if it isn't yet.
+function swapSides() {
+  if (!cal.fhSign) { startCalib(); return; }
+  cal.fhSign = -cal.fhSign; cal.learned = false; votes = []; saveCal(); sendStatus();
+  buzz(20);
+  gripNote('Swapped: forehand and backhand now turn the other way.', 'ok');
 }
 
 // ---------- what the game is doing ----------
+// state (src/phone.js pushState): inMatch, serving, tossed, stroke, tossT; and, from newer games, srv ('me' | 'them'),
+// phase (serve, toss, rally, dead), score { g: [you, them], p: [you, them], tb, opp }, paused, over, won, route.
 let lastState = null, noteUntil = 0;
 function playState(s) {
   if (s) lastState = s;
   keepAlive();
   s = lastState || {};
+  if (s.route && link && s.route !== lastRoute) { lastRoute = s.route; saveLast(); }
+  renderScore(s); renderQuick(); renderLink();
   if (screen !== 'play' || performance.now() < noteUntil) return;
-  const serving = !!s.serving;
-  $('btnToss').hidden = !(serving && !s.tossed);
+  const serving = !!s.serving, tossNow = serving && !s.tossed && !s.paused;
+  $('btnToss').hidden = !tossNow;
+  $('screenPlay').classList.toggle('tossing', tossNow);
+  if (s.over) { title('Match over', s.won ? 'You won!' : `${(s.score && s.score.opp) || 'They'} won`, 'Tap Rematch to play again.'); return; }
+  if (s.paused) { title('Paused', 'Paused', 'Tap Resume when you’re ready.'); return; }
   if (!s.inMatch) { title('Connected', 'Ready', 'Start a match on the game screen. Swing here to test.'); return; }
   if (serving && !s.tossed) title('Your serve', 'Tap to toss', 'Or lift the phone to toss. Then swing.');
   else if (serving) title('Your serve', 'Swing!', '');
   else if (s.stroke) title('Incoming', s.stroke === 'fh' ? 'Forehand' : 'Backhand', 'Swing when the ball reaches you.');
+  else if (s.srv === 'them' && (s.phase === 'serve' || s.phase === 'toss')) title('Their serve', 'Get ready', 'Swing when the ball reaches you.');
   else title(s.text || 'Rally', 'Ready', '');
 }
 function title(eyebrow, big, small) { $('playEyebrow').textContent = eyebrow; $('playTitle').textContent = big; $('playText').textContent = small; }
@@ -598,6 +1049,76 @@ function pointNote(m) {
   noteUntil = performance.now() + 1800;
   setTimeout(() => playState(null), 1850);
 }
+function renderScore(s) {
+  const sc = s.score && Array.isArray(s.score.g) && Array.isArray(s.score.p) ? s.score : null;
+  $('scoreCard').hidden = !sc;
+  if (!sc) return;
+  $('gMe').textContent = String(sc.g[0]); $('gThem').textContent = String(sc.g[1]);
+  $('pMe').textContent = String(sc.p[0] ?? ''); $('pThem').textContent = String(sc.p[1] ?? '');
+  $('oppName').textContent = String(sc.opp || 'Opponent').slice(0, 16);
+  $('rowMe').classList.toggle('serving', s.srv === 'me' && !s.over);
+  $('rowThem').classList.toggle('serving', s.srv === 'them' && !s.over);
+  $('ptsHead').textContent = sc.tb ? 'Tiebreak' : 'Points';
+}
+const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M8 5v14M16 5v14"/></svg>';
+const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12.5-7.5z"/></svg>';
+function renderQuick() {
+  const s = lastState || {}, paused = !!s.paused;
+  $('btnPause').disabled = !link || !(s.inMatch || paused);
+  $('pauseLabel').textContent = paused ? 'Resume' : 'Pause';
+  $('pauseIco').innerHTML = paused ? ICON_PLAY : ICON_PAUSE;
+  $('btnRematch').disabled = !link || !s.over;
+  $('swapLabel').textContent = cal.fhSign ? 'Swap FH/BH' : 'Set up FH/BH';
+}
+
+// The link, for the play screen: which way it goes, the lag, and a clear state while it's down.
+const ICON_WIFI = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.8 16a5 5 0 0 1 6.4 0"/><circle cx="12" cy="19.3" r="1.4" fill="currentColor" stroke="none"/></svg>';
+const ICON_NET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg>';
+let lastRoute = '', linkIcon = '', recoTimer = 0;
+function routeText() {
+  if (link === 'relay') return 'Wi-Fi via PC';
+  const r = lastState && lastState.route;
+  return r === 'Wi-Fi direct' ? 'Wi-Fi direct' : r === 'TURN relay' ? 'Internet relay' : r === 'internet' ? 'Internet' : 'Direct link';
+}
+function renderLink() {
+  if (link) {
+    const q = !lag ? 'good' : lag < 45 ? 'good' : lag < 100 ? 'ok' : 'slow', via = routeText(), icon = /Wi-Fi/.test(via) ? ICON_WIFI : ICON_NET;
+    $('linkRoute').textContent = via;
+    $('linkLag').textContent = lag ? String(lag) : '–';
+    $('linkCard').setAttribute('data-q', q);
+    if (icon !== linkIcon) { linkIcon = icon; $('linkIco').innerHTML = icon; }
+  }
+  // Down while playing: say so over the whole screen, with the next try counting down.
+  const down = !link && everUp && !leaving && screen === 'play';
+  $('reconnect').hidden = !down;
+  clearTimeout(recoTimer);
+  if (!down) return;
+  const waiting = /^Waiting/.test(netText), secs = Math.max(1, Math.ceil((nextTry - performance.now()) / 1000));
+  $('recoSpin').className = 'spin' + (gaveUp ? ' stop' : '');
+  $('recoTitle').textContent = waiting ? 'Waiting for the game' : gaveUp ? 'Can’t find the game' : 'Reconnecting…';
+  $('recoText').textContent = waiting ? 'The PC is there, but the game page closed or is reloading. Open it again on the PC.'
+    : gaveUp ? 'Check the PC is on and the game is open, then tap Try now.'
+    : retries ? `The link dropped. Try ${retries}, next in ${secs} s.` : 'The link dropped. Getting it back…';
+  if (!waiting && !gaveUp) recoTimer = setTimeout(renderLink, 1000);
+}
+
+// The game's read of your last hit: where it went, spin, speed and your timing ("Cross → · topspin · 92 km/h · On time").
+let readAt = -1e9;
+function showRead(r, quiet) {
+  if (!r || typeof r !== 'object') return;
+  readAt = performance.now();
+  const el = $('lastSwing'), small = document.createElement('small');
+  el.className = 'last read';
+  el.textContent = String(r.where || 'Hit').slice(0, 24);
+  small.textContent = [r.how, r.kmh ? `${Math.round(+r.kmh)} km/h` : ''].filter(Boolean).join(' · ').slice(0, 60);
+  el.append(small);
+  const chip = $('shotWhen');
+  chip.hidden = !r.when;
+  chip.textContent = String(r.when || '').slice(0, 20);
+  chip.className = 'chip' + (r.tone ? ' ' + r.tone : '');
+  if (!quiet) pop($('shotCard'));
+}
+function pop(el) { if (prefs.calm) return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
 
 // ---------- swings ----------
 function onSwingStart(t, sign) {
@@ -644,16 +1165,19 @@ function onSwing(sw) {
   }
   showSwing(sw);
 }
+// Your own swing, until the game says what it made of it (its read wins for a moment after a hit).
 function showSwing(sw) {
+  if (performance.now() - readAt < 1500) return;
   const el = $('lastSwing');
   const kind = sw.dir === 'fh' ? 'Forehand' : sw.dir === 'bh' ? 'Backhand' : 'Swing';
   const spin = sw.spin > 0.5 ? 'topspin' : sw.spin < 0 ? 'slice' : 'flat';
   el.className = 'last' + (sw.dir ? ' ' + sw.dir : '');
   el.textContent = `${kind} ${sw.dir === 'fh' ? '→' : sw.dir === 'bh' ? '←' : ''}`.trim();
   const small = document.createElement('small');
-  small.textContent = `${Math.round(sw.power * 100)}% · ${spin} · ${sw.peak}°/s`;
+  small.textContent = `${Math.round(sw.power * 100)}% power · ${spin} · ${sw.peak}°/s`;
   el.append(small);
-  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  $('shotWhen').hidden = true;
+  pop($('shotCard'));
 }
 function sendSwing(sw) {
   lastSent = sw;
@@ -666,12 +1190,15 @@ function sendEnd(sw) { send({ type: 'swingEnd', id: sw.id, yawPost: sw.yawPost, 
 // A swing comes with a wind-up before it and a recovery after, both turning the other way. So each step
 // collects the swings that come close together and keeps the fastest side-to-side one: that's the stroke.
 let calStep = 0, calFhSign = 0, cluster = [], clusterTimer = 0;
+// The picture: a right-hander's forehand from above; mirrored for a backhand, and again for a left-hander.
+function calDemo() { $('calDemo').setAttribute('data-flip', (calStep === 2) !== (game.handed === 'L') ? '1' : '0'); }
 function startCalib() {
   show('calib'); calStep = 1; calFhSign = 0; cluster = []; clearTimeout(clusterTimer);
   $('calibTitle').textContent = 'Swing a forehand';
   $('calibText').textContent = 'A normal side-to-side forehand, like you’re hitting a ball.';
   $('stepFh').className = 'step now'; $('stepBh').className = 'step';
   msg('calibMsg', '');
+  calDemo();
 }
 function calibSwing(sw) {
   cluster.push(sw);
@@ -690,6 +1217,7 @@ function judgeCluster() {
     $('calibTitle').textContent = 'Now a backhand';
     $('calibText').textContent = 'Swing across your body the other way.';
     msg('calibMsg', 'Got your forehand.', 'ok');
+    calDemo();
     buzz(30);
   } else if (calStep === 2) {
     if (best.sign === calFhSign) { msg('calibMsg', 'That looked like another forehand. Swing a backhand, across your body.', 'err'); return; }
@@ -697,7 +1225,7 @@ function judgeCluster() {
     $('stepBh').className = 'step done';
     buzz([30, 50, 30]);
     sendStatus();
-    show('play'); playState(null);
+    show('play');
     gripNote('Setup done: it knows your forehand from your backhand.', 'ok');
   }
 }
@@ -711,34 +1239,116 @@ function frame() {
 }
 requestAnimationFrame(frame);
 
+// ---------- the app: home screen install, offline start, settings ----------
+const standalone = () => { try { return navigator.standalone === true || (!!window.matchMedia && window.matchMedia('(display-mode: standalone)').matches); } catch (e) { return false; } };
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; renderInstall(); });
+window.addEventListener('appinstalled', () => { installEvt = null; prefs.installed = true; savePrefs(); renderInstall(); });
+function installHow() { return standalone() || prefs.installed ? '' : installEvt ? 'prompt' : IOS ? 'ios' : ''; }
+function renderInstall() {
+  const how = installHow(), later = Date.now() - (+prefs.installNo || 0) < 5 * 864e5;
+  $('installCard').hidden = !how || later || screen !== 'connect';
+  $('installAndroid').hidden = how !== 'prompt';
+  $('installIos').hidden = how !== 'ios';
+  $('btnInstall').hidden = how !== 'prompt';
+  $('btnSheetInstall').hidden = how !== 'prompt';
+  $('sheetIos').hidden = how !== 'ios';
+}
+async function install() {
+  const e = installEvt;
+  if (!e) return;
+  installEvt = null;
+  try { e.prompt(); const r = await e.userChoice; if (r && r.outcome === 'accepted') { prefs.installed = true; savePrefs(); } } catch (x) { /* dismissed */ }
+  renderInstall();
+}
+// The service worker keeps the app's shell for an instant start. Scoped to this page only (see racket-sw.js).
+// A new version (VERSION bumped) takes over as it installs: reload into it, unless you're already playing or typing.
+if (navigator.serviceWorker && window.isSecureContext) {
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (had && screen === 'connect' && !armed && !link && !($('code').value && !code)) location.reload();
+  });
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('racket-sw.js', { scope: './controller.html' }).then(() => { appInfo(); }).catch(() => { /* a self-signed PC link: no offline start there */ });
+  });
+}
+function appInfo() { $('appInfo').textContent = `Palm Court Racket${standalone() ? ' · home screen app' : ''}${navigator.serviceWorker && navigator.serviceWorker.controller ? ' · starts offline' : ''}`; }
+// iPhone splash: a picture the size of this screen, in the app's colours (iOS shows it while the home screen app opens).
+if (IOS && !standalone() && document.head && document.createElement('canvas').getContext) {
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const d = window.devicePixelRatio || 1, w = window.screen.width * d, h = window.screen.height * d, cv = document.createElement('canvas'), g = cv.getContext('2d'), s = Math.min(w, h) * 0.32;
+      cv.width = w; cv.height = h; g.fillStyle = '#09131d'; g.fillRect(0, 0, w, h); g.drawImage(img, (w - s) / 2, (h - s) / 2 - s * 0.2, s, s);
+      const l = document.createElement('link'); l.rel = 'apple-touch-startup-image'; l.href = cv.toDataURL('image/png'); document.head.append(l);
+    } catch (e) { /* no splash */ }
+  };
+  img.src = 'site/racket-icon.svg';
+}
+function openSheet() { $('sheet').hidden = false; renderInstall(); appInfo(); try { $('btnSheetClose').focus(); } catch (e) { /* no focus */ } }
+function closeSheet() { $('sheet').hidden = true; }
+function toggle(k) { prefs[k] = !prefs[k]; savePrefs(); applyPrefs(); }
+
 // ---------- buttons ----------
 $('btnConnect').addEventListener('click', startClicked);
+$('btnReconnect').addEventListener('click', reconnectClicked);
+$('btnOther').addEventListener('click', () => {
+  pairNew = true;
+  if (!link) { stopAll(); code = ''; setNet(false, 'Not connected'); }
+  $('code').value = ''; msg('connectMsg', '');
+  renderPair();
+  try { $('code').focus(); } catch (e) { /* no focus */ }
+});
 $('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') startClicked(); });
+$('code').addEventListener('input', () => { const el = $('code'), v = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5); if (v !== el.value) el.value = v; });
+$('btnScan').addEventListener('click', startScan);
+$('btnScanClose').addEventListener('click', stopScan);
+$('btnMotion').addEventListener('click', allowMotion);
+$('btnMotionBack').addEventListener('click', () => { show('connect'); });
 let tossTimer = 0;
 function doToss() {
   send({ type: 'toss' }); buzz(15);
-  $('btnToss').hidden = true; title('Your serve', 'Swing!', '');
+  $('btnToss').hidden = true; $('screenPlay').classList.toggle('tossing', false); title('Your serve', 'Swing!', '');
   // If the game didn't toss (the tap came too early or got lost), offer the button again.
   clearTimeout(tossTimer);
   tossTimer = setTimeout(() => { if (lastState && lastState.serving && !lastState.tossed) playState(null); }, 1500);
 }
 $('btnToss').addEventListener('click', doToss);
+$('btnPause').addEventListener('click', () => { const s = lastState || {}; send({ type: 'pause', on: !s.paused }); buzz(15); });
+$('btnRematch').addEventListener('click', () => { send({ type: 'rematch' }); buzz(15); $('btnRematch').disabled = true; });
+$('btnSwap').addEventListener('click', swapSides);
 $('btnRecal').addEventListener('click', startCalib);
 $('btnCalibRestart').addEventListener('click', startCalib);
-$('btnCalibSkip').addEventListener('click', () => { cluster = []; clearTimeout(clusterTimer); show('play'); playState(null); });
+$('btnCalibSkip').addEventListener('click', () => { cluster = []; clearTimeout(clusterTimer); show('play'); });
+function leave() {
+  leaving = true; armed = false; stopAll(); letSleep();
+  setNet(false, 'Not connected'); show('connect'); msg('connectMsg', '');
+  $('btnLeave').textContent = 'Disconnect';
+}
 let leaveArmed = 0;
 $('btnLeave').addEventListener('click', () => {
   if (performance.now() - leaveArmed > 2500) { leaveArmed = performance.now(); $('btnLeave').textContent = 'Tap again to disconnect'; setTimeout(() => ($('btnLeave').textContent = 'Disconnect'), 2500); return; }
-  leaving = true; armed = false; stopAll();
-  setNet(false, 'Not connected'); show('connect'); msg('connectMsg', '');
-  $('btnLeave').textContent = 'Disconnect';
+  leave();
 });
+$('btnRetryNow').addEventListener('click', retryNow);
+$('btnRecoLeave').addEventListener('click', () => { leave(); pairNew = true; renderPair(); });
+$('btnSettings').addEventListener('click', openSheet);
+$('btnSheetClose').addEventListener('click', closeSheet);
+$('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) closeSheet(); });
+$('optSun').addEventListener('click', () => toggle('sun'));
+$('optBig').addEventListener('click', () => toggle('big'));
+$('optCalm').addEventListener('click', () => toggle('calm'));
+$('optBuzz').addEventListener('click', () => { toggle('buzz'); buzz(30); });
+$('btnInstall').addEventListener('click', install);
+$('btnSheetInstall').addEventListener('click', install);
+$('btnInstallClose').addEventListener('click', () => { prefs.installNo = Date.now(); savePrefs(); renderInstall(); });
 
 // Opened from the game's QR code: the code is in the address, so link up straight away. Motion still needs a tap.
 const preset = (params.get('c') || params.get('code') || location.hash.slice(1) || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
 $('code').value = preset;
-if (/^[A-Z0-9]{5}$/.test(preset)) { code = preset; msg('connectMsg', 'Finding your game… Tap Start when you’re ready.'); connect(); }
-window.PalmRacket = { S, DET, cal, cues, onMotion, get link() { return link; }, get armed() { return armed; }, get screen() { return screen; }, get offset() { return offset; }, get votes() { return votes.slice(); } };
+if (/^[A-Z0-9]{5}$/.test(preset)) { code = preset; msg('connectMsg', ''); connect(); }
+renderPair();
+window.PalmRacket = { S, DET, cal, cues, prefs, onMotion, renderInstall, get link() { return link; }, get armed() { return armed; }, get screen() { return screen; }, get offset() { return offset; }, get votes() { return votes.slice(); }, get lastState() { return lastState; }, get retries() { return retries; }, get lag() { return lag; } };
 </script>
 </body>
 </html>

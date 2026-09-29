@@ -556,7 +556,8 @@ export class Avatar {
       if (i === 2) { [nx, nz] = [ca * nx + sa * nz, -sa * nx + ca * nz]; }
       const al2 = Math.hypot(ax, ay, az) || 1, nl = Math.hypot(nx, ny, nz) || 1;
       ax /= al2; ay /= al2; az /= al2;
-      if (i === 2) { K[PLEN] = c.x - kp.px; K[PLEN + 1] = c.y; K[PLEN + 2] = c.z - kp.pz; }   // (the ball, from where the step takes the body) else { K[PLEN] = Wx + RH * ax; K[PLEN + 1] = Wy + RH * ay; K[PLEN + 2] = Wz + RH * az; }
+      if (i === 2) { K[PLEN] = c.x - kp.px; K[PLEN + 1] = c.y; K[PLEN + 2] = c.z - kp.pz; }   // (the ball, from where the step takes the body)
+      else { K[PLEN] = Wx + RH * ax; K[PLEN + 1] = Wy + RH * ay; K[PLEN + 2] = Wz + RH * az; }
       K[PLEN + 3] = ax; K[PLEN + 4] = ay; K[PLEN + 5] = az; K[PLEN + 6] = nx / nl; K[PLEN + 7] = ny / nl; K[PLEN + 8] = nz / nl; K[PLEN + 9] = r(9);
       // The free hand: a two-hander's on the grip through the stroke, a one-hander's on the throat at the take-back.
       K[PLEN + 10] = bh ? (one ? [0.9, 0.5, 0, 0, 0][i] : [1, 1, 1, 1, 0.85][i]) : 0;

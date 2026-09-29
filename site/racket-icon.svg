@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080">
+  <title>Palm Court Racket</title>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="36%" r="78%">
+      <stop offset="0" stop-color="#17405a"/><stop offset=".55" stop-color="#0c2233"/><stop offset="1" stop-color="#061019"/>
+    </radialGradient>
+    <radialGradient id="ball" cx="38%" cy="32%" r="75%">
+      <stop offset="0" stop-color="#f4ff8a"/><stop offset=".45" stop-color="#dcf53c"/><stop offset=".85" stop-color="#a6c21a"/><stop offset="1" stop-color="#7f9912"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#d6f04a" stop-opacity=".32"/><stop offset="1" stop-color="#d6f04a" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="ballClip"><circle cx="520" cy="480" r="232"/></clipPath>
+  </defs>
+  <rect id="plate" width="1080" height="1080" rx="236" fill="url(#bg)"/>
+  <g id="art">
+    <g stroke="#ffffff" stroke-opacity=".15" stroke-width="12" fill="none" stroke-linecap="round">
+      <path d="M170 1080 L380 800 L660 800 L870 1080"/><path d="M290 930 H750"/><path d="M520 800 V930"/>
+    </g>
+    <g fill="#1f7a4a">
+      <path d="M520 450 C 410 310, 260 270, 130 310 C 260 310, 380 360, 500 470 Z"/>
+      <path d="M520 450 C 440 270, 340 170, 220 150 C 330 210, 420 310, 505 460 Z"/>
+      <path d="M520 450 C 630 310, 780 270, 910 310 C 780 310, 660 360, 540 470 Z"/>
+      <path d="M520 450 C 600 270, 700 170, 820 150 C 710 210, 620 310, 535 460 Z"/>
+    </g>
+    <g fill="#2a9a5e" opacity=".9">
+      <path d="M520 450 C 450 340, 360 310, 270 330 C 360 340, 430 380, 505 470 Z"/>
+      <path d="M520 450 C 590 340, 680 310, 770 330 C 680 340, 610 380, 535 470 Z"/>
+    </g>
+    <circle cx="520" cy="480" r="320" fill="url(#glow)"/>
+    <circle cx="520" cy="480" r="232" fill="url(#ball)"/>
+    <g clip-path="url(#ballClip)" fill="none" stroke="#f6f8ef" stroke-width="24" stroke-linecap="round">
+      <path d="M325 295 C 455 390, 455 575, 325 668"/><path d="M715 295 C 585 390, 585 575, 715 668"/>
+    </g>
+    <circle cx="520" cy="480" r="232" fill="none" stroke="#000" stroke-opacity=".12" stroke-width="6"/>
+    <ellipse cx="440" cy="382" rx="64" ry="38" fill="#fff" opacity=".22" transform="rotate(-35 440 382)"/>
+    <!-- the phone: your racket -->
+    <g transform="rotate(-24 790 770)">
+      <path d="M672 690 C 640 730, 640 800, 672 840" fill="none" stroke="#f2f5ee" stroke-opacity=".55" stroke-width="16" stroke-linecap="round"/>
+      <path d="M630 660 C 590 720, 590 820, 630 880" fill="none" stroke="#f2f5ee" stroke-opacity=".28" stroke-width="16" stroke-linecap="round"/>
+      <rect x="720" y="640" width="140" height="262" rx="30" fill="#09131d" stroke="#f2f5ee" stroke-width="18"/>
+      <rect x="746" y="672" width="88" height="186" rx="10" fill="#d6f04a"/>
+    </g>
+  </g>
+</svg>
