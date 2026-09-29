@@ -5,7 +5,7 @@
 
 // Your domain, https, no trailing slash, e.g. 'https://palmcourt.com'. While it's the placeholder, the site is
 // published under its GitHub Pages address instead (and no CNAME file is written).
-export const SITE_URL = 'https://palmcourt.example';
+export const SITE_URL = 'https://palmcourt.me';
 
 // AdSense publisher id, 'ca-pub-' + 16 digits. Empty = the game's id (CONFIG.adsense.client in src/config.js), so
 // the website and the in-game ads share one id. The AdSense tag is only written on a real domain: the github.io
