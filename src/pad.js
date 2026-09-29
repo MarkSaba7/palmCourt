@@ -295,7 +295,7 @@ const Pad = {
     el.hidden = !on;
     if (!on) return;
     el.innerHTML = this.cardHTML(true);
-    this.glyphs(el);
+    this.glyphs(el); this.glyphs($('setupSteps'));   // (the tips were written before the pad was known)
     this.testCharge = null;
     $('swingLog').textContent = this.id ? 'Press the shot buttons to try them. D-pad down, then ✕, for Done.'.replace('✕', this.glyph('a')) : 'No controller yet: plug one in (or turn it on) and press any button.';
     setTimeout(() => { if (!el.hidden) Nav.focus(el); }, 0);
@@ -431,6 +431,9 @@ const CSS = `
 .pc-list dt { color: var(--chalk); font-weight: 600; white-space: nowrap; }
 .pc-list dd { margin: 0; color: var(--mist); }
 #setup[data-mode="pad"] .meter { display: none; }
+#setup[data-mode="pad"] .cam-slot { aspect-ratio: auto; width: 100%; overflow: visible; background: transparent; }
+#setup[data-mode="pad"] .pad-card { position: relative; inset: auto; border-style: solid; }
+#setup[data-mode="pad"] #setupTipsBox { display: block; }
 .pad-offer { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--optic); background: rgba(214,240,74,.08); }
 .pad-offer p { margin: 0; font-size: 14px; line-height: 1.4; }
 .pad-offer .row { display: flex; flex-wrap: wrap; gap: 8px; }
