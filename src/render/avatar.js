@@ -331,7 +331,7 @@ export class Avatar {
     // Smooth motion: the stroke's and the serve's own clocks (tau: 0 at the contact; ss: from the toss) and how fast they
     // run; a second stage for the pose filter (so joints ease in and out: no velocity jumps); the shown pose (the
     // filtered one with the racket arm solved on it); the arm solve's weight, eased in and out; the take-back, eased.
-    this.tau = null; this.ss = null; this.rate = 1;
+    this.tau = null; this.ss = null; this.rate = 1; this.hitT = null;
     this.pose1 = clonePose(POSE.stand); this.show = clonePose(POSE.stand);
     this.ikW = 0; this.prepS = 0; this.load = 0; this.et = EASE_T;
     this.kPrev = new Float64Array(5); this.sPrev = new Float64Array(7); this.kOK = this.sOK = false;
@@ -380,9 +380,9 @@ export class Avatar {
   // Input.read) when a person swung; without it the stroke is guessed from how this player plays until hit() says.
   // A new call for the same stroke before its contact only re-times it (the stroke's clock speeds up or slows down to
   // meet the new moment); anything else starts a fresh stroke from its take-back, eased from wherever the racket is.
-  swing(stroke, contactT, read) {
+  swing(stroke, contactT, read, hitT) {
     if (!(this.mode === 'swing' && this.stroke === stroke && this.tau != null && this.tau < 0.02)) { this.tau = null; this.kOK = false; }
-    this.mode = 'swing'; this.stroke = stroke; this.contactT = contactT; this.ss = null; this.ev = 1; this.prepS = 0;
+    this.mode = 'swing'; this.stroke = stroke; this.contactT = contactT; this.hitT = hitT ?? null; this.ss = null; this.ev = 1; this.prepS = 0;
     const s = this.sh;
     s.known = !!read;
     if (read) {
@@ -556,11 +556,11 @@ export class Avatar {
       let x = plan.x, y = plan.y, z = plan.z;
       // A person's swing meets the ball when they swing (a little early, a little late), not at the planned moment:
       // where the ball is at that time, from the path it is flying.
-      const path = pl.path, dt = this.contactT - plan.t;
+      const path = pl.path, tb = this.hitT ?? this.contactT, dt = tb - plan.t;
       if (this.mode === 'swing' && path && path.length && Math.abs(dt) > 0.01 && Math.abs(dt) < 0.3) {
         let s = path[0];
-        for (const q of path) if (Math.abs(q.t - this.contactT) < Math.abs(s.t - this.contactT)) s = q;
-        const d = this.contactT - s.t;
+        for (const q of path) if (Math.abs(q.t - tb) < Math.abs(s.t - tb)) s = q;
+        const d = tb - s.t;
         if (Math.abs(d) < 0.3 && s.b === (plan.volley ? 0 : 1)) { x = s.x + s.vx * d; y = Math.max(0.1, s.y + s.vy * d - 4.9 * d * d); z = s.z + s.vz * d; }
       }
       this.toBody(x, y, z, pl, this.c);

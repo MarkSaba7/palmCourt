@@ -516,7 +516,7 @@ const Game = {
     const tc = plan.t + clamp(0.3 * dt, -0.05, 0.04);
     // A camera swing is usually heard after the ball has reached the racket: the racket swings through at once and
     // the ball is rewound to the moment of the real swing (see rollback and shownBall).
-    this.animSwing(me, plan.stroke, Math.max(tc, now), sw);
+    this.animSwing(me, plan.stroke, Math.max(tc, now), sw, tc);   // (tc: where the ball is when it is struck; the racket meets it there)
     if (tc >= b.simT) this.pending = { t: tc, pl: me, kind: 'ground', swing: sw };
     else if (this.rollback(tc)) this.contact({ pl: me, kind: 'ground', swing: sw });
     else UI.timing('Too late');   // further back than the ball's history goes
@@ -546,11 +546,11 @@ const Game = {
   },
   // Show a stroke whose racket meets the ball at time t. A swing already under way isn't wound back for a small
   // change (a racket jerking backwards looks worse than meeting the ball a few hundredths early).
-  animSwing(pl, stroke, t, sw) {
+  animSwing(pl, stroke, t, sw, hitT) {
     const a = pl.avatar, now = Clock.now();
     if (sw && (sw.src === 'hand' || sw.src === 'paddle')) this.noteCamSwing(pl, sw, now);
-    if (a.mode === 'swing' && a.stroke === stroke && t > a.contactT && t - a.contactT < 0.12 && a.contactT > now - 0.1) return;
-    a.swing(stroke, t, sw ? Input.read(sw, stroke, pl.handed) : null);   // V2: the stroke shows the shot the swing asked for
+    if (a.mode === 'swing' && a.stroke === stroke && t > a.contactT && t - a.contactT < 0.12 && a.contactT > now - 0.1) { if (hitT != null) a.hitT = hitT; return; }
+    a.swing(stroke, t, sw ? Input.read(sw, stroke, pl.handed) : null, hitT);   // V2: the stroke shows the shot the swing asked for
   },
   // Is this camera swing the arm coming back from the last one that moved the racket (the other way, soon after)?
   armReturn(pl, sw, now) {
