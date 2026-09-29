@@ -200,11 +200,13 @@ export function humanServe(o) {
   const P = o.pad || null, T = (P && SERVE_TYPE[P.shot]) || SERVE_TYPE.flat;
   const power = clamp(o.second ? Math.min(o.power, 0.62) : o.power, 0.05, 1);
   // Inside the lines: 35 cm off the T, wide 55 cm inside the sideline, about a metre short of the service line.
-  const lx = o.court === 'deuce' ? lerp(-3.55, -0.35, a) : lerp(0.35, 3.55, a);
-  const dl = 5.3 + 0.35 * (power - 0.5) + T.depth;
+  // (R1 goes for the lines: 20 cm closer to the sideline and the T, and 45 cm deeper, at a bit more pace and more scatter.)
+  const rk = P && P.risk ? 1 : 0, wd = 3.55 + 0.2 * rk, tee = 0.35 - 0.15 * rk;
+  const lx = o.court === 'deuce' ? lerp(-wd, -tee, a) : lerp(tee, wd, a);
+  const dl = 5.3 + 0.35 * (power - 0.5) + T.depth + 0.45 * rk;
   const errK = (1 + 2.6 * (1 - q)) / (S.ctl || 1) * (P ? PAD.err * (P.risk ? PAD.risk : 1) : 1);
   const sx = (0.14 + 0.42 * power * power) * errK * T.sx, sz = (0.16 + 0.42 * power * power + 0.6 * sstep(0.8, 1, power)) * errK * T.sz;
-  const kmh = (o.second ? lerp(105, 160, power) : lerp(115, 205, power)) * (S.pow || 1) * T.kmh;
+  const kmh = (o.second ? lerp(105, 160, power) : lerp(115, 205, power)) * (S.pow || 1) * T.kmh * (1 + 0.03 * rk);
   const rpm = (P ? lerp(T.rpm[0], T.rpm[1], power) : lerp(2800, 800, power)) * (o.second ? 1.25 : 1);
   const tx = o.side * (lx + gauss() * sx), tz = -o.side * (dl + gauss() * sz);
   const sol = solveShot(o.from, tx, tz, kmh / 3.6, rpm * RPM, { lo: -0.45, hi: 0.3, minNet: T.net });
