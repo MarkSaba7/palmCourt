@@ -516,7 +516,7 @@ const Game = {
     const tc = plan.t + clamp(0.3 * dt, -0.05, 0.04);
     // A camera swing is usually heard after the ball has reached the racket: the racket swings through at once and
     // the ball is rewound to the moment of the real swing (see rollback and shownBall).
-    this.animSwing(me, plan.stroke, Math.max(tc, now), sw);
+    this.animSwing(me, plan.stroke, Math.max(tc, now), sw, tc);   // (tc: where the ball is when it is struck; the racket meets it there)
     if (tc >= b.simT) this.pending = { t: tc, pl: me, kind: 'ground', swing: sw };
     else if (this.rollback(tc)) this.contact({ pl: me, kind: 'ground', swing: sw });
     else UI.timing('Too late');   // further back than the ball's history goes
@@ -528,7 +528,10 @@ const Game = {
     // Too soon after the toss to be the serve: say so (a camera swing upward is just the tossing arm still rising).
     if (ts < 0.22) { if (!cam || sw.vy > 0) UI.timing('Too early'); return; }
     me.hitFor = -3;
-    const tc = this.tossT + clamp(ts, 0.3, 0.98);
+    let tc = this.tossT + clamp(ts, 0.3, 0.98);
+    // IMP1: a click starts the swing, so the racket meets the ball a natural swing later (the toss is near its top, so it
+    // is barely lower) rather than the swing being crammed into a frame or two. A camera or phone swing is already at its peak.
+    if ((sw.src === 'mouse' || sw.src === 'key') && me.avatar.serveLead) tc = Math.min(this.tossT + 0.98, Math.max(tc, now + me.avatar.serveLead(swingPower(sw))));
     me.avatar.serveHit(Math.max(tc, now), swingPower(sw));   // V2: a harder serve, a quicker motion
     if (cam) this.noteCamSwing(me, sw, now);
     const q = 1 - sstep(0.1, 0.38, Math.abs(ts - 0.68));
@@ -543,11 +546,11 @@ const Game = {
   },
   // Show a stroke whose racket meets the ball at time t. A swing already under way isn't wound back for a small
   // change (a racket jerking backwards looks worse than meeting the ball a few hundredths early).
-  animSwing(pl, stroke, t, sw) {
+  animSwing(pl, stroke, t, sw, hitT) {
     const a = pl.avatar, now = Clock.now();
     if (sw && (sw.src === 'hand' || sw.src === 'paddle')) this.noteCamSwing(pl, sw, now);
-    if (a.mode === 'swing' && a.stroke === stroke && t > a.contactT && t - a.contactT < 0.12 && a.contactT > now - 0.1) return;
-    a.swing(stroke, t, sw ? Input.read(sw, stroke, pl.handed) : null);   // V2: the stroke shows the shot the swing asked for
+    if (a.mode === 'swing' && a.stroke === stroke && t > a.contactT && t - a.contactT < 0.12 && a.contactT > now - 0.1) { if (hitT != null) a.hitT = hitT; return; }
+    a.swing(stroke, t, sw ? Input.read(sw, stroke, pl.handed) : null, hitT);   // V2: the stroke shows the shot the swing asked for
   },
   // Is this camera swing the arm coming back from the last one that moved the racket (the other way, soon after)?
   armReturn(pl, sw, now) {
@@ -565,6 +568,12 @@ const Game = {
   // The phone reports the start of a swing before its peak: start the animation now so it feels instant.
   swingStart(me, ev, now) {
     const plan = me.plan, b = this.ball;
+    // IMP1: the phone's serve swing starts the racket's drop now; its peak (the contact) follows about a tenth of a second on
+    // and re-times the motion (humanServe), so the serve isn't crammed into the frames after the peak is heard.
+    if (this.state === 'toss' && this.match.currentServer === me.idx && me.hitFor !== -3 && ev.src === 'phone') {
+      if (ev.t0 - this.tossT > 0.3 && me.avatar.mode === 'serve' && !(me.avatar.contactT > 0)) me.avatar.serveHit(Math.min(this.tossT + 0.98, Math.max(now + 0.1, ev.t0 + 0.13)));
+      return;
+    }
     if (this.state !== 'rally' || !plan || b.lastHitter === me.idx || b.lastHitter < 0 || me.hitFor === b.rally) return;
     if (ev.t0 - plan.t < -0.5 || me.avatar.mode === 'swing') return;
     if (ev.dir && ev.dir !== plan.stroke) { me.windAt = now; return; }   // turning the other way: that's the wind-up
@@ -843,6 +852,7 @@ const Game = {
     this.hist.length = 0; this.bounceLog.length = 0;
     if (b.serve) this.state = 'rally';
     const kmh = Math.round(Math.hypot(b.v.x, b.v.y, b.v.z) * 3.6);
+    if (pl.ctl === 'human') this.view.lag = Math.min(0.12, Math.max(this.view.lag, pl.avatar.late(Clock.now())));   // IMP1: (a hurried swing is still on its way: the drawn ball waits for the racket)
     pl.avatar.hit(shot, b.v, !!(pl.plan && pl.plan.volley));   // V2: the follow-through shows the shot (spin, pace, direction)
     if (this.mode !== 'attract') Sound.hit(shot.power ?? 0.6, this.camDist(b.p), shot.q ?? 1, !!b.serve);
     if (b.serve) this.match.stats.fastest[pl.idx] = Math.max(this.match.stats.fastest[pl.idx], kmh);
