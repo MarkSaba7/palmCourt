@@ -26,6 +26,7 @@ for (const k in DEFAULTS) if (Settings[k] === undefined) Settings[k] = DEFAULTS[
 const STICK_DEAD = 0.3, STICK_HIT = 0.82, TRIG_REST = 0.2, TRIG_HIT = 0.75;
 // Stick flick: power from how fast the stick / trigger travelled (full travel per second): a lazy push ~4, a hard flick 20+.
 const flickPower = (speed) => clamp(0.3 + speed * 0.032, 0.35, 0.96);
+const KEEP = 120;   // ms: what was held just before the release still counts (easing off R1, the stick springing back)
 const HINT_HITS = 25;   // in-match hints until a player has hit this many balls with a controller
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -127,8 +128,16 @@ const Pad = {
     if (this.charge && !this.charge.serve && Game.state === 'dead') this.charge = null;   // the point ended while charging
     for (const b of FACE) if (E[b] === 1) this.press(b, tEv);
     const c = this.charge;
+    if (c) this.latch(c, S, tEv);
     if (c && !S.d[c.btn]) this.release(c, tEv);
     else if (c && Game.state === 'rally' && me.plan && Game.ball.lastHitter !== me.idx) me.windAt = Clock.now();   // the racket goes back while charging
+  },
+  // Keep the strongest recent aim and the modifier buttons, so what was held a moment before the release still counts.
+  latch(c, S, tMs) {
+    if (S.d[BTN.RB]) c.rb = tMs;
+    if (S.d[BTN.LB]) c.lb = tMs;
+    const a = this.aim(), r = Math.hypot(a.x, a.y);
+    if (r >= c.lr || tMs - c.lt > KEEP) { c.lx = a.x; c.ly = a.y; c.lr = r; c.lt = tMs; }
   },
   // A shot button went down: start charging (and toss, when it's our serve).
   press(btn, tMs) {
@@ -137,7 +146,7 @@ const Pad = {
     if (st === 'dead') { Input.emit({ type: 'toss' }); return; }   // skips a replay; nothing else between points
     if (this.charge) { this.charge.btn = btn; return; }   // another shot button while charging: that one is the shot now
     const mine = !!m && m.currentServer === me.idx;
-    this.charge = { btn, t0: tMs, serve: mine && (st === 'serve' || st === 'toss') };
+    this.charge = { btn, t0: tMs, serve: mine && (st === 'serve' || st === 'toss'), rb: -1e9, lb: -1e9, lx: 0, ly: 0, lr: 0, lt: -1e9 };
     if (mine && st === 'serve') Input.emit({ type: 'toss' });   // (the game holds it until the serve may start)
   },
   // The held button came up: that's the swing, at the moment it came up.
@@ -145,14 +154,14 @@ const Pad = {
     this.charge = null;
     const G = Game, me = G.me(), m = G.match, st = G.state, S = this.S;
     if (!me || !m) return;
-    const t0 = Clock.fromPerf(tMs / 1000), risk = !!S.d[BTN.RB], aim = this.aim(), mine = m.currentServer === me.idx;
+    const t0 = Clock.fromPerf(tMs / 1000), risk = tMs - c.rb < KEEP, aim = tMs - c.lt <= KEEP ? { x: c.lx, y: c.ly } : this.aim(), mine = m.currentServer === me.idx;
     if (mine && st === 'serve') return;   // let go before the toss went up: press again to hit it
     if (mine && st === 'toss') {
       const type = serveFor(c.btn), a = serveAim(aim.x);
       this.send(t0, servePower(t0 - G.tossT, type, risk), 0.4, { x: 0.2 + 0.6 * a, y: 0.3, pad: { shot: type, serve: true, risk, handed: me.handed } });
       return;
     }
-    const shot = shotFor(c.btn, !!S.d[BTN.LB]), hold = Math.max(0, (tMs - c.t0) / 1000);
+    const shot = shotFor(c.btn, tMs - c.lb < KEEP), hold = Math.max(0, (tMs - c.t0) / 1000);
     this.send(t0, holdPower(hold, shot, risk), SHOTS[shot].spin, { x: 0.5, y: 0.5, drop: shot === 'drop', pad: { shot, risk, ax: aim.x, ay: aim.y, hold } });
   },
   send(t0, power, spin, more) {
