@@ -356,6 +356,9 @@ class RelayOverHttp(unittest.TestCase):
         with urllib.request.urlopen(f'http://127.0.0.1:{self.port}/controller.html') as r:
             self.assertEqual(r.status, 200)
             self.assertEqual(r.headers['Cache-Control'], 'no-store')
+        for path, kind in (('/racket.webmanifest', 'application/manifest+json'), ('/racket-sw.js', 'text/javascript'), ('/src/main.js', 'text/javascript')):
+            with urllib.request.urlopen(f'http://127.0.0.1:{self.port}{path}') as r:
+                self.assertTrue(r.headers['Content-Type'].startswith(kind), (path, r.headers['Content-Type']))
 
     @unittest.skipUnless(sys.platform == 'win32', 'Windows port sharing')
     def test_second_server_cannot_share_the_port(self):
@@ -407,6 +410,13 @@ class PhoneHttps(unittest.TestCase):
 
     def test_pages(self):
         self.assertEqual(self.get('/controller.html')[0], 200)
+        # The racket app: its manifest, service worker and icons, with types phones accept.
+        for path, kind in (('/racket.webmanifest', 'application/manifest+json'), ('/racket-sw.js', 'text/javascript'),
+                           ('/site/racket-icon-192.png', 'image/png'), ('/site/racket-icon.svg', 'image/svg+xml')):
+            status, headers, _ = self.get(path)
+            ctype = {k.lower(): v for k, v in headers.items()}.get('content-type', '')
+            self.assertEqual(status, 200, path)
+            self.assertTrue(ctype.startswith(kind), (path, ctype))
         status, headers, _ = self.get('/?c=ABCDE')
         self.assertEqual(status, 302)
         self.assertEqual(headers['Location'], '/controller.html?c=ABCDE')

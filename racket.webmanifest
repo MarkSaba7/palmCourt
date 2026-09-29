@@ -1,0 +1,20 @@
+{
+  "name": "Palm Court Racket",
+  "short_name": "Palm Racket",
+  "description": "Your phone is the racket: swing it to play Palm Court on your PC or TV.",
+  "id": "./controller.html",
+  "start_url": "./controller.html?app=1",
+  "scope": "./controller.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#09131d",
+  "theme_color": "#09131d",
+  "categories": ["games", "sports"],
+  "icons": [
+    { "src": "site/racket-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "site/racket-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "site/racket-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "site/racket-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "site/racket-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
