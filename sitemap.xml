@@ -9,4 +9,5 @@
   <url><loc>https://palmcourt.example/contact.html</loc><priority>0.4</priority></url>
   <url><loc>https://palmcourt.example/privacy.html</loc><priority>0.3</priority></url>
   <url><loc>https://palmcourt.example/terms.html</loc><priority>0.3</priority></url>
+  <url><loc>https://palmcourt.example/cookies.html</loc><priority>0.3</priority></url>
 </urlset>

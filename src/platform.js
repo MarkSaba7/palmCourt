@@ -18,7 +18,8 @@ import { Sound } from './match.js';
 import { Bus } from './events.js';
 
 const T = { load: 8000, init: 6000, start: 6000, interstitialMax: 45000, rewardedMax: 90000 };   // ms; tests shrink these
-const LEGAL = (f) => new URL('../' + f, import.meta.url).href;   // privacy/credits pages sit at the site root, next to src/ (the game page is in play/)
+const INSTAGRAM_URL = 'https://www.instagram.com/palmcourt.game/';
+const LEGAL = (f) => new URL('../' + f, import.meta.url).href;   // legal/credits pages sit at the site root, next to src/ (the game page is in play/)
 const settle = (p, ms, fallback) => new Promise((res) => {
   const t = setTimeout(() => res(fallback), ms);
   Promise.resolve(p).then((v) => { clearTimeout(t); res(v); }, () => { clearTimeout(t); res(fallback); });
@@ -321,6 +322,8 @@ const Platform = {
 .pf-links a, .pf-links .pf-link { color: var(--mist, #9ab); text-decoration: none; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 .pf-links a:hover, .pf-links .pf-link:hover { color: var(--chalk, #fff); text-decoration: underline; }
 .pf-links .pf-wish { margin-right: auto; }
+.pf-links .pf-social { display: inline-flex; align-items: center; gap: 6px; }
+.pf-social svg { width: 14px; height: 14px; flex: none; }
 .pf-wish { display: inline-flex; align-items: center; gap: 8px; appearance: none; cursor: pointer; font: 700 13px/1 var(--body, sans-serif); letter-spacing: .02em;
   color: var(--chalk, #fff); background: rgba(242,245,238,.06); border: 1px solid var(--edge, #444); border-radius: 999px; padding: 8px 13px; }
 .pf-wish:hover { background: rgba(242,245,238,.13); border-color: rgba(242,245,238,.3); }
@@ -336,7 +339,7 @@ const Platform = {
 .pf-consent .pf-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .pf-consent .btn { flex: 1 1 180px; }
 .pf-shield { position: fixed; inset: 0; z-index: 70; background: rgba(4,9,15,.72); display: grid; place-items: center; color: var(--mist, #9ab); font: 600 13px var(--body, sans-serif); letter-spacing: .08em; text-transform: uppercase; }
-.pf-shield[hidden], .pf-consent[hidden], .pf-wish[hidden], .pf-over-wish[hidden], .pf-link[hidden] { display: none; }`;
+.pf-shield[hidden], .pf-consent[hidden], .pf-wish[hidden], .pf-over-wish[hidden], .pf-link[hidden], .pf-social[hidden] { display: none; }`;
     document.head.appendChild(css);
 
     const star = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>';
@@ -347,7 +350,7 @@ const Platform = {
       const nav = document.createElement('nav');
       nav.className = 'pf-links'; nav.id = 'pfLinks'; nav.setAttribute('aria-label', 'About');
       nav.append(wish('btnWishlist'));
-      nav.insertAdjacentHTML('beforeend', `<a href="${LEGAL('privacy.html')}" target="_blank" rel="noopener">Privacy</a><a href="${LEGAL('credits.html')}" target="_blank" rel="noopener">Credits</a><button type="button" class="pf-link" id="btnAdChoices">Ad choices</button>`);
+      nav.insertAdjacentHTML('beforeend', `<a class="pf-social" id="lnkInstagram" href="${INSTAGRAM_URL}" target="_blank" rel="noopener" aria-label="Instagram: @palmcourt.game (opens in a new tab)" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>Instagram</a><a href="${LEGAL('terms.html')}" target="_blank" rel="noopener">Terms</a><a href="${LEGAL('privacy.html')}" target="_blank" rel="noopener">Privacy</a><a href="${LEGAL('cookies.html')}" target="_blank" rel="noopener">Cookies</a><a href="${LEGAL('credits.html')}" target="_blank" rel="noopener">Credits</a><button type="button" class="pf-link" id="btnAdChoices">Ad choices</button>`);
       nav.querySelector('#btnAdChoices').onclick = () => Consent.ask();
       menuSlab.append(nav);
     }
@@ -381,6 +384,8 @@ const Platform = {
     if (typeof document === 'undefined') return;
     const show = wishlistVisible();
     for (const id of ['btnWishlist', 'pfOverWish']) { const el = document.getElementById(id); if (el) el.hidden = !show; }
+    const ig = document.getElementById('lnkInstagram');   // own web edition only: no social links in the Steam build or on portals (they disallow them)
+    if (ig) ig.hidden = !(CONFIG.edition === 'web' && (CONFIG.portal === 'none' || CONFIG.portal === 'adsense'));
     const ac = document.getElementById('btnAdChoices');
     if (ac) ac.hidden = !Consent.needed;
   },

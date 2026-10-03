@@ -10,7 +10,7 @@ export const SITE_URL = 'https://palmcourt.me';
 // AdSense publisher id, 'ca-pub-' + 16 digits. Empty = the game's id (CONFIG.adsense.client in src/config.js), so
 // the website and the in-game ads share one id. The AdSense tag is only written on a real domain: the github.io
 // preview and the placeholder address never carry ads.
-export const ADSENSE_CLIENT = '';
+export const ADSENSE_CLIENT = 'ca-pub-6534034175572614';
 
 // Optional: a display ad unit id (AdSense → Ads → By ad unit → Display ads → the data-ad-slot number). Empty = no
 // fixed ad boxes on the content pages; Auto ads (switched on in the AdSense console) still work with just the tag.

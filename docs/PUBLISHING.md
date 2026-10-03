@@ -139,7 +139,8 @@ weeks and apply again. A github.io address can't be approved; the domain can.
    - Under **Page exclusions**, add `yourdomain/play/`. The game page must never get display ads over gameplay.
      In-game breaks come from H5 Games Ads (section 7).
 5. Optional fixed ad boxes: *Ads* → *By ad unit* → *Display ads* → name it `Content` → *Responsive* → *Create*.
-   Copy the `data-ad-slot` number into `AD_SLOT` (or a variable of that name), then redeploy. One box then shows
+   Copy the `data-ad-slot` number into `AD_SLOT` (or a variable of that name), then redeploy. Without it the build
+   removes the boxes from the published pages, and Auto ads (above) are the only website ads. One box then shows
    on the landing page, How to play, FAQ and About, labelled "Advertisement".
 6. *Sites* should show **ads.txt: Authorized** within a few days.
 
@@ -153,8 +154,8 @@ AdSense and needs no code: the AdSense tag shows the message.
    policy URL `https://yourdomain/privacy.html` → *Publish*.
 2. *Privacy & messaging* → **US state regulations** → *Create message* → *Publish* (adds the "Do not sell or share"
    link where those laws apply).
-3. Once both are live, tell Claude (see below). The game's own consent prompt (`consentPrompt` in `src/config.js`)
-   is then set to `'never'`, so players aren't asked twice. The privacy page's *Change my cookie choices* button
+3. The game's own consent prompt (`consentPrompt` in `src/config.js`) is already `'never'`, so players are only
+   asked by Google's message. Until that message is published, Google serves EEA/UK visitors limited ads only. The privacy page's *Change my cookie choices* button
    works automatically with Google's message.
 
 ## 7. H5 Games Ads (in-game ads)
