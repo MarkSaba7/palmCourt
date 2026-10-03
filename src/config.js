@@ -19,8 +19,11 @@ const CONFIG = {
   },
   gd: { gameId: '' },        // GameDistribution: the game id from their developer dashboard (required)
   adsense: { client: 'ca-pub-6534034175572614', test: false, frequencyHint: '120s' },   // H5 Games Ads: publisher id 'ca-pub-…' (null = no ads); test = adbreak test mode
-  consentPrompt: 'auto',     // own EU consent prompt for personalised ads: 'auto' (only when the SDK has no CMP) | 'never' | 'ask'
+  consentPrompt: 'never',    // own EU consent prompt: 'never' = Google's certified CMP (AdSense → Privacy & messaging) asks instead | 'auto' (EU/UK time zones, when the SDK has no CMP) | 'ask'
   showWishlist: false,       // show the wishlist button even while steamUrl is the placeholder (testing)
+  // Online play: your own TURN relay, for friends whose networks block a direct link (see README → Play a friend online).
+  // e.g. turn: [{ urls: ['turn:<host>:80', 'turns:<host>:443?transport=tcp'], username: '…', credential: '…' }]
+  online: { turn: [] },
 };
 
 // URL overrides, for testing a portal or edition without editing this file.

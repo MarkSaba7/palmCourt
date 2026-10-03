@@ -93,6 +93,8 @@ Webcam controls always trail your real hand by a few hundredths of a second. Sco
 
 The two browsers connect directly (WebRTC via [PeerJS](https://peerjs.com)). PeerJS's free public server only introduces them. Each player's own swings are judged on their own machine, so your timing never waits on the network. Whoever the ball is travelling towards makes the line call and sends the score.
 
+**Friends on other networks.** Most home connections link directly. When both players are behind strict networks (mobile data, many office, school and hotel Wi-Fi networks) the browsers can only reach each other through a TURN relay. The game lists PeerJS's free relay, but it is shared and best-effort, so for reliable matches add your own relay account in `src/config.js` → `online.turn` (for example a free [Metered](https://www.metered.ca/stun-turn) TURN account: paste the `urls`, `username` and `credential` it gives you). If the browsers still can't connect, the lobby says so after about 20 seconds instead of waiting forever.
+
 **The link only works if the game is on the web.** A link to a file on your computer won't open on your friend's machine. Options:
 
 - **Quick:** send your friend the whole Palm Court folder. You both start it with `play.cmd`, then they type your code under **Join**.
@@ -115,6 +117,7 @@ Every release setting is in `src/config.js`. There is one build for every editio
 | `steamUrl` | Your Steam store page, e.g. `https://store.steampowered.com/app/1234560/Palm_Court/`. While it still holds the `YOUR_APP_ID` placeholder, the wishlist buttons (main menu and match-over screen) stay hidden. |
 | `ads` | `interstitialEveryMatches` (default 2) and `minGapS` (150) pace the breaks. `rewardedDoubleFuzz` turns the optional "watch an ad to double your Fuzz" offer on or off. |
 | `cloud` | Supabase cloud saves. Only the publishable key goes here, never any other Supabase key. Online backup and leaderboards are on (`enabled: true`); a player can switch them off in Settings (`cloudSync`). |
+| `online` | `turn`: your own TURN relay servers for online play, `[{ urls, username, credential }]`. Empty uses only the free public ones (see Play a friend online). |
 
 To test without editing the file, add URL parameters: `?portal=poki`, `?edition=steam`, `?showWishlist=1` (shows the wishlist button while the URL is still the placeholder), `?adEvery=1` (a break before every match after the first), `?consent=ask` (always show the ad-consent prompt), and `?adTest=1&adClient=ca-pub-…` (AdSense test ads).
 
@@ -122,7 +125,7 @@ To test without editing the file, add URL parameters: `?portal=poki`, `?edition=
 
 **Portal requirements.** These change, so check each portal's current developer docs before you submit.
 
-- **Own domain (Google H5 Games Ads / AdSense):** your AdSense account must be approved for the H5 Games Ads (Ad Placement API) beta on your domain. Set `adsense.client: 'ca-pub-…'`. Publish `ads.txt` at the root of the domain (it already lists the publisher id; the site build adds the line if the id changes). In the EU and UK, Google expects a Google-certified consent platform. The simplest option is AdSense → Privacy & messaging → a GDPR message. Once that's live, set `consentPrompt: 'never'`. Until then, the game's own small prompt asks EU/UK players (detected from their time zone) whether ads may be personalised, and it requests non-personalised ads until the player says yes.
+- **Own domain (Google H5 Games Ads / AdSense):** your AdSense account must be approved for the H5 Games Ads (Ad Placement API) beta on your domain. Set `adsense.client: 'ca-pub-…'`. Publish `ads.txt` at the root of the domain (it already lists the publisher id; the site build adds the line if the id changes). In the EU and UK, Google expects a Google-certified consent platform. The simplest option is AdSense → Privacy & messaging → a GDPR message. `consentPrompt` is `'never'` so players are only asked by that message (set it to `'auto'` to use the game's own small prompt for EU/UK time zones instead, e.g. on an ad SDK without a CMP).
 - **CrazyGames:** set `portal: 'crazygames'` and upload the folder as an HTML5 game. The SDK (v3) handles consent and ad pacing itself. Their QA checks the gameplay start/stop calls, which the game already makes.
 - **Poki:** set `portal: 'poki'`. Poki reviews games before publishing. Their SDK handles consent and decides when a break actually shows, so `interstitialEveryMatches: 1` is fine there.
 - **GameDistribution:** set `portal: 'gd'` and `gd.gameId` to the id from your GameDistribution dashboard. Their SDK handles consent.

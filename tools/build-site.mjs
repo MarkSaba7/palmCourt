@@ -44,7 +44,12 @@ for (const d of ['play', 'src', 'site']) fs.cpSync(path.join(ROOT, d), path.join
 fs.writeFileSync(path.join(OUT, '.nojekyll'), '');
 
 // Fill in the settings in every page and text file (not in src/: the game's own settings live in src/config.js).
-const adTag = `<meta name="google-adsense-account" content="${client}">\n<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${client}" crossorigin="anonymous"></script>`;
+// The site-ownership meta tag is harmless anywhere, so it goes in whenever the publisher id is real; the ad script
+// itself only on the custom domain (AdSense can't approve a github.io address: ads.txt has to sit at a domain root).
+const adMeta = `<meta name="google-adsense-account" content="${client}">`;
+const adTag = adMeta + `\n<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${client}" crossorigin="anonymous"></script>`;
+// A fixed ad box with no real ad unit id is removed from the published page (Auto ads need no box).
+const adBox = /[ \t]*<aside class="ad"[^>]*>[\s\S]*?<\/aside>\n?/g;
 const texts = [];
 const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (p !== path.join(OUT, 'src')) walk(p); } else if (/\.(html|xml|txt|webmanifest|svg)$/.test(e.name)) texts.push(p); } };
 walk(OUT);
@@ -58,7 +63,8 @@ for (const f of texts) {
     if (s.includes('<!-- adsense -->')) { s = s.replace('<!-- adsense -->', adTag); adPages++; }
     s = s.split(`data-ad-client="${PH.client}"`).join(`data-ad-client="${client}"`);
     if (slotOk) s = s.split(`data-ad-slot="${PH.slot}"`).join(`data-ad-slot="${slot}"`);
-  }
+  } else if (realClient) s = s.replace('<!-- adsense -->', adMeta);
+  if (!slotOk) s = s.replace(adBox, '');
   if (s !== before) fs.writeFileSync(f, s);
 }
 
@@ -70,6 +76,8 @@ if (realClient) { const cur = fs.existsSync(adsTxt) ? fs.readFileSync(adsTxt, 'u
 // documents the domain in the published site and other hosts or a branch deployment can use it).
 if (custom) fs.writeFileSync(path.join(OUT, 'CNAME'), host + '\n');
 
+const stray = texts.filter((f) => /data-ad-(client|slot)="0+"|ca-pub-0{16}/.test(fs.readFileSync(f, 'utf8'))).map((f) => path.relative(OUT, f));
+if (stray.length) fail('placeholder ad units left in: ' + stray.join(', '));
 const left = texts.filter((f) => /https:\/\/palmcourt\.example|@palmcourt\.example/.test(fs.readFileSync(f, 'utf8'))).map((f) => path.relative(OUT, f));
 console.log(`build-site: ${OUT}\n  site ${url}${custom ? ' (custom domain)' : ' (no domain yet)'}\n  ads ${ads ? `on, ${client}, ${adPages} pages, ${slotOk ? 'slot ' + slot : 'no fixed slot'}` : realClient ? 'off until the site has its own domain (' + client + ')' : 'off'}\n  contact ${email}${email === PH.email ? ' (placeholder)' : ''}\n  steam ${steam || 'coming soon'}\n  CNAME ${fs.existsSync(path.join(OUT, 'CNAME')) ? host : 'none'}`);
 if (left.length && url !== PH.url) console.log('  note: still mentions palmcourt.example: ' + left.join(', '));

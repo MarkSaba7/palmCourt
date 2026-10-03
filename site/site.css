@@ -176,5 +176,7 @@ td:first-child { color: var(--chalk); font-weight: 600; }
 .site-foot a:hover { color: var(--chalk); text-decoration: underline; }
 .site-foot .fine { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 18px; font-size: 13px; max-width: none; }
 @media (max-width: 640px) { .site-foot .wrap { grid-template-columns: 1fr 1fr; } .site-foot .wrap > div:first-child { grid-column: 1 / -1; } }
+.site-foot a.social { display: inline-flex; align-items: center; gap: 7px; }
+.site-foot a.social svg { flex: none; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
