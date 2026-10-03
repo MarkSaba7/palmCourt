@@ -53,7 +53,7 @@ const Net = {
     UI.lobbyStatus(`Connecting to match ${this.code}…`);
     const peer = (this.peer = new Peer(this.options()));
     this.watchServer(peer);
-    peer.on('open', () => { clearTimeout(this.serverTimer); this.bind(peer.connect(this.peerId(this.code), { reliable: true, serialization: 'json' })); });
+    peer.on('open', () => { clearTimeout(this.serverTimer); UI.lobbyStatus(`Connecting to match ${this.code}…`); this.bind(peer.connect(this.peerId(this.code), { reliable: true, serialization: 'json' })); });
     peer.on('error', (e) => this.onError(e));
   },
   bind(c) {
